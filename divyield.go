@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"context"
+	"strconv"
 
 	"szakszon.com/divyield/fetcher"
 	"szakszon.com/divyield/charter"
@@ -21,8 +22,11 @@ const defaultChartOutputDir = "work/charts"
 
 
 func main() {
+	var err error
 	ctx := context.Background()
 	ctx, ctxCancel := context.WithCancel(ctx)
+
+	now := time.Now()
 
 	termCh := make(chan os.Signal)
 	signal.Notify(termCh, os.Interrupt, syscall.SIGTERM)
@@ -33,16 +37,26 @@ func main() {
 	}()
 
 	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
+	fetchCmd.Usage = func() {
+		fmt.Println(usageFetch)
+		os.Exit(1) 
+	}
 	fetchOutputDir := fetchCmd.String("outputDir", defaultStocksDir, "output dir")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
+	chartCmd.Usage = func() {
+		fmt.Println(usageChart)
+		os.Exit(1) 
+	}
 	chartOutputDir := chartCmd.String("outputDir", defaultChartOutputDir, "output dir")
 	chartStocksDir := chartCmd.String("stocksDir", defaultStocksDir, "stocks dir")
-	//startDateFlag := chartCmd.String("startDate", "", "start date of the chart period")
-	//endDateFlag := chartCmd.String("endDate", "", "end date of the chart period")
+	startDateFlag := chartCmd.String("startDate", "-10y", "start date of the chart period, format 2010-06-05 or relative -10y")
+	endDateFlag := chartCmd.String("endDate", "", "end date of the chart period, format 2010-06-05")
+	var startDate time.Time
+	var endDate time.Time
 
 	if len(os.Args) < 2 {
-		fmt.Println("expected subcommand, see -help")
+		fmt.Println(usage)
 		os.Exit(1)
 	}
 
@@ -76,11 +90,39 @@ func main() {
 			return
 		}
 
+		if *startDateFlag != "" {
+			if relDateRE.MatchString(*startDateFlag) {
+				nYears, err := strconv.ParseInt((*startDateFlag)[1:len(*startDateFlag)-1], 10, 64)
+				if err != nil {
+					fmt.Println("invalid start date: ", *startDateFlag)
+					return
+				}
+				startDate = time.Date(now.Year()-int(nYears), time.January, 1, 0, 0, 0, 0, time.UTC)
+			} else {
+				startDate, err = time.Parse("2006-01-02", *startDateFlag)
+				if err != nil {
+					fmt.Println("invalid start date: ", *startDateFlag)
+					return
+				}
+			}
+		}
+	
+		if *endDateFlag == "" {
+			endDate = now
+		} else {
+			endDate, err = time.Parse("2006-01-02", *endDateFlag)
+			if err != nil {
+				fmt.Println("invalid end date: ", *endDateFlag)
+				return
+			}
+		}
+
+		
 		charter := charter.NewCharter(
 			charter.OutputDir(*chartOutputDir),
 			charter.StocksDir(*chartStocksDir),
-			//charter.StartDate(startDate),
-			//charter.EndDate(endDate),
+			charter.StartDate(startDate),
+			charter.EndDate(endDate),
 			charter.Log(&StdoutLogger{}),
 		)
 		fmt.Println("Create chart")
@@ -90,74 +132,39 @@ func main() {
 			return
 		}
 	default:
-		fmt.Println("expected subcommand, see -help")
+		fmt.Println(usage)
 		os.Exit(1)
 	}
-
-	/*
-	var startDateStr string
-	var startDate time.Time
-	var endDateStr string
-	var endDate time.Time
-
-	flag.StringVar(&startDateStr, "startDate", "", "start date")
-	flag.StringVar(&endDateStr, "endDate", "", "end date")
-	flag.Parse()
-
-	now := time.Now()
-
-	if startDateStr != "" {
-		if relDateRE.MatchString(startDateStr) {
-			nYears, err := strconv.ParseInt(startDateStr[1:len(startDateStr)-1], 10, 64)
-			if err != nil {
-				fmt.Println("invalid start date: ", startDateStr)
-				return
-			}
-			startDate = time.Date(now.Year()-int(nYears), time.January, 1, 0, 0, 0, 0, time.UTC)
-		} else {
-			startDate, err = time.Parse("2006-01-02", startDateStr)
-			if err != nil {
-				fmt.Println("invalid start date: ", startDateStr)
-				return
-			}
-		}
-	}
-
-	if endDateStr != "" {
-		endDate, err = time.Parse("2006-01-02", endDateStr)
-		if err != nil {
-			fmt.Println("invalid end date: ", endDateStr)
-			return
-		}
-	}
-
-	if flag.NArg() != 1 {
-		fmt.Println("specifiy exactly one path to a stock dir")
-		return
-	}
-
-	ticker := flag.Arg(0)
-	stockDir := "stocks/" + ticker
-	pricesPath := stockDir + "/prices.csv"
-	prices, err := parsePrices(ticker, pricesPath)
-	if err != nil {
-		fmt.Println("parse prices: %s: %s", pricesPath, err)
-		return
-	}
-
-	dividendsPath := stockDir + "/dividends.csv"
-	dividends, err := parseDividends(dividendsPath)
-	if err != nil {
-		fmt.Println("parse dividends: %s: %s", dividendsPath, err)
-		return
-	}
-	//fmt.Println(dividends)
-
-	setDividendRecent(prices, dividends)
-	printPrices(prices, startDate, endDate)
-	*/
 }
 
+const usage = `usage: divyield <command> [<flags>] [<args>]
+
+Commands:
+  fetch		Fetch stock price and dividend history
+  chart		Create dividend yield chart
+
+See 'divyield <command> -h' to read about a specific command.
+`
+
+const usageFetch = `usage: divyield fetch [<flags>] <tickers>
+
+Flags:
+  -outputDir string
+      output dir (default "work/stocks")
+`
+
+const usageChart = `usage: divyield chart [<flags>] <tickers>
+
+Flags:
+  -endDate string
+      end date of the chart period, format 2010-06-05
+  -outputDir string
+      output dir (default "work/charts")
+  -startDate string
+      start date of the chart period, format 2010-06-05 or relative -10y (default "-10y")
+  -stocksDir string
+      stocks dir (default "work/stocks")
+`
 
 type StdoutLogger struct {}
 
