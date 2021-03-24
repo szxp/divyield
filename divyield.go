@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"szakszon.com/divyield/fetcher"
+	"szakszon.com/divyield/stats"
 	"szakszon.com/divyield/charter"
 )
 
@@ -42,6 +43,13 @@ func main() {
 		os.Exit(1) 
 	}
 	fetchOutputDir := fetchCmd.String("outputDir", defaultStocksDir, "output dir")
+
+	statsCmd := flag.NewFlagSet("stats", flag.ExitOnError)
+	statsCmd.Usage = func() {
+		fmt.Println(usageStats)
+		os.Exit(1) 
+	}
+	statsStocksDir := statsCmd.String("stocksDir", defaultStocksDir, "stocks dir")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
@@ -75,11 +83,31 @@ func main() {
 			fetcher.Timeout(10*time.Second),
 			fetcher.Log(&StdoutLogger{}),
 		)
-		fmt.Println("Fetch stock data")
 		fetcher.Fetch(ctx, tickers)
 		for _, err := range fetcher.Errs() {
 			fmt.Println("Error:", err)
 		}
+
+	case "stats":
+		statsCmd.Parse(os.Args[2:])
+
+		tickers := statsCmd.Args()
+		if len(tickers) == 0 {
+			fmt.Println("tickers not specified")
+			return
+		}
+
+		statsGenerator := stats.NewStatsGenerator(
+			stats.StocksDir(*statsStocksDir),
+			stats.Now(now),
+			stats.Log(&StdoutLogger{}),
+		)
+		stats, err := statsGenerator.Generate(ctx, tickers)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		fmt.Println(stats)
 
 	case "chart":
 		chartCmd.Parse(os.Args[2:])
@@ -125,7 +153,6 @@ func main() {
 			charter.EndDate(endDate),
 			charter.Log(&StdoutLogger{}),
 		)
-		fmt.Println("Create chart")
 		err := charter.Chart(ctx, tickers)
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -141,6 +168,7 @@ const usage = `usage: divyield <command> [<flags>] [<args>]
 
 Commands:
   fetch		Fetch stock price and dividend history
+  stats		Show dividend yield stats
   chart		Create dividend yield chart
 
 See 'divyield <command> -h' to read about a specific command.
@@ -151,6 +179,15 @@ const usageFetch = `usage: divyield fetch [<flags>] <tickers>
 Flags:
   -outputDir string
       output dir (default "work/stocks")
+`
+
+const usageStats = `usage: divyield stats [<flags>] <tickers>
+
+Flags:
+  -divYieldMin number
+      minimum dividend yield
+  -divYieldMax number
+      maximum dividend yield
 `
 
 const usageChart = `usage: divyield chart [<flags>] <tickers>
