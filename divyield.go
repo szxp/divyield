@@ -44,6 +44,8 @@ func main() {
 		os.Exit(1) 
 	}
 	fetchOutputDir := fetchCmd.String("outputDir", defaultStocksDir, "output dir")
+	fetchForce := fetchCmd.Bool("force", false, "force downloading stock data even if it is already downloaded")
+	fetchIEXCloudAPIToken := fetchCmd.String("iexCloudAPIToken", "", "IEXCloud API Token, see https://iexcloud.io/docs/api/#authentication")
 
 	statsCmd := flag.NewFlagSet("stats", flag.ExitOnError)
 	statsCmd.Usage = func() {
@@ -84,6 +86,8 @@ func main() {
 			fetcher.Workers(2),
 			fetcher.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
 			fetcher.Timeout(10*time.Second),
+			fetcher.IEXCloudAPIToken(*fetchIEXCloudAPIToken),
+			fetcher.Force(*fetchForce),
 			fetcher.Log(&StdoutLogger{}),
 		)
 		fetcher.Fetch(ctx, tickers)

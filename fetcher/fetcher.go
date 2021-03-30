@@ -3,7 +3,10 @@ package fetcher
 import (
 	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"golang.org/x/time/rate"
 	"io"
 	"net/http"
 	"os"
@@ -13,19 +16,20 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"golang.org/x/time/rate"
 
 	"szakszon.com/divyield/logger"
 )
 
 type options struct {
-	outputDir string
-	startDate time.Time
-	endDate   time.Time
-	timeout   time.Duration // http client timeout, 0 means no timeout
-	logger    logger.Logger
-	rateLimiter *rate.Limiter
-	workers int
+	outputDir        string
+	startDate        time.Time
+	endDate          time.Time
+	timeout          time.Duration // http client timeout, 0 means no timeout
+	iexCloudAPIToken string
+	force            bool
+	logger           logger.Logger
+	rateLimiter      *rate.Limiter
+	workers          int
 }
 
 type Option func(o options) options
@@ -51,7 +55,6 @@ func EndDate(d time.Time) Option {
 	}
 }
 
-
 func Workers(n int) Option {
 	return func(o options) options {
 		o.workers = n
@@ -73,6 +76,20 @@ func Timeout(d time.Duration) Option {
 	}
 }
 
+func IEXCloudAPIToken(t string) Option {
+	return func(o options) options {
+		o.iexCloudAPIToken = t
+		return o
+	}
+}
+
+func Force(f bool) Option {
+	return func(o options) options {
+		o.force = f
+		return o
+	}
+}
+
 func Log(l logger.Logger) Option {
 	return func(o options) options {
 		o.logger = l
@@ -81,13 +98,13 @@ func Log(l logger.Logger) Option {
 }
 
 var defaultOptions = options{
-	outputDir: "",
-	startDate: time.Date(1900, time.January, 1, 1, 0, 0, 0, time.UTC),
-	endDate:   time.Time{},
-	workers: 1,
+	outputDir:   "",
+	startDate:   time.Date(1900, time.January, 1, 1, 0, 0, 0, time.UTC),
+	endDate:     time.Time{},
+	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
-	timeout:   0,
-	logger:    nil,
+	timeout:     0,
+	logger:      nil,
 }
 
 type RLClient struct {
@@ -126,8 +143,8 @@ func NewFetcher(os ...Option) Fetcher {
 
 type Fetcher struct {
 	client *RLClient
-	opts options
-	errs []error
+	opts   options
+	errs   []error
 }
 
 func (f *Fetcher) Fetch(ctx context.Context, tickers []string) {
@@ -224,72 +241,226 @@ func (f *Fetcher) getStockData(ctx context.Context, ticker string) error {
 }
 
 func (f *Fetcher) getDividends(ctx context.Context, ticker string) error {
-	dstPath := filepath.Join(f.opts.outputDir, ticker, "dividends.csv")
-	dst, err := os.Create(dstPath)
+	p := filepath.Join(f.opts.outputDir, ticker, "dividends.json")
+
+	savedDividends, err := f.loadDividends(p)
 	if err != nil {
-		return fmt.Errorf("create dividends file %s: %s", dstPath, err)
-	}
-	defer dst.Close()
-
-	u := dividendsURL(ticker, f.opts.startDate, f.opts.endDate)
-	_, err = f.download(ctx, dst, u)
-	if err != nil {
-		return fmt.Errorf("download from %s: %s", u, err)
+		return fmt.Errorf("load dividends file %s: %s", p, err)
 	}
 
-	lines, err := linesN(dstPath, 2)
-	if err != nil {
-		return fmt.Errorf("read file %s: %s", dstPath, err)
+	elapsedDays := int64(-1)
+	if len(savedDividends) > 0 {
+		elapsedDays = savedDividends[0].ExDate.UntilDays(time.Now())
+	}
+	
+	downloadPeriod := downloadPeriod(elapsedDays)
+	if downloadPeriod == "" {
+		return nil // up-to-date, ready
 	}
 
-	//	if len(lines) < 2 {
-	//		return fmt.Errorf("too few lines: %s", dstPath)
-	//	}
 
-	if !strings.HasPrefix(lines[0], "Date,Dividends") {
-		return fmt.Errorf("csv header not found: %s", dstPath)
-	}
 
-	if len(lines) >= 2 {
-		err = sortCSVDesc(dstPath)
-		if err != nil {
-			return fmt.Errorf("sort %s: %s", dstPath, err)
-		}
-	}
+	return nil
+
+	// ph, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+	// if err != nil {
+	// 	return fmt.Errorf("create dividends file %s: %s", p, err)
+	// }
+	// defer ph.Close()
+
+	// u := dividendsURL(ticker, f.opts.startDate, f.opts.endDate)
+	// _, err = f.download(ctx, ph, u)
+	// if err != nil {
+	// 	return fmt.Errorf("download from %s: %s", u, err)
+	// }
+
+	// lines, err := linesN(p, 2)
+	// if err != nil {
+	// 	return fmt.Errorf("read file %s: %s", p, err)
+	// }
+
+	// //	if len(lines) < 2 {
+	// //		return fmt.Errorf("too few lines: %s", p)
+	// //	}
+
+	// if !strings.HasPrefix(lines[0], "Date,Dividends") {
+	// 	return fmt.Errorf("csv header not found: %s", p)
+	// }
+
+	// if len(lines) >= 2 {
+	// 	err = sortCSVDesc(p)
+	// 	if err != nil {
+	// 		return fmt.Errorf("sort %s: %s", p, err)
+	// 	}
+	// }
 
 	return nil
 }
 
-func (f *Fetcher) getPrices(ctx context.Context, ticker string) error {
-	dstPath := filepath.Join(f.opts.outputDir, ticker, "prices.csv")
-	dst, err := os.Create(dstPath)
-	if err != nil {
-		return fmt.Errorf("create prices file %s: %s", dstPath, err)
+func downloadPeriod(days int64) string {
+	if days < 0 {
+		return "5y"
+	} else if days == 0 {
+		return ""
+	} else if days <= 27 {
+		return "1m"		
+	} else if days <= 85 {
+		return "3m"
+	} else if days <= 180 {
+		return "6m"
+	} else if days <= 360 {
+		return "1y"
+	} else if days <= 725 {
+		return "2y"
 	}
-	defer dst.Close()
+	return "5y"
+}
+
+func (f *Fetcher) loadDividends(p string) ([]*dividend, error) {
+	ph, err := os.Open(p)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []*dividend{}, nil
+		}
+		return nil, fmt.Errorf("open dividends file %s: %s", p, err)
+	}
+	defer ph.Close()
+
+	dividends := make([]*dividend, 0)
+
+	dec := json.NewDecoder(ph)
+	// read open bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	// while the array contains values
+	for dec.More() {
+		var d dividend
+		err := dec.Decode(&d)
+		if err != nil {
+			return nil, fmt.Errorf("decode: %s", err)
+		}
+		dividends = append(dividends, &d)
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	return dividends, nil
+}
+
+type dividend struct {
+	Amount       float64  `json:"amount"`
+	Currency     string   `json:"currency"`
+	DeclaredDate Time     `json:"declaredDate"`
+	Description  string   `json:"description"`
+	ExDate       Time     `json:"exDate"`
+	Flag         string   `json:"flag"`
+	Frequency    string   `json:"frequency"`
+	PaymentDate  Time     `json:"paymentDate"`
+	RecordDate   Time     `json:"recordDate"`
+	Refid        int64    `json:"refid"`
+	Symbol       string   `json:"symbol"`
+	ID           string   `json:"id"`
+	Key          string   `json:"key"`
+	SubKey       string   `json:"subkey"`
+	Date         TimeUnix `json:"date"`
+	Updated      TimeUnix `json:"updated"`
+}
+
+func (d *dividend) String() string {
+	return fmt.Sprintf("%v: %v",
+		time.Time(d.ExDate).Format(timeFormat),
+		d.Amount,
+	)
+}
+
+type Time time.Time
+
+const timeFormat = "2006-01-02"
+
+func (t Time) UntilDays(p time.Time) int64 {
+	st := time.Time(t)
+	if st.IsZero() {
+		return -1
+	}
+	return int64(p.Sub(st) / (24 * time.Hour))
+}
+
+func (t Time) MarshalJSON() ([]byte, error) {
+	st := time.Time(t)
+	if st.IsZero() {
+		return []byte("0000-00-00"), nil
+	}
+	s := fmt.Sprintf("%q", st.Format(timeFormat))
+	return []byte(s), nil
+}
+
+func (t *Time) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "0000-00-00" {
+		*t = Time(time.Time{})
+		return nil
+	}
+
+	st, err := time.Parse(timeFormat, s)
+	if err != nil {
+		return err
+	}
+	*t = Time(st)
+	return nil
+}
+
+type TimeUnix time.Time
+
+func (t TimeUnix) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Time(t).Unix() * 1000)
+}
+
+func (t *TimeUnix) UnmarshalJSON(b []byte) error {
+	var i int64
+	if err := json.Unmarshal(b, &i); err != nil {
+		return err
+	}
+	*t = TimeUnix(time.Unix(i/1000, 0))
+	return nil
+}
+
+func (f *Fetcher) getPrices(ctx context.Context, ticker string) error {
+	p := filepath.Join(f.opts.outputDir, ticker, "prices.csv")
+	ph, err := os.Create(p)
+	if err != nil {
+		return fmt.Errorf("create prices file %s: %s", p, err)
+	}
+	defer ph.Close()
 
 	u := pricesURL(ticker, f.opts.startDate, f.opts.endDate)
-	_, err = f.download(ctx, dst, u)
+	_, err = f.download(ctx, ph, u)
 	if err != nil {
 		return fmt.Errorf("download from %s: %s", u, err)
 	}
 
-	lines, err := linesN(dstPath, 2)
+	lines, err := linesN(p, 2)
 	if err != nil {
-		return fmt.Errorf("read file %s: %s", dstPath, err)
+		return fmt.Errorf("read file %s: %s", p, err)
 	}
 
 	if len(lines) < 2 {
-		return fmt.Errorf("too few lines: %s", dstPath)
+		return fmt.Errorf("too few lines: %s", p)
 	}
 
 	if !strings.HasPrefix(lines[0], "Date,Open,High,Low,Close,Adj Close,Volume") {
-		return fmt.Errorf("csv header not found: %s", dstPath)
+		return fmt.Errorf("csv header not found: %s", p)
 	}
 
-	err = sortCSVDesc(dstPath)
+	err = sortCSVDesc(p)
 	if err != nil {
-		return fmt.Errorf("sort %s: %s", dstPath, err)
+		return fmt.Errorf("sort %s: %s", p, err)
 	}
 
 	return nil
