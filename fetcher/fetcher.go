@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"golang.org/x/time/rate"
 
 	"szakszon.com/divyield/logger"
 )
@@ -23,6 +24,8 @@ type options struct {
 	endDate   time.Time
 	timeout   time.Duration // http client timeout, 0 means no timeout
 	logger    logger.Logger
+	rateLimiter *rate.Limiter
+	workers int
 }
 
 type Option func(o options) options
@@ -48,6 +51,21 @@ func EndDate(d time.Time) Option {
 	}
 }
 
+
+func Workers(n int) Option {
+	return func(o options) options {
+		o.workers = n
+		return o
+	}
+}
+
+func RateLimiter(rl *rate.Limiter) Option {
+	return func(o options) options {
+		o.rateLimiter = rl
+		return o
+	}
+}
+
 func Timeout(d time.Duration) Option {
 	return func(o options) options {
 		o.timeout = d
@@ -66,8 +84,27 @@ var defaultOptions = options{
 	outputDir: "",
 	startDate: time.Date(1900, time.January, 1, 1, 0, 0, 0, time.UTC),
 	endDate:   time.Time{},
+	workers: 1,
+	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
 	timeout:   0,
 	logger:    nil,
+}
+
+type RLClient struct {
+	client      *http.Client
+	ratelimiter *rate.Limiter
+}
+
+func (c *RLClient) Do(req *http.Request) (*http.Response, error) {
+	err := c.ratelimiter.Wait(req.Context())
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func NewFetcher(os ...Option) Fetcher {
@@ -75,12 +112,20 @@ func NewFetcher(os ...Option) Fetcher {
 	for _, o := range os {
 		opts = o(opts)
 	}
+
 	return Fetcher{
+		client: &RLClient{
+			client: &http.Client{
+				Timeout: opts.timeout,
+			},
+			ratelimiter: opts.rateLimiter,
+		},
 		opts: opts,
 	}
 }
 
 type Fetcher struct {
+	client *RLClient
 	opts options
 	errs []error
 }
@@ -91,13 +136,12 @@ func (f *Fetcher) Fetch(ctx context.Context, tickers []string) {
 	}
 
 	var workerWg sync.WaitGroup
-	workerPoolSize := 1
 	jobCh := make(chan job)
 	var pendingWg sync.WaitGroup
 	var resultWg sync.WaitGroup
 	resultCh := make(chan result)
 
-	for i := 0; i < workerPoolSize; i++ {
+	for i := 0; i < f.opts.workers; i++ {
 		workerWg.Add(1)
 		go func() {
 			defer func() {
@@ -270,10 +314,7 @@ func (f *Fetcher) download(ctx context.Context, dst io.Writer, u string) (int64,
 	if err != nil {
 		return 0, err
 	}
-	client := &http.Client{
-		Timeout: f.opts.timeout,
-	}
-	resp, err := client.Do(req)
+	resp, err := f.client.Do(req)
 	if err != nil {
 		return 0, err
 	}

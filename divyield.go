@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"context"
 	"strconv"
+	"golang.org/x/time/rate"
 
 	"szakszon.com/divyield/fetcher"
 	"szakszon.com/divyield/stats"
@@ -80,6 +81,8 @@ func main() {
 
 		fetcher := fetcher.NewFetcher(
 			fetcher.OutputDir(*fetchOutputDir),
+			fetcher.Workers(2),
+			fetcher.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
 			fetcher.Timeout(10*time.Second),
 			fetcher.Log(&StdoutLogger{}),
 		)
