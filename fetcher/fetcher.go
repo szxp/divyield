@@ -230,10 +230,10 @@ func (f *Fetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	// err = f.getPrices(ctx, ticker)
-	// if err != nil {
-	// 	return fmt.Errorf("download prices: %s", err)
-	// }
+	err = f.getPrices(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download prices: %s", err)
+	}
 	err = f.getDividends(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download dividends: %s", err)
@@ -255,7 +255,7 @@ func (f *Fetcher) getDividends(ctx context.Context, ticker string) error {
 	}
 
 	now := time.Now().UTC()
-	nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	nowDate := timeDate(now)
 
 	if downloadFrom.Equal(nowDate) {
 		f.log("%s: %s", ticker, "up to date, skip download")
@@ -271,7 +271,7 @@ func (f *Fetcher) getDividends(ctx context.Context, ticker string) error {
 		f.log("%s: %d new dividends", ticker, len(newDividends)-1)
 	}
 
-	// new dividends and saved dividends must overlap 
+	// new dividends and saved dividends must overlap
 	if len(newDividends) > 0 && len(savedDividends) > 0 {
 		newBottom := newDividends[len(newDividends)-1]
 		savedTop := savedDividends[0]
@@ -280,7 +280,7 @@ func (f *Fetcher) getDividends(ctx context.Context, ticker string) error {
 		}
 	}
 
-	mergedDividends := make([]*dividend, 0, len(newDividends) + len(savedDividends))
+	mergedDividends := make([]*dividend, 0, len(newDividends)+len(savedDividends))
 	mergedDividends = append(mergedDividends, newDividends...)
 	if len(savedDividends) > 0 {
 		mergedDividends = append(mergedDividends, savedDividends[1:]...)
@@ -291,6 +291,10 @@ func (f *Fetcher) getDividends(ctx context.Context, ticker string) error {
 		return fmt.Errorf("save dividends %s: %s", p, err)
 	}
 	return nil
+}
+
+func timeDate(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
 func (f *Fetcher) loadDividends(p string) ([]*dividend, error) {
@@ -309,6 +313,35 @@ func (f *Fetcher) loadDividends(p string) ([]*dividend, error) {
 	}
 
 	sortDividendsDesc(dividends)
+	return dividends, nil
+}
+
+func (f *Fetcher) parseDividends(r io.Reader) ([]*dividend, error) {
+	dividends := make([]*dividend, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	// while the array contains values
+	for dec.More() {
+		var v dividend
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode: %s", err)
+		}
+		dividends = append(dividends, &v)
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
 	return dividends, nil
 }
 
@@ -347,7 +380,9 @@ func (f *Fetcher) downloadDividends(ctx context.Context, ticker string, from tim
 }
 
 func dividendsURL(ticker string, from time.Time, apiToken string) string {
-	return "https://cloud.iexapis.com/stable/time-series/DIVIDENDS/"+ticker+"?from="+from.Format(timeFormat)+"&token="+apiToken
+	return "https://cloud.iexapis.com/stable/time-series/DIVIDENDS/" + ticker +
+		"?from=" + from.Format(timeFormat) +
+		"&token=" + apiToken
 
 	// return "https://query1.finance.yahoo.com/v7/finance/download/" + ticker +
 	// 	"?period1=" + strconv.FormatInt(sd.Unix(), 10) +
@@ -355,60 +390,38 @@ func dividendsURL(ticker string, from time.Time, apiToken string) string {
 	// 	"&interval=1d&events=div&includeAdjustedClose=true"
 }
 
-func (f *Fetcher) parseDividends(r io.Reader) ([]*dividend, error) {
-	dividends := make([]*dividend, 0)
-
-	dec := json.NewDecoder(r)
-	// read open bracket
-	_, err := dec.Token()
-	if err != nil {
-		return nil, fmt.Errorf("open bracket: %s", err)
-	}
-
-	// while the array contains values
-	for dec.More() {
-		var d dividend
-		err := dec.Decode(&d)
-		if err != nil {
-			return nil, fmt.Errorf("decode: %s", err)
-		}
-		dividends = append(dividends, &d)
-	}
-
-	// read closing bracket
-	_, err = dec.Token()
-	if err != nil {
-		return nil, fmt.Errorf("closing bracket: %s", err)
-	}
-
-	return dividends, nil
-}
-
 func (f *Fetcher) saveDividends(p string, dividends []*dividend) error {
-	tmpfile, err := ioutil.TempFile(filepath.Dir(p), "dividends.tmp.json")
+	tmp, err := f.saveJsonTmp(filepath.Dir(p), "dividends.tmp.json", dividends)
 	if err != nil {
-		return fmt.Errorf("create temp file: %s", err)
+		return fmt.Errorf("save temp dividends: %s", err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer os.Remove(tmp)
 
-	enc := json.NewEncoder(tmpfile)
-	enc.SetIndent("", "    ")
-	err = enc.Encode(dividends)
-	if err != nil {
-		return fmt.Errorf("encode dividends: %s", err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		return fmt.Errorf("create temp file %s: %s", tmpfile.Name(), err)
-	}
-
-	err = os.Rename(tmpfile.Name(), p)
-	if err != nil {
-		return fmt.Errorf("rename %s -> %s: %s", tmpfile.Name(), p, err)
+	if err = os.Rename(tmp, p); err != nil {
+		return fmt.Errorf("rename %s -> %s: %s", tmp, p, err)
 	}
 
 	return nil
 }
 
+func (f *Fetcher) saveJsonTmp(dir, name string, v interface{}) (string, error) {
+	tmp, err := ioutil.TempFile(dir, name)
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %s", err)
+	}
+	defer tmp.Close()
+
+	enc := json.NewEncoder(tmp)
+	enc.SetIndent("", "    ")
+	if err = enc.Encode(v); err != nil {
+		return "", fmt.Errorf("encode: %s", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("create temp file: %s", err)
+	}
+
+	return tmp.Name(), nil
+}
 
 type dividend struct {
 	Amount       float64  `json:"amount"`
@@ -452,6 +465,14 @@ func (t Time) Equal(o Time) bool {
 	return time.Time(t).Equal(time.Time(o))
 }
 
+func (t Time) String() string {
+	st := time.Time(t)
+	if st.IsZero() {
+		return "0000-00-00"
+	}
+	return st.Format(timeFormat)
+}
+
 func (t Time) MarshalJSON() ([]byte, error) {
 	st := time.Time(t)
 	if st.IsZero() {
@@ -476,18 +497,25 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (t Time) String() string {
-	st := time.Time(t)
-	if st.IsZero() {
-		return "0000-00-00"
-	}
-	return st.Format(timeFormat)
-}
-
-
 type TimeUnix time.Time
 
+func (t TimeUnix) Equal(o TimeUnix) bool {
+	return time.Time(t).Equal(time.Time(o))
+}
+
+func (t TimeUnix) String() string {
+	st := time.Time(t)
+	if st.IsZero() {
+		return "0"
+	}
+	return strconv.FormatInt(time.Time(t).Unix()*1000, 10)
+}
+
 func (t TimeUnix) MarshalJSON() ([]byte, error) {
+	st := time.Time(t)
+	if st.IsZero() {
+		return []byte("0"), nil
+	}
 	return json.Marshal(time.Time(t).Unix() * 1000)
 }
 
@@ -501,46 +529,193 @@ func (t *TimeUnix) UnmarshalJSON(b []byte) error {
 }
 
 func (f *Fetcher) getPrices(ctx context.Context, ticker string) error {
-	p := filepath.Join(f.opts.outputDir, ticker, "prices.csv")
-	ph, err := os.Create(p)
+	p := filepath.Join(f.opts.outputDir, ticker, "prices.json")
+
+	savedPrices, err := f.loadPrices(p)
 	if err != nil {
-		return fmt.Errorf("create prices file %s: %s", p, err)
+		return fmt.Errorf("load prices file %s: %s", p, err)
+	}
+
+	downloadFrom := time.Date(time.Now().Year()-5, time.January, 1, 1, 0, 0, 0, time.UTC)
+	if len(savedPrices) > 0 {
+		downloadFrom = time.Time(savedPrices[0].Date)
+	}
+
+	now := time.Now().UTC()
+	nowDate := timeDate(now)
+
+	if downloadFrom.Equal(nowDate) {
+		f.log("%s: %s", ticker, "up to date, skip download")
+		return nil // up-to-date
+	}
+
+	newPrices, err := f.downloadPrices(ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
+	if err != nil {
+		return fmt.Errorf("download prices %s: %s", ticker, err)
+	}
+
+	if len(newPrices) > 1 {
+		f.log("%s: %d new prices", ticker, len(newPrices)-1)
+	}
+
+	// new prices and saved prices must overlap
+	if len(newPrices) > 0 && len(savedPrices) > 0 {
+		newBottom := newPrices[len(newPrices)-1]
+		savedTop := savedPrices[0]
+		if !newBottom.Date.Equal(savedTop.Date) {
+			return fmt.Errorf("non-overlapping price dates %v vs %v", newBottom.Date, savedTop.Date)
+		}
+	}
+
+	mergedPrices := make([]*price, 0, len(newPrices)+len(savedPrices))
+	mergedPrices = append(mergedPrices, newPrices...)
+	if len(savedPrices) > 0 {
+		mergedPrices = append(mergedPrices, savedPrices[1:]...)
+	}
+
+	err = f.savePrices(p, mergedPrices)
+	if err != nil {
+		return fmt.Errorf("save prices %s: %s", p, err)
+	}
+	return nil
+}
+
+func (f *Fetcher) loadPrices(p string) ([]*price, error) {
+	ph, err := os.Open(p)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []*price{}, nil
+		}
+		return nil, fmt.Errorf("open prices file %s: %s", p, err)
 	}
 	defer ph.Close()
 
-	u := pricesURL(ticker, f.opts.startDate, f.opts.endDate)
-	_, err = f.download(ctx, ph, u)
+	prices, err := f.parsePrices(ph)
 	if err != nil {
-		return fmt.Errorf("download from %s: %s", u, err)
+		return nil, fmt.Errorf("parse prices: %s", err)
 	}
 
-	lines, err := linesN(p, 2)
+	sortPricesDesc(prices)
+	return prices, nil
+}
+
+func (f *Fetcher) parsePrices(r io.Reader) ([]*price, error) {
+	prices := make([]*price, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
 	if err != nil {
-		return fmt.Errorf("read file %s: %s", p, err)
+		return nil, fmt.Errorf("open bracket: %s", err)
 	}
 
-	if len(lines) < 2 {
-		return fmt.Errorf("too few lines: %s", p)
+	// while the array contains values
+	for dec.More() {
+		var v price
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode: %s", err)
+		}
+		prices = append(prices, &v)
 	}
 
-	if !strings.HasPrefix(lines[0], "Date,Open,High,Low,Close,Adj Close,Volume") {
-		return fmt.Errorf("csv header not found: %s", p)
-	}
-
-	err = sortCSVDesc(p)
+	// read closing bracket
+	_, err = dec.Token()
 	if err != nil {
-		return fmt.Errorf("sort %s: %s", p, err)
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	return prices, nil
+}
+
+func sortPricesDesc(prices []*price) {
+	sort.SliceStable(prices, func(i, j int) bool {
+		ti := time.Time(prices[i].Date)
+		tj := time.Time(prices[j].Date)
+		return ti.After(tj)
+	})
+}
+
+func (f *Fetcher) downloadPrices(ctx context.Context, ticker string, from time.Time, apiToken string) ([]*price, error) {
+	u := pricesURL(ticker, from, apiToken)
+	//fmt.Println(u)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+	}
+
+	prices, err := f.parsePrices(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse prices: %s", err)
+	}
+
+	sortPricesDesc(prices)
+	return prices, nil
+}
+
+func pricesURL(ticker string, from time.Time, apiToken string) string {
+	return "https://cloud.iexapis.com/stable/time-series/HISTORICAL_PRICES/" + ticker +
+		"?from=" + from.Format(timeFormat) +
+		"&token=" + apiToken
+
+	// return "https://query1.finance.yahoo.com/v7/finance/download/" + ticker +
+	// 	"?period1=" + strconv.FormatInt(sd.Unix(), 10) +
+	// 	"&period2=" + strconv.FormatInt(ed.Unix(), 10) +
+	// 	"&interval=1d&events=history&includeAdjustedClose=true"
+}
+
+func (f *Fetcher) savePrices(p string, prices []*price) error {
+	tmp, err := f.saveJsonTmp(filepath.Dir(p), "prices.tmp.json", prices)
+	if err != nil {
+		return fmt.Errorf("save temp prices: %s", err)
+	}
+	defer os.Remove(tmp)
+
+	if err = os.Rename(tmp, p); err != nil {
+		return fmt.Errorf("rename %s -> %s: %s", tmp, p, err)
 	}
 
 	return nil
 }
 
+type price struct {
+	Close   float64  `json:"close"`
+	Fclose  float64  `json:"fclose"`
+	Fhigh   float64  `json:"fhigh"`
+	Flow    float64  `json:"flow"`
+	Fopen   float64  `json:"fopen"`
+	Fvolume float64  `json:"fvolume"`
+	High    float64  `json:"high"`
+	Low     float64  `json:"low"`
+	Open    float64  `json:"open"`
+	Symbol  string   `json:"symbol"`
+	Uclose  float64  `json:"uclose"`
+	Uhigh   float64  `json:"uhigh"`
+	Ulow    float64  `json:"ulow"`
+	Uopen   float64  `json:"uopen"`
+	Uvolume float64  `json:"uvolume"`
+	Volume  float64  `json:"volume"`
+	ID      string   `json:"id"`
+	Key     string   `json:"key"`
+	SubKey  string   `json:"subkey"`
+	Date    TimeUnix `json:"date"`
+	Updated TimeUnix `json:"updated"`
+}
 
-func pricesURL(ticker string, sd, ed time.Time) string {
-	return "https://query1.finance.yahoo.com/v7/finance/download/" + ticker +
-		"?period1=" + strconv.FormatInt(sd.Unix(), 10) +
-		"&period2=" + strconv.FormatInt(ed.Unix(), 10) +
-		"&interval=1d&events=history&includeAdjustedClose=true"
+func (p *price) String() string {
+	return fmt.Sprintf("%v: %v",
+		time.Time(p.Date).Format(timeFormat),
+		p.Fclose,
+	)
 }
 
 func (f *Fetcher) download(ctx context.Context, dst io.Writer, u string) (int64, error) {
