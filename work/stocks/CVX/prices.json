@@ -1,5 +1,28 @@
 [
     {
+        "close": 104.79,
+        "fclose": 104.79,
+        "fhigh": 106.22,
+        "flow": 104.6,
+        "fopen": 105.55,
+        "fvolume": 8954377,
+        "high": 106.22,
+        "low": 104.6,
+        "open": 105.55,
+        "symbol": "CVX",
+        "uclose": 104.79,
+        "uhigh": 106.22,
+        "ulow": 104.6,
+        "uopen": 105.55,
+        "uvolume": 8954377,
+        "volume": 8954377,
+        "id": "HISTORICAL_PRICES",
+        "key": "CVX",
+        "subkey": "",
+        "date": 1617148800000,
+        "updated": 1617238087000
+    },
+    {
         "close": 105.93,
         "fclose": 105.93,
         "fhigh": 106.83,

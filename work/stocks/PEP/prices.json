@@ -1,5 +1,28 @@
 [
     {
+        "close": 141.45,
+        "fclose": 141.45,
+        "fhigh": 143.33,
+        "flow": 141.17,
+        "fopen": 143.32,
+        "fvolume": 6257943,
+        "high": 143.33,
+        "low": 141.17,
+        "open": 143.32,
+        "symbol": "PEP",
+        "uclose": 141.45,
+        "uhigh": 143.33,
+        "ulow": 141.17,
+        "uopen": 143.32,
+        "uvolume": 6257943,
+        "volume": 6257943,
+        "id": "HISTORICAL_PRICES",
+        "key": "PEP",
+        "subkey": "",
+        "date": 1617148800000,
+        "updated": 1617238102000
+    },
+    {
         "close": 142.54,
         "fclose": 142.54,
         "fhigh": 144.75,

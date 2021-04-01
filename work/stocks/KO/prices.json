@@ -1,5 +1,28 @@
 [
     {
+        "close": 52.71,
+        "fclose": 52.71,
+        "fhigh": 53.17,
+        "flow": 52.5,
+        "fopen": 53.03,
+        "fvolume": 15826474,
+        "high": 53.17,
+        "low": 52.5,
+        "open": 53.03,
+        "symbol": "KO",
+        "uclose": 52.71,
+        "uhigh": 53.17,
+        "ulow": 52.5,
+        "uopen": 53.03,
+        "uvolume": 15826474,
+        "volume": 15826474,
+        "id": "HISTORICAL_PRICES",
+        "key": "KO",
+        "subkey": "",
+        "date": 1617148800000,
+        "updated": 1617238098000
+    },
+    {
         "close": 53.15,
         "fclose": 53.15,
         "fhigh": 53.79,

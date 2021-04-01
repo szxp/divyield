@@ -1,5 +1,28 @@
 [
     {
+        "close": 103.26,
+        "fclose": 103.26,
+        "fhigh": 105.6,
+        "flow": 103.06,
+        "fopen": 103.79,
+        "fvolume": 2176707,
+        "high": 105.6,
+        "low": 103.06,
+        "open": 103.79,
+        "symbol": "NTES",
+        "uclose": 103.26,
+        "uhigh": 105.6,
+        "ulow": 103.06,
+        "uopen": 103.79,
+        "uvolume": 2176707,
+        "volume": 2176707,
+        "id": "HISTORICAL_PRICES",
+        "key": "NTES",
+        "subkey": "",
+        "date": 1617148800000,
+        "updated": 1617238101000
+    },
+    {
         "close": 102.9,
         "fclose": 102.9,
         "fhigh": 103.7,
