@@ -4,6 +4,7 @@
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
 work/charts
+*.swp
 
 # Node artifact files
 node_modules/

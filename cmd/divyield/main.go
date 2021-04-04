@@ -10,9 +10,12 @@ import (
 	"syscall"
 	"context"
 	"strconv"
+    "database/sql"
+	_ "github.com/lib/pq"
 	"golang.org/x/time/rate"
 
-	"szakszon.com/divyield/fetcher"
+	"szakszon.com/divyield/postgres"
+	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/stats"
 	"szakszon.com/divyield/charter"
 )
@@ -37,6 +40,10 @@ func main() {
 		fmt.Println("Ctrl+C pressed")
 		ctxCancel()
 	}()
+
+
+    dbConnStr := flag.CommandLine.String("db", "postgres://postgres:postgres@localhost/divyield?sslmode=disable", "database connection string")
+
 
 	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
@@ -71,9 +78,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
+    subIdx := subcommandIndex(os.Args)
+    err = flag.CommandLine.Parse(os.Args[1:subIdx])
+    if err != nil {
+        fmt.Println(err)
+		os.Exit(1)
+
+    }
+
+    db, err := sql.Open("postgres", *dbConnStr)
+    if err != nil {
+        fmt.Println(err)
+		os.Exit(1)
+    }
+
+    pdb := &postgres.DB{
+        DB: db,
+    }
+
+	switch os.Args[subIdx] {
 	case "fetch":
-		fetchCmd.Parse(os.Args[2:])
+		fetchCmd.Parse(os.Args[subIdx+1:])
 
 		tickers := fetchCmd.Args()
 		if len(tickers) == 0 {
@@ -81,14 +106,15 @@ func main() {
 			return
 		}
 
-		fetcher := fetcher.NewFetcher(
-			fetcher.OutputDir(*fetchOutputDir),
-			fetcher.Workers(2),
-			fetcher.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
-			fetcher.Timeout(10*time.Second),
-			fetcher.IEXCloudAPIToken(*fetchIEXCloudAPIToken),
-			fetcher.Force(*fetchForce),
-			fetcher.Log(&StdoutLogger{}),
+		fetcher := iexcloud.NewStockFetcher(
+			iexcloud.OutputDir(*fetchOutputDir),
+			iexcloud.Workers(2),
+			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
+			iexcloud.Timeout(10*time.Second),
+			iexcloud.IEXCloudAPIToken(*fetchIEXCloudAPIToken),
+			iexcloud.Force(*fetchForce),
+			iexcloud.Log(&StdoutLogger{}),
+			iexcloud.DB(pdb),
 		)
 		fetcher.Fetch(ctx, tickers)
 		for _, err := range fetcher.Errs() {
@@ -96,7 +122,7 @@ func main() {
 		}
 
 	case "stats":
-		statsCmd.Parse(os.Args[2:])
+		statsCmd.Parse(os.Args[subIdx+1:])
 
 		tickers := statsCmd.Args()
 		if len(tickers) == 0 {
@@ -117,7 +143,7 @@ func main() {
 		fmt.Println(stats)
 
 	case "chart":
-		chartCmd.Parse(os.Args[2:])
+		chartCmd.Parse(os.Args[subIdx+1:])
 
 		tickers := chartCmd.Args()
 		if len(tickers) == 0 {
@@ -141,7 +167,7 @@ func main() {
 				}
 			}
 		}
-	
+
 		if *endDateFlag == "" {
 			endDate = now
 		} else {
@@ -169,6 +195,18 @@ func main() {
 		fmt.Println(usage)
 		os.Exit(1)
 	}
+}
+
+func subcommandIndex(args []string) int {
+    subcommands := []string{"fetch", "chart", "stats"}
+    for i, a := range args {
+        for _, c := range subcommands {
+            if a == c {
+                return i
+            }
+        }
+    }
+    return len(args)
 }
 
 const usage = `usage: divyield <command> [<flags>] [<args>]

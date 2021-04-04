@@ -171,7 +171,7 @@ func (f *Charter) log(format string, v ...interface{}) {
 func writePrices(out io.Writer, prices []*Price, startDate, endDate time.Time) error {
 	w := &writer{W: bufio.NewWriter(out)}
 
-	w.WriteString("Date,Price,DividendRecent,DividendForward12M,DividendYieldForward12M")
+	w.WriteString("Date,Price,DividendRecent,DividendForward12M,DividendYieldForward12M,Close")
 	for _, p := range prices {
 
 		if !startDate.IsZero() && p.Date.Unix() < startDate.Unix() {
@@ -232,6 +232,7 @@ func (w *writer) WriteString(s string) error {
 type Price struct {
 	Date           time.Time
 	Price          float64
+	Close          float64
 	DividendRecent float64
 	PayoutPerYear  int
 }
@@ -243,12 +244,13 @@ func (r *Price) String() string {
 		divYield = (divForward12M / r.Price) * float64(100)
 	}
 
-	return fmt.Sprintf("%s,%.2f,%.2f,%.2f,%.2f",
+	return fmt.Sprintf("%s,%.2f,%.2f,%.2f,%.2f,%.2f",
 		r.Date.Format("2006-01-02"),
 		r.Price,
 		r.DividendRecent,
 		divForward12M,
 		divYield,
+		r.Close,
 	)
 }
 
@@ -269,6 +271,7 @@ func parsePrices(ticker, p string) ([]*Price, error) {
 
 	for _, row := range rows[1:] {
 		price := float64(0)
+		close := float64(0)
 
 		date, err := time.Parse("2006-01-02", row[0])
 		if err != nil {
@@ -280,9 +283,13 @@ func parsePrices(ticker, p string) ([]*Price, error) {
 			if err != nil {
 				return nil, err
 			}
+			close, err = strconv.ParseFloat(row[4], 64)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		record := &Price{Date: date, Price: price, PayoutPerYear: payout.PerYear(ticker)}
+		record := &Price{Date: date, Price: price, Close: close, PayoutPerYear: payout.PerYear(ticker)}
 		records = append(records, record)
 	}
 
@@ -388,12 +395,13 @@ set title titleprices;
 plot datafile using 1:2 with filledcurves above y = 0;
 
 set origin 0.0,0.33;
-set title titledivyield;
-plot datafile using 1:5 with filledcurves above y = 0;
+plot datafile using 1:6 with filledcurves above y = 0;
+#set title titledivyield;
+#plot datafile using 1:5 with filledcurves above y = 0;
 
-set origin 0.0,0.0;
-set title titledividends;
-plot datafile using 1:3 with lines;
+#set origin 0.0,0.0;
+#set title titledividends;
+#plot datafile using 1:3 with lines;
 
 unset multiplot;
 `
