@@ -6,10 +6,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	sq "github.com/Masterminds/squirrel"
+	"github.com/lib/pq"
 	"strings"
 	"text/template"
 	"time"
-    "github.com/lib/pq"
 
 	"szakszon.com/divyield"
 )
@@ -67,7 +68,68 @@ func (db *DB) Prices(
 	ticker string,
 	f *divyield.PriceFilter,
 ) ([]*divyield.Price, error) {
-	return nil, nil
+	prices := make([]*divyield.Price, 0)
+
+	err := execNonTx(ctx, db.DB, func(runner runner) error {
+		schemaName := schemaName(ticker)
+
+		q := sq.Select(
+			"date", "symbol", "close", "high",
+			"low", "open", "volume").
+			From(schemaName+".price").
+			OrderBy("date desc").
+			PlaceholderFormat(sq.Dollar)
+
+		if !f.From.IsZero() {
+			q = q.Where("date >= ?", f.From)
+		}
+
+		if f.Limit > 0 {
+			q = q.Limit(f.Limit)
+		}
+
+		sql, args, err := q.ToSql()
+		if err != nil {
+			return err
+		}
+
+		rows, err := runner.QueryContext(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var date time.Time
+			var symbol string
+			var close float64
+			var high float64
+			var low float64
+			var open float64
+			var volume float64
+
+			err = rows.Scan(&date, &symbol, &close, &high,
+				&low, &open, &volume)
+			if err != nil {
+				return err
+			}
+			np := &divyield.Price{
+				Date:   date,
+				Symbol: symbol,
+				Close:  close,
+				High:   high,
+				Low:    low,
+				Open:   open,
+				Volume: volume,
+			}
+			prices = append(prices, np)
+		}
+        return nil
+	})
+    if err != nil {
+        return nil, err
+    }
+	return prices, nil
 }
 
 func (db *DB) PrependPrices(
@@ -75,18 +137,18 @@ func (db *DB) PrependPrices(
 	ticker string,
 	prices []*divyield.Price,
 ) error {
-    if len(prices) == 0 {
-        return nil
-    }
+	if len(prices) == 0 {
+		return nil
+	}
 
 	err := execTx(ctx, db.DB, func(runner runner) error {
 		schemaName := schemaName(ticker)
 
 		row := runner.QueryRowContext(ctx,
 			"select date from "+schemaName+".price "+
-                "order by date desc limit 1")
+				"order by date desc limit 1")
 
-        var date time.Time
+		var date time.Time
 		err := row.Scan(&date)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
@@ -100,8 +162,8 @@ func (db *DB) PrependPrices(
 					newBottom.Date, date)
 			}
 
-            // forget the last price
-            prices = prices[:len(prices)-1]
+			// forget the last price
+			prices = prices[:len(prices)-1]
 		}
 
 		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
@@ -119,14 +181,14 @@ func (db *DB) PrependPrices(
 				// noop
 			}
 
-			_, err = stmt.ExecContext(ctx, v.Date, v.Symbol, v.Close, 
-                v.High, v.Low, v.Open, v.Volume)
+			_, err = stmt.ExecContext(ctx, v.Date, v.Symbol, v.Close,
+				v.High, v.Low, v.Open, v.Volume)
 			if err != nil {
 				return err
 			}
 		}
 
-        _, err = stmt.ExecContext(ctx)
+		_, err = stmt.ExecContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -145,7 +207,61 @@ func (db *DB) Dividends(
 	ticker string,
 	f *divyield.DividendFilter,
 ) ([]*divyield.Dividend, error) {
-	return nil, nil
+	dividends := make([]*divyield.Dividend, 0)
+
+	err := execNonTx(ctx, db.DB, func(runner runner) error {
+		schemaName := schemaName(ticker)
+
+		q := sq.Select("ex_date", "amount", "currency", "frequency", "symbol").
+			From(schemaName+".dividend").
+			OrderBy("ex_date desc").
+			PlaceholderFormat(sq.Dollar)
+
+		if !f.From.IsZero() {
+			q = q.Where("ex_date >= ?", f.From)
+		}
+
+		if f.Limit > 0 {
+			q = q.Limit(f.Limit)
+		}
+
+		sql, args, err := q.ToSql()
+		if err != nil {
+			return err
+		}
+
+		rows, err := runner.QueryContext(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var exDate time.Time
+			var amount float64
+			var currency string
+			var frequency int
+			var symbol string
+
+			err = rows.Scan(&exDate, &amount, &currency, &frequency, &symbol)
+			if err != nil {
+				return err
+			}
+			v := &divyield.Dividend{
+				ExDate:    exDate,
+				Amount:    amount,
+				Currency:  currency,
+				Frequency: frequency,
+				Symbol:    symbol,
+			}
+			dividends = append(dividends, v)
+		}
+        return nil
+	})
+    if err != nil {
+        return nil, err
+    }
+	return dividends, nil
 }
 
 func (db *DB) PrependDividends(
@@ -163,7 +279,11 @@ type runner interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 
-func execTx(ctx context.Context, db *sql.DB, fn func(runner runner) error) error {
+func execTx(
+	ctx context.Context,
+	db *sql.DB,
+	fn func(runner runner) error,
+) error {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -178,6 +298,14 @@ func execTx(ctx context.Context, db *sql.DB, fn func(runner runner) error) error
 	}
 
 	return tx.Commit()
+}
+
+func execNonTx(
+	ctx context.Context,
+	db *sql.DB,
+	fn func(runner runner) error,
+) error {
+	return fn(db)
 }
 
 const initSchemaTmpl = `

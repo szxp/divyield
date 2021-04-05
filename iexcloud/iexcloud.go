@@ -242,17 +242,19 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 }
 
 func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
-	p := filepath.Join(f.opts.outputDir, ticker, "dividends.json")
-
     latestDividends, err := f.opts.db.Dividends(ctx, ticker, &divyield.DividendFilter{Limit: 1})
 	if err != nil {
-		return fmt.Errorf("load dividends file %s: %s", p, err)
+		return fmt.Errorf("latest dividend: %s", err)
 	}
+
+    fmt.Printf("latest dividend: %+v\n", latestDividends)
 
 	downloadFrom := time.Date(time.Now().Year()-5, time.January, 1, 1, 0, 0, 0, time.UTC)
 	if len(latestDividends) > 0 {
 		downloadFrom = latestDividends[0].ExDate
 	}
+    
+    fmt.Println("download dividends from", downloadFrom)
 
 	now := time.Now().UTC()
 	nowDate := timeDate(now)
@@ -268,11 +270,9 @@ func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
 	}
 
 	if len(newDividends) > 1 {
-		f.log("%s: %d new dividends", ticker, len(newDividends))
-
         err = f.opts.db.PrependDividends(ctx, ticker, toDBDividends(newDividends))
 	    if err != nil {
-		    return fmt.Errorf("save dividends %s: %s", p, err)
+		    return fmt.Errorf("save dividends: %s", err)
 	    }
 	}
 
@@ -423,7 +423,9 @@ func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
 		return fmt.Errorf("latest price: %s", err)
 	}
 
-	downloadFrom := time.Date(time.Now().Year()-5, time.January, 1, 1, 0, 0, 0, time.UTC)
+    fmt.Printf("latest price: %+v\n", latestPrices)
+	
+    downloadFrom := time.Date(time.Now().Year()-5, time.January, 1, 1, 0, 0, 0, time.UTC)
     if len(latestPrices) >0 {
 		downloadFrom = time.Time(latestPrices[0].Date)
 	}
@@ -443,8 +445,8 @@ func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
 		return fmt.Errorf("download prices %s: %s", ticker, err)
 	}
 
+
 	if len(newPrices) > 1 {
-		f.log("%s: %d new prices", ticker, len(newPrices))
 	    err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
 	    if err != nil {
 		    return fmt.Errorf("save prices: %s", err)

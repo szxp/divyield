@@ -37,7 +37,7 @@ func (p *Price) String() string {
 
 type PriceFilter struct {
 	From time.Time
-    Limit int64
+    Limit uint64
 }
 
 
@@ -58,5 +58,5 @@ func (d *Dividend) String() string {
 
 type DividendFilter struct {
 	From time.Time
-    Limit int64
+    Limit uint64
 }
