@@ -108,7 +108,7 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-	startDate:   time.Date(1900, time.January, 1, 1, 0, 0, 0, time.UTC),
+    startDate:   time.Date(2000, time.January, 1, 1, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -375,7 +375,9 @@ func (d *dividend) FrequencyNumber() int {
     if d.Frequency == "quaterly" {
         return 4
     }
-    return 0
+
+    panic("unexpected frequency: " + d.String())
+    //return 0
 }
 
 func parseDividends(r io.Reader) ([]*dividend, error) {
