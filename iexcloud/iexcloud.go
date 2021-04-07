@@ -1,24 +1,23 @@
 package iexcloud
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/time/rate"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"golang.org/x/time/rate"
-    "strings"
-    "strconv"
 
 	"szakszon.com/divyield"
-	"szakszon.com/divyield/logger"
 	"szakszon.com/divyield/httprate"
+	"szakszon.com/divyield/logger"
 )
 
 type options struct {
@@ -31,7 +30,7 @@ type options struct {
 	logger           logger.Logger
 	rateLimiter      *rate.Limiter
 	workers          int
-    db              divyield.DB
+	db               divyield.DB
 }
 
 type Option func(o options) options
@@ -108,7 +107,7 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-    startDate:   time.Date(2000, time.January, 1, 1, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2000, time.January, 1, 1, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -124,7 +123,7 @@ func NewStockFetcher(os ...Option) StockFetcher {
 
 	return StockFetcher{
 		client: &httprate.RLClient{
-		    Client: &http.Client{
+			Client: &http.Client{
 				Timeout: opts.timeout,
 			},
 			Ratelimiter: opts.rateLimiter,
@@ -134,7 +133,7 @@ func NewStockFetcher(os ...Option) StockFetcher {
 }
 
 type StockFetcher struct {
-    db *divyield.DB
+	db *divyield.DB
 
 	client *httprate.RLClient
 	opts   options
@@ -142,16 +141,16 @@ type StockFetcher struct {
 }
 
 func (f *StockFetcher) Fetch(ctx context.Context, tickers []string) {
-    if f.opts.endDate.IsZero() {
+	if f.opts.endDate.IsZero() {
 		f.opts.endDate = time.Now()
-    }
+	}
 
-    err := f.opts.db.InitSchema(ctx, tickers)
-    if err != nil {
-        e := fmt.Errorf("init schema: %v", err)
-	    f.errs = append(f.errs, e)
-        return
-    }
+	err := f.opts.db.InitSchema(ctx, tickers)
+	if err != nil {
+		e := fmt.Errorf("init schema: %v", err)
+		f.errs = append(f.errs, e)
+		return
+	}
 
 	var workerWg sync.WaitGroup
 	jobCh := make(chan job)
@@ -242,19 +241,19 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 }
 
 func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
-    latestDividends, err := f.opts.db.Dividends(ctx, ticker, &divyield.DividendFilter{Limit: 1})
+	latestDividends, err := f.opts.db.Dividends(
+		ctx, ticker, &divyield.DividendFilter{Limit: 1})
 	if err != nil {
 		return fmt.Errorf("latest dividend: %s", err)
 	}
 
-    fmt.Printf("latest dividend: %+v\n", latestDividends)
-
-	downloadFrom := time.Date(time.Now().Year()-5, time.January, 1, 1, 0, 0, 0, time.UTC)
+	downloadFrom := f.opts.startDate
 	if len(latestDividends) > 0 {
 		downloadFrom = latestDividends[0].ExDate
 	}
-    
-    fmt.Println("download dividends from", downloadFrom)
+
+	f.log("%v: download dividends from %v",
+		ticker, downloadFrom.Format(divyield.DateFormat))
 
 	now := time.Now().UTC()
 	nowDate := timeDate(now)
@@ -264,60 +263,49 @@ func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
 		return nil // up-to-date
 	}
 
-	newDividends, err := f.downloadDividends(ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
+	newDividends, err := f.downloadDividends(
+		ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
 	if err != nil {
-		return fmt.Errorf("download dividends %s: %s", ticker, err)
+		return err
 	}
 
 	if len(newDividends) > 1 {
-        err = f.opts.db.PrependDividends(ctx, ticker, toDBDividends(newDividends))
-	    if err != nil {
-		    return fmt.Errorf("save dividends: %s", err)
-	    }
-	}
-
-/*
-	// new dividends and saved dividends must overlap
-	if len(newDividends) > 0 && len(savedDividends) > 0 {
-		newBottom := newDividends[len(newDividends)-1]
-		savedTop := savedDividends[0]
-		if newBottom.Refid != savedTop.Refid {
-			return fmt.Errorf("non-overlapping refids %v vs %v", newBottom.Refid, savedTop.Refid)
+		err = f.opts.db.PrependDividends(
+			ctx, ticker, toDBDividends(newDividends))
+		if err != nil {
+			return fmt.Errorf("save dividends: %s", err)
 		}
 	}
-
-
-	mergedDividends := make([]*dividend, 0, len(newDividends)+len(savedDividends))
-	mergedDividends = append(mergedDividends, newDividends...)
-	if len(savedDividends) > 0 {
-		mergedDividends = append(mergedDividends, savedDividends[1:]...)
-	}
-*/
 
 	return nil
 }
 
 func toDBDividends(dividends []*dividend) []*divyield.Dividend {
-    ret := make([]*divyield.Dividend, 0, len(dividends))
+	ret := make([]*divyield.Dividend, 0, len(dividends))
 
-    for _, v := range dividends {
-        nv := &divyield.Dividend{
-            ExDate: time.Time(v.ExDate),
-            Symbol: v.Symbol,
-            Amount: v.Amount,
-            Currency: v.Currency,
-            Frequency: v.FrequencyNumber(),
-        }
-        ret = append(ret, nv)
-    }
-    return ret
+	for _, v := range dividends {
+		nv := &divyield.Dividend{
+			ExDate:    time.Time(v.ExDate),
+			Symbol:    v.Symbol,
+			Amount:    v.Amount,
+			Currency:  v.Currency,
+			Frequency: v.FrequencyNumber(),
+		}
+		ret = append(ret, nv)
+	}
+	return ret
 }
 
 func timeDate(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-func (f *StockFetcher) downloadDividends(ctx context.Context, ticker string, from time.Time, apiToken string) ([]*dividend, error) {
+func (f *StockFetcher) downloadDividends(
+	ctx context.Context,
+	ticker string,
+	from time.Time,
+	apiToken string,
+) ([]*dividend, error) {
 	u := dividendsURL(ticker, from, apiToken)
 	//fmt.Println(u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -344,7 +332,8 @@ func (f *StockFetcher) downloadDividends(ctx context.Context, ticker string, fro
 }
 
 func dividendsURL(ticker string, from time.Time, apiToken string) string {
-	return "https://cloud.iexapis.com/stable/time-series/DIVIDENDS/" + ticker +
+	return "https://cloud.iexapis.com/stable/time-series" +
+		"/DIVIDENDS/" + ticker +
 		"?from=" + from.Format(divyield.DateFormat) +
 		"&token=" + apiToken
 
@@ -355,13 +344,13 @@ func dividendsURL(ticker string, from time.Time, apiToken string) string {
 }
 
 type dividend struct {
-	ExDate       Time     `json:"exDate"`
-	Amount       float64  `json:"amount"`
-	Currency     string   `json:"currency"`
-	Flag         string   `json:"flag"`
-	Frequency    string   `json:"frequency"`
-	Refid        int64    `json:"refid"`
-	Symbol       string   `json:"symbol"`
+	ExDate    Time    `json:"exDate"`
+	Amount    float64 `json:"amount"`
+	Currency  string  `json:"currency"`
+	Flag      string  `json:"flag"`
+	Frequency string  `json:"frequency"`
+	Refid     int64   `json:"refid"`
+	Symbol    string  `json:"symbol"`
 }
 
 func (d *dividend) String() string {
@@ -372,12 +361,12 @@ func (d *dividend) String() string {
 }
 
 func (d *dividend) FrequencyNumber() int {
-    if d.Frequency == "quaterly" {
-        return 4
-    }
+	if d.Frequency == "quarterly" {
+		return 4
+	}
 
-    panic("unexpected frequency: " + d.String())
-    //return 0
+	panic(fmt.Sprintf("unexpected frequency: %v: %v: %v",
+		d.Symbol, d.ExDate, d.Frequency))
 }
 
 func parseDividends(r io.Reader) ([]*dividend, error) {
@@ -417,22 +406,20 @@ func sortDividendsDesc(dividends []*dividend) {
 	})
 }
 
-
-
 func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
-    latestPrices, err := f.opts.db.Prices(ctx, ticker, &divyield.PriceFilter{Limit: 1})
+	latestPrices, err := f.opts.db.Prices(
+		ctx, ticker, &divyield.PriceFilter{Limit: 1})
 	if err != nil {
 		return fmt.Errorf("latest price: %s", err)
 	}
 
-    fmt.Printf("latest price: %+v\n", latestPrices)
-	
-    downloadFrom := time.Date(time.Now().Year()-5, time.January, 1, 1, 0, 0, 0, time.UTC)
-    if len(latestPrices) >0 {
+	downloadFrom := f.opts.startDate
+	if len(latestPrices) > 0 {
 		downloadFrom = time.Time(latestPrices[0].Date)
 	}
 
-    fmt.Println("download prices from", downloadFrom)
+	f.log("%v: download prices from %v",
+		ticker, downloadFrom.Format(divyield.DateFormat))
 
 	now := time.Now().UTC()
 	nowDate := timeDate(now)
@@ -442,43 +429,46 @@ func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
 		return nil // up-to-date
 	}
 
-	newPrices, err := f.downloadPrices(ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
+	newPrices, err := f.downloadPrices(
+		ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
 	if err != nil {
-		return fmt.Errorf("download prices %s: %s", ticker, err)
+		return err
 	}
 
-
 	if len(newPrices) > 1 {
-	    err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
-	    if err != nil {
-		    return fmt.Errorf("save prices: %s", err)
-	    }
+		err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
+		if err != nil {
+			return fmt.Errorf("save prices: %s", err)
+		}
 	}
 
 	return nil
 }
 
 func toDBPrices(prices []*price) []*divyield.Price {
-    ret := make([]*divyield.Price, 0, len(prices))
+	ret := make([]*divyield.Price, 0, len(prices))
 
-    for _, p := range prices {
-        dbp := &divyield.Price{
-            Date: time.Time(p.Date),
-            Symbol: p.Symbol,
-            Close: p.UClose,
-            High: p.UHigh,
-            Low: p.ULow,
-            Open: p.UOpen,
-            Volume: p.UVolume,
-        }
-        ret = append(ret, dbp)
-    }
-    return ret
+	for _, p := range prices {
+		dbp := &divyield.Price{
+			Date:   time.Time(p.Date),
+			Symbol: p.Symbol,
+			Close:  p.UClose,
+			High:   p.UHigh,
+			Low:    p.ULow,
+			Open:   p.UOpen,
+			Volume: p.UVolume,
+		}
+		ret = append(ret, dbp)
+	}
+	return ret
 }
 
-
-
-func (f *StockFetcher) downloadPrices(ctx context.Context, ticker string, from time.Time, apiToken string) ([]*price, error) {
+func (f *StockFetcher) downloadPrices(
+	ctx context.Context,
+	ticker string,
+	from time.Time,
+	apiToken string,
+) ([]*price, error) {
 	u := pricesURL(ticker, from, apiToken)
 	//fmt.Println(u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -505,7 +495,8 @@ func (f *StockFetcher) downloadPrices(ctx context.Context, ticker string, from t
 }
 
 func pricesURL(ticker string, from time.Time, apiToken string) string {
-	return "https://cloud.iexapis.com/stable/time-series/HISTORICAL_PRICES/" + ticker +
+	return "https://cloud.iexapis.com/stable/time-series" +
+		"/HISTORICAL_PRICES/" + ticker +
 		"?from=" + from.Format(divyield.DateFormat) +
 		"&token=" + apiToken
 
@@ -515,9 +506,11 @@ func pricesURL(ticker string, from time.Time, apiToken string) string {
 	// 	"&interval=1d&events=history&includeAdjustedClose=true"
 }
 
-
-
-func (f *StockFetcher) download(ctx context.Context, dst io.Writer, u string) (int64, error) {
+func (f *StockFetcher) download(
+	ctx context.Context,
+	dst io.Writer,
+	u string,
+) (int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return 0, err
@@ -538,11 +531,11 @@ func (f *StockFetcher) download(ctx context.Context, dst io.Writer, u string) (i
 type price struct {
 	Date    TimeUnix `json:"date"`
 	Symbol  string   `json:"symbol"`
-	UClose   float64  `json:"uClose"`
-	UHigh    float64  `json:"uHigh"`
-	ULow     float64  `json:"uLow"`
-	UOpen    float64  `json:"uOpen"`
-	UVolume  float64  `json:"uVolume"`
+	UClose  float64  `json:"uClose"`
+	UHigh   float64  `json:"uHigh"`
+	ULow    float64  `json:"uLow"`
+	UOpen   float64  `json:"uOpen"`
+	UVolume float64  `json:"uVolume"`
 }
 
 func (p *price) String() string {
@@ -679,74 +672,4 @@ type FetchError struct {
 
 func (e *FetchError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Ticker, e.Err)
-}
-
-func linesN(path string, n int) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanLines)
-	var text []string
-	for scanner.Scan() {
-		if n == 0 {
-			break
-		}
-		text = append(text, scanner.Text())
-		if n > 0 {
-			n -= 1
-		}
-	}
-	return text, nil
-}
-
-func sortCSVDesc(p string) error {
-	lines, err := linesN(p, -1)
-	if err != nil {
-		return err
-	}
-	if len(lines) < 3 {
-		return nil
-	}
-
-	header := lines[0]
-	body := lines[1:]
-	sort.Sort(sort.Reverse(sort.StringSlice(body)))
-
-	f, err := os.Create(p)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	w := bufio.NewWriter(f)
-
-	_, err = w.WriteString(header)
-	if err != nil {
-		return err
-	}
-	err = w.WriteByte('\n')
-	if err != nil {
-		return err
-	}
-
-	for _, line := range body {
-		_, err = w.WriteString(line)
-		if err != nil {
-			return err
-		}
-		err = w.WriteByte('\n')
-		if err != nil {
-			return err
-		}
-	}
-
-	err = w.Flush()
-	if err != nil {
-		return err
-	}
-
-	return err
 }

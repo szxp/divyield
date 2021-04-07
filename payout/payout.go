@@ -751,5 +751,3 @@ var payoutPerYear map[string]int = map[string]int{
 	"ZION":  4,
 	"ZTS":   4,
 }
-
-

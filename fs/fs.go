@@ -1,15 +1,15 @@
 package fs
 
 import (
-    "io/ioutil"
-    "path/filepath"
-    "os"
-    "errors"
-    "fmt"
-    "io"
-    "encoding/json"
-    "sort"
-    "time"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
 
 	"szakszon.com/divyield"
 )
@@ -82,7 +82,7 @@ func sortDividendsDesc(dividends []*divyield.Dividend) {
 func (s *DB) PrependDividends(ticker string, dividends []*divyield.Dividend) error {
 	// calc overlaping
 	// save
-    return nil
+	return nil
 }
 
 func save(ticker string, dividends []*divyield.Dividend) error {
@@ -119,14 +119,12 @@ func saveJsonTmp(dir, name string, v interface{}) (string, error) {
 	return tmp.Name(), nil
 }
 
-
 func (s *DB) Prices(
 	ticker string,
 	f *PriceFilter,
 ) ([]*Price, error) {
 	return nil, nil
 }
-
 
 func (s *DB) PrependPrices(
 	ticker string,

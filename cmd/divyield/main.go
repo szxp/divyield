@@ -1,30 +1,29 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"flag"
 	"fmt"
-	"regexp"
-	"time"
-	"os"
-	"os/signal"
-	"syscall"
-	"context"
-	"strconv"
-    "database/sql"
 	_ "github.com/lib/pq"
 	"golang.org/x/time/rate"
+	"os"
+	"os/signal"
+	"regexp"
+	"strconv"
+	"syscall"
+	"time"
 
-	"szakszon.com/divyield/postgres"
-	"szakszon.com/divyield/iexcloud"
-	"szakszon.com/divyield/stats"
 	"szakszon.com/divyield/charter"
+	"szakszon.com/divyield/iexcloud"
+	"szakszon.com/divyield/postgres"
+	"szakszon.com/divyield/stats"
 )
 
 var relDateRE *regexp.Regexp = regexp.MustCompile("^-[0-9]+y$")
 
 const defaultStocksDir = "work/stocks"
 const defaultChartOutputDir = "work/charts"
-
 
 func main() {
 	var err error
@@ -41,14 +40,12 @@ func main() {
 		ctxCancel()
 	}()
 
-
-    dbConnStr := flag.CommandLine.String("db", "postgres://postgres:postgres@localhost/divyield?sslmode=disable", "database connection string")
-
+	dbConnStr := flag.CommandLine.String("db", "postgres://postgres:postgres@localhost/divyield?sslmode=disable", "database connection string")
 
 	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
 		fmt.Println(usageFetch)
-		os.Exit(1) 
+		os.Exit(1)
 	}
 	fetchOutputDir := fetchCmd.String("outputDir", defaultStocksDir, "output dir")
 	fetchForce := fetchCmd.Bool("force", false, "force downloading stock data even if it is already downloaded")
@@ -57,14 +54,14 @@ func main() {
 	statsCmd := flag.NewFlagSet("stats", flag.ExitOnError)
 	statsCmd.Usage = func() {
 		fmt.Println(usageStats)
-		os.Exit(1) 
+		os.Exit(1)
 	}
 	statsStocksDir := statsCmd.String("stocksDir", defaultStocksDir, "stocks dir")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
 		fmt.Println(usageChart)
-		os.Exit(1) 
+		os.Exit(1)
 	}
 	chartOutputDir := chartCmd.String("outputDir", defaultChartOutputDir, "output dir")
 	chartStocksDir := chartCmd.String("stocksDir", defaultStocksDir, "stocks dir")
@@ -78,23 +75,23 @@ func main() {
 		os.Exit(1)
 	}
 
-    subIdx := subcommandIndex(os.Args)
-    err = flag.CommandLine.Parse(os.Args[1:subIdx])
-    if err != nil {
-        fmt.Println(err)
+	subIdx := subcommandIndex(os.Args)
+	err = flag.CommandLine.Parse(os.Args[1:subIdx])
+	if err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 
-    }
+	}
 
-    db, err := sql.Open("postgres", *dbConnStr)
-    if err != nil {
-        fmt.Println(err)
+	db, err := sql.Open("postgres", *dbConnStr)
+	if err != nil {
+		fmt.Println(err)
 		os.Exit(1)
-    }
+	}
 
-    pdb := &postgres.DB{
-        DB: db,
-    }
+	pdb := &postgres.DB{
+		DB: db,
+	}
 
 	switch os.Args[subIdx] {
 	case "fetch":
@@ -178,7 +175,6 @@ func main() {
 			}
 		}
 
-		
 		charter := charter.NewCharter(
 			charter.OutputDir(*chartOutputDir),
 			charter.StocksDir(*chartStocksDir),
@@ -198,15 +194,15 @@ func main() {
 }
 
 func subcommandIndex(args []string) int {
-    subcommands := []string{"fetch", "chart", "stats"}
-    for i, a := range args {
-        for _, c := range subcommands {
-            if a == c {
-                return i
-            }
-        }
-    }
-    return len(args)
+	subcommands := []string{"fetch", "chart", "stats"}
+	for i, a := range args {
+		for _, c := range subcommands {
+			if a == c {
+				return i
+			}
+		}
+	}
+	return len(args)
 }
 
 const usage = `usage: divyield <command> [<flags>] [<args>]
@@ -248,10 +244,9 @@ Flags:
       stocks dir (default "work/stocks")
 `
 
-type StdoutLogger struct {}
+type StdoutLogger struct{}
 
 func (l *StdoutLogger) Logf(format string, v ...interface{}) {
 	fmt.Printf(format, v...)
 	fmt.Println()
 }
-

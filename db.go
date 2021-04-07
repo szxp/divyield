@@ -1,29 +1,50 @@
 package divyield
 
 import (
-    "time"
-    "fmt"
-    "context"
+	"context"
+	"fmt"
+	"time"
 )
 
 type DB interface {
-    InitSchema(ctx context.Context, tickers []string) error
+	InitSchema(
+		ctx context.Context,
+		tickers []string,
+	) error
 
-	Prices(ctx context.Context, ticker string, f *PriceFilter) ([]*Price, error)
-	PrependPrices(ctx context.Context, ticker string, prices []*Price) error
+	Prices(
+		ctx context.Context,
+		ticker string,
+		f *PriceFilter,
+	) ([]*Price, error)
 
-	Dividends(ctx context.Context, ticker string, f *DividendFilter) ([]*Dividend, error)
-	PrependDividends(ctx context.Context, ticker string, dividends []*Dividend) error
+	PrependPrices(
+		ctx context.Context,
+		ticker string,
+		prices []*Price,
+	) error
+
+	Dividends(
+		ctx context.Context,
+		ticker string,
+		f *DividendFilter,
+	) ([]*Dividend, error)
+
+	PrependDividends(
+		ctx context.Context,
+		ticker string,
+		dividends []*Dividend,
+	) error
 }
 
 type Price struct {
-	Date    time.Time
-	Symbol  string
-	Close   float64
-	High    float64
-	Low     float64
-	Open    float64
-	Volume  float64
+	Date   time.Time
+	Symbol string
+	Close  float64
+	High   float64
+	Low    float64
+	Open   float64
+	Volume float64
 }
 
 const DateFormat = "2006-01-02"
@@ -36,17 +57,16 @@ func (p *Price) String() string {
 }
 
 type PriceFilter struct {
-	From time.Time
-    Limit uint64
+	From  time.Time
+	Limit uint64
 }
 
-
 type Dividend struct {
-	ExDate       time.Time
-	Amount       float64
-	Currency     string
-	Frequency    int
-	Symbol       string
+	ExDate    time.Time
+	Amount    float64
+	Currency  string
+	Frequency int
+	Symbol    string
 }
 
 func (d *Dividend) String() string {
@@ -57,6 +77,6 @@ func (d *Dividend) String() string {
 }
 
 type DividendFilter struct {
-	From time.Time
-    Limit uint64
+	From  time.Time
+	Limit uint64
 }

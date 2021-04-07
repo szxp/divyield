@@ -1,10 +1,9 @@
 package divyield
 
 import (
-    "context"
+	"context"
 )
 
 type StockFetcher interface {
-   Fetch(ctx context.Context, tickers []string)
+	Fetch(ctx context.Context, tickers []string)
 }
-

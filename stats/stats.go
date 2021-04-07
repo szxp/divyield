@@ -1,25 +1,25 @@
 package stats
 
 import (
-	"context"
-	"fmt"
-	"sync"
 	"bytes"
-	"text/tabwriter"	
-	"strconv"
-	"path/filepath"
-	"os"
-	"time"
+	"context"
 	"encoding/csv"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
+	"sync"
+	"text/tabwriter"
+	"time"
 
-	"szakszon.com/divyield/payout"
 	"szakszon.com/divyield/logger"
+	"szakszon.com/divyield/payout"
 )
 
 type options struct {
 	stocksDir string
-	now time.Time
+	now       time.Time
 	logger    logger.Logger
 }
 
@@ -47,7 +47,7 @@ func Log(l logger.Logger) Option {
 }
 
 var defaultOptions = options{
-	logger:    nil,
+	logger: nil,
 }
 
 func NewStatsGenerator(os ...Option) StatsGenerator {
@@ -65,14 +65,14 @@ type StatsGenerator struct {
 }
 
 type StatsRow struct {
-	Ticker string
-	DivYield float64
+	Ticker           string
+	DivYield         float64
 	DividendChangeMR *DividendChangeMR
-	DGR1y float64
-	DGR3y float64
-	DGR5y float64
-	DGR10y float64
-	DividendsAnnual []*DividendAnnual
+	DGR1y            float64
+	DGR3y            float64
+	DGR5y            float64
+	DGR10y           float64
+	DividendsAnnual  []*DividendAnnual
 }
 
 func (r *StatsRow) DGR(n int) float64 {
@@ -85,14 +85,14 @@ func (r *StatsRow) DGR(n int) float64 {
 
 type DividendChangeMR struct {
 	Amount float64
-	Date time.Time
+	Date   time.Time
 }
 
 type DividendAnnual struct {
-	Year int
-	Amount float64
+	Year          int
+	Amount        float64
 	PayoutPerYear int
-	ChangeRate float64 // compared to the year before
+	ChangeRate    float64 // compared to the year before
 }
 
 type Stats struct {
@@ -124,7 +124,7 @@ func (s *Stats) String() string {
 	// if len(s.Rows) > 0 {
 	// 	for _, d := range s.Rows[0].DividendsAnnual {
 	// 		b.WriteString("DGR-" + strconv.Itoa(d.Year) + " (DPS)")
-	// 		b.WriteByte('\t')	
+	// 		b.WriteByte('\t')
 	// 	}
 	// }
 	fmt.Fprintln(w, b.String())
@@ -150,7 +150,7 @@ func (s *Stats) String() string {
 
 		// for _, d := range row.DividendsAnnual {
 		// 	b.WriteString(fmt.Sprintf("%.2f%% (%.2f)", d.ChangeRate, d.Amount))
-		// 	b.WriteByte('\t')	
+		// 	b.WriteByte('\t')
 		// }
 
 		fmt.Fprintln(w, b.String())
@@ -160,8 +160,8 @@ func (s *Stats) String() string {
 }
 
 type result struct {
-	Row *StatsRow 
-	Err    error
+	Row *StatsRow
+	Err error
 }
 
 type StatsError struct {
@@ -172,7 +172,6 @@ type StatsError struct {
 func (e *StatsError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Ticker, e.Err)
 }
-
 
 func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats, error) {
 	var workerWg sync.WaitGroup
@@ -195,9 +194,8 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 
 		sort.SliceStable(stats.Rows, func(i, j int) bool {
 			return stats.Rows[i].Ticker < stats.Rows[j].Ticker
-		})	
+		})
 	}()
-
 
 LOOP:
 	for _, ticker := range tickers {
@@ -229,7 +227,6 @@ LOOP:
 	return stats, nil
 }
 
-
 func (f *StatsGenerator) generateStatsRow(ticker string) (*StatsRow, error) {
 	dividendsPath := filepath.Join(f.opts.stocksDir, ticker, "dividends.csv")
 	dividends, err := parseDividends(dividendsPath)
@@ -250,14 +247,13 @@ func (f *StatsGenerator) generateStatsRow(ticker string) (*StatsRow, error) {
 	for _, a := range divsAnnual {
 		if payout.PerYear(ticker) != a.PayoutPerYear {
 		}
-		fmt.Println(ticker, a.Year, a.PayoutPerYear, a.Amount, a.ChangeRate)			
+		fmt.Println(ticker, a.Year, a.PayoutPerYear, a.Amount, a.ChangeRate)
 	}
 
-
 	row := &StatsRow{
-		Ticker: ticker,
+		Ticker:           ticker,
 		DividendChangeMR: mr,
-		DividendsAnnual: divsAnnual,
+		DividendsAnnual:  divsAnnual,
 	}
 
 	return row, nil
@@ -266,9 +262,9 @@ func (f *StatsGenerator) generateStatsRow(ticker string) (*StatsRow, error) {
 func (f *StatsGenerator) dividendChangeMostRecent(dividends []*Dividend) (*DividendChangeMR, error) {
 	mr := &DividendChangeMR{
 		Amount: float64(0),
-		Date: time.Time{},
+		Date:   time.Time{},
 	}
-	
+
 	if len(dividends) < 2 {
 		return mr, nil
 	}
@@ -276,15 +272,15 @@ func (f *StatsGenerator) dividendChangeMostRecent(dividends []*Dividend) (*Divid
 	for i := 0; i <= len(dividends)-2; i++ {
 		d1 := dividends[i]
 		d0 := dividends[i+1]
-		if (d1.Amount-d0.Amount) != 0 {
+		if (d1.Amount - d0.Amount) != 0 {
 			mr = &DividendChangeMR{
 				Amount: ((d1.Amount - d0.Amount) / d0.Amount) * 100,
-				Date: d1.Date,
+				Date:   d1.Date,
 			}
 			break
 		}
 	}
-	
+
 	return mr, nil
 }
 
@@ -294,7 +290,7 @@ func (f *StatsGenerator) dividendsAnnual(dividends []*Dividend) ([]*DividendAnnu
 	startYear := f.opts.now.Year() - 12
 	endYear := f.opts.now.Year() - 1
 
-	for i := startYear; i<=endYear; i++ {
+	for i := startYear; i <= endYear; i++ {
 		divsAnnualMap[i] = &DividendAnnual{Year: i}
 	}
 
@@ -331,7 +327,7 @@ func (f *StatsGenerator) dividendsAnnual(dividends []*Dividend) ([]*DividendAnnu
 }
 
 type Dividend struct {
-	Date     time.Time
+	Date   time.Time
 	Amount float64
 }
 

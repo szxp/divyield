@@ -1,8 +1,8 @@
 package httprate
 
 import (
-    "net/http"
 	"golang.org/x/time/rate"
+	"net/http"
 )
 
 type RLClient struct {
@@ -21,5 +21,3 @@ func (c *RLClient) Do(req *http.Request) (*http.Response, error) {
 	}
 	return resp, nil
 }
-
-

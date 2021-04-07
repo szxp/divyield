@@ -76,7 +76,7 @@ func (db *DB) Prices(
 		q := sq.Select(
 			"date", "symbol", "close", "high",
 			"low", "open", "volume").
-			From(schemaName+".price").
+			From(schemaName + ".price").
 			OrderBy("date desc").
 			PlaceholderFormat(sq.Dollar)
 
@@ -124,11 +124,11 @@ func (db *DB) Prices(
 			}
 			prices = append(prices, np)
 		}
-        return nil
+		return nil
 	})
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return prices, nil
 }
 
@@ -162,7 +162,7 @@ func (db *DB) PrependPrices(
 					newBottom.Date, date)
 			}
 
-			// forget the last price
+			// forget the last one
 			prices = prices[:len(prices)-1]
 		}
 
@@ -213,7 +213,7 @@ func (db *DB) Dividends(
 		schemaName := schemaName(ticker)
 
 		q := sq.Select("ex_date", "amount", "currency", "frequency", "symbol").
-			From(schemaName+".dividend").
+			From(schemaName + ".dividend").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
 
@@ -256,11 +256,11 @@ func (db *DB) Dividends(
 			}
 			dividends = append(dividends, v)
 		}
-        return nil
+		return nil
 	})
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return dividends, nil
 }
 
@@ -269,7 +269,68 @@ func (db *DB) PrependDividends(
 	ticker string,
 	dividends []*divyield.Dividend,
 ) error {
-	return nil
+	if len(dividends) == 0 {
+		return nil
+	}
+
+	err := execTx(ctx, db.DB, func(runner runner) error {
+		schemaName := schemaName(ticker)
+
+		var date time.Time
+		err := runner.QueryRowContext(ctx,
+			"select ex_date from "+schemaName+".dividend "+
+				"order by ex_date desc limit 1").
+			Scan(&date)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		if !date.IsZero() {
+			newBottom := dividends[len(dividends)-1]
+			if !newBottom.ExDate.Equal(date) {
+				return fmt.Errorf(
+					"non-overlapping dividend ex dates %v vs %v",
+					newBottom.ExDate, date)
+			}
+
+			// forget the last one
+			dividends = dividends[:len(dividends)-1]
+		}
+
+		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
+			schemaName, "dividend", "ex_date", "symbol",
+			"amount", "currency", "frequency"))
+		if err != nil {
+			return err
+		}
+
+		for _, v := range dividends {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("interrupted")
+			default:
+				// noop
+			}
+
+			_, err = stmt.ExecContext(ctx,
+				v.ExDate, v.Symbol, v.Amount, v.Currency, v.Frequency)
+			if err != nil {
+				return err
+			}
+		}
+
+		_, err = stmt.ExecContext(ctx)
+		if err != nil {
+			return err
+		}
+
+		err = stmt.Close()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return err
 }
 
 type runner interface {

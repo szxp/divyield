@@ -1,24 +1,24 @@
 package charter
 
 import (
-	"context"
-	"time"
-	"path/filepath"
-	"path"
-	"fmt"
 	"bufio"
-	"os"
-	"strconv"
-	"sort"
-	"io"
-	"encoding/csv"
-	"text/template"
 	"bytes"
+	"context"
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
+	"text/template"
+	"time"
 
-	"szakszon.com/divyield/payout"
 	"szakszon.com/divyield/logger"
+	"szakszon.com/divyield/payout"
 )
 
 type options struct {
@@ -101,40 +101,38 @@ func (f *Charter) Chart(ctx context.Context, tickers []string) error {
 		if err != nil {
 			return fmt.Errorf("parse prices: %s: %s", pricesPath, err)
 		}
-	
+
 		dividendsPath := filepath.Join(f.opts.stocksDir, ticker, "dividends.csv")
 		dividends, err := parseDividends(dividendsPath)
 		if err != nil {
 			return fmt.Errorf("parse dividends: %s: %s", dividendsPath, err)
 		}
-	
+
 		setDividendRecent(prices, dividends)
 
-		
 		err = os.MkdirAll(f.opts.outputDir, 0666)
 		if err != nil {
 			return fmt.Errorf("create dir: %s", err)
 		}
 
-		dataPath := filepath.Join(f.opts.outputDir, ticker + ".csv")
+		dataPath := filepath.Join(f.opts.outputDir, ticker+".csv")
 		d, err := os.Create(dataPath)
 		if err != nil {
 			return fmt.Errorf("create data file: %s: %s", dataPath, err)
 		}
 		defer d.Close()
-	
+
 		err = writePrices(d, prices, f.opts.startDate, f.opts.endDate)
 		if err != nil {
 			return fmt.Errorf("create data file: %s: %s", dataPath, err)
 		}
 
 		plotParams := plotParams{
-			Datafile: path.Join(f.opts.outputDir, ticker+".csv"),
-			Imgfile: path.Join(f.opts.outputDir, ticker+".png"),
-			TitlePrices:  ticker+" prices",
-			TitleDivYield: ticker+" forward dividend yield",
-			TitleDividends: ticker+" dividends",
-		
+			Datafile:       path.Join(f.opts.outputDir, ticker+".csv"),
+			Imgfile:        path.Join(f.opts.outputDir, ticker+".png"),
+			TitlePrices:    ticker + " prices",
+			TitleDivYield:  ticker + " forward dividend yield",
+			TitleDividends: ticker + " dividends",
 		}
 		plotCommandsTmpl, err := template.New("plot").Parse(plotCommandsTmpl)
 		if err != nil {
@@ -143,8 +141,8 @@ func (f *Charter) Chart(ctx context.Context, tickers []string) error {
 
 		plotCommands := bytes.NewBufferString("")
 		err = plotCommandsTmpl.Execute(plotCommands, plotParams)
-		if err != nil { 
-			return err 
+		if err != nil {
+			return err
 		}
 
 		plotCommandsStr := nlRE.ReplaceAllString(plotCommands.String(), " ")
@@ -152,7 +150,7 @@ func (f *Charter) Chart(ctx context.Context, tickers []string) error {
 		if err != nil {
 			return err
 		}
-		
+
 		f.log("%s: %s", ticker, "OK")
 	}
 	return nil
@@ -356,10 +354,10 @@ func parseDividends(p string) ([]*Dividend, error) {
 var nlRE = regexp.MustCompile(`\r?\n`)
 
 type plotParams struct {
-	Datafile string
-	Imgfile    string
-	TitlePrices string
-	TitleDivYield string
+	Datafile       string
+	Imgfile        string
+	TitlePrices    string
+	TitleDivYield  string
 	TitleDividends string
 }
 
@@ -405,4 +403,3 @@ plot datafile using 1:6 with filledcurves above y = 0;
 
 unset multiplot;
 `
-
