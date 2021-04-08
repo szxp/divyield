@@ -333,6 +333,66 @@ func (db *DB) PrependDividends(
 	return err
 }
 
+func (db *DB) DividendYields(
+	ctx context.Context,
+	ticker string,
+	f *divyield.DividendYieldFilter,
+) ([]*divyield.DividendYield, error) {
+	yields := make([]*divyield.DividendYield, 0)
+
+	err := execNonTx(ctx, db.DB, func(runner runner) error {
+		schemaName := schemaName(ticker)
+
+		q := sq.Select(
+			"date", 
+            "close", 
+            "(select coalesce(amount, 0) from "+schemaName+".dividend where ex_date <= date order by ex_date desc limit 1) as div_amount", 
+            "(select coalesce(frequency, 0) from "+schemaName+".dividend where ex_date <= date order by ex_date desc limit 1) as div_freq", 
+        ).
+			From(schemaName + ".price").
+			OrderBy("date desc").
+			PlaceholderFormat(sq.Dollar)
+
+		if !f.From.IsZero() {
+			q = q.Where("date >= ?", f.From)
+		}
+
+		sql, args, err := q.ToSql()
+		if err != nil {
+			return err
+		}
+
+		rows, err := runner.QueryContext(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var date time.Time
+			var close float64
+			var dividend float64
+			var frequency int
+
+			err = rows.Scan(&date, &close, &dividend, &frequency)
+			if err != nil {
+				return err
+			}
+			v := &divyield.DividendYield{
+				Date:   date,
+				Close:  close,
+				Dividend:   dividend,
+				Frequency:   frequency,
+			}
+			yields = append(yields, v)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return yields, nil
+}
 type runner interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	PrepareContext(context.Context, string) (*sql.Stmt, error)

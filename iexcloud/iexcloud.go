@@ -107,7 +107,7 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-	startDate:   time.Date(2000, time.January, 1, 1, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2021, time.January, 1, 1, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
