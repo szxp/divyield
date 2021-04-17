@@ -312,7 +312,7 @@ func (f *StockFetcher) downloadDividends(
 	apiToken string,
 ) ([]*dividend, error) {
 	u := dividendsURL(ticker, from, apiToken)
-	//fmt.Println(u)
+	fmt.Println(u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -350,6 +350,7 @@ func dividendsURL(ticker string, from time.Time, apiToken string) string {
 
 type dividend struct {
 	ExDate    Time    `json:"exDate"`
+	PaymentDate    Time    `json:"paymentDate"`
 	Amount    float64 `json:"amount"`
 	Currency  string  `json:"currency"`
 	Flag      string  `json:"flag"`
@@ -391,7 +392,10 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode: %s", err)
 		}
-		dividends = append(dividends, &v)
+
+        if !v.PaymentDate.IsZero() {
+    		dividends = append(dividends, &v)
+    }
 	}
 
 	// read closing bracket
@@ -553,6 +557,10 @@ func (p *price) String() string {
 type Time time.Time
 
 const DateFormat = "2006-01-02"
+
+func (t Time) IsZero() bool {
+	return time.Time(t).IsZero()
+}
 
 func (t Time) UntilDays(p time.Time) int64 {
 	st := time.Time(t)

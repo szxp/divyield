@@ -82,7 +82,10 @@ type StatsRow struct {
 func (r *StatsRow) DGR(n int) float64 {
 	sum := float64(0)
 	for _, a := range r.DividendsAnnual[0:n] {
-		sum += a.ChangeRate
+		if n==3 {
+            fmt.Println("change", a.ChangeRate)
+        }
+        sum += a.ChangeRate
 	}
 	return sum / float64(n)
 }
@@ -315,8 +318,8 @@ func (f *StatsGenerator) dividendsAnnual(
 ) ([]*DividendAnnual, error) {
 	divsAnnualMap := map[int]*DividendAnnual{}
 
-	startYear := f.opts.now.Year() - 12
 	endYear := f.opts.now.Year() - 1
+	startYear := f.opts.now.Year() - 12
 
 	for i := startYear; i <= endYear; i++ {
 		divsAnnualMap[i] = &DividendAnnual{Year: i}
@@ -335,6 +338,10 @@ func (f *StatsGenerator) dividendsAnnual(
 		a.Amount += d.Amount
 		a.PayoutPerYear += 1
 	}
+	
+    for _, x := range divsAnnualMap{
+        fmt.Printf("%v\n", x)
+    }
 
 	divsAnnual := []*DividendAnnual{}
 	for _, a := range divsAnnualMap {
@@ -349,8 +356,14 @@ func (f *StatsGenerator) dividendsAnnual(
 		a1 := divsAnnual[i]
 		a0 := divsAnnual[i+1]
 		a1.ChangeRate = ((a1.Amount - a0.Amount) / a0.Amount) * 100
-	}
+	
+           fmt.Printf("change from %v to %v: %v\n", 
+           a0.Year, a1.Year, a1.ChangeRate)
+    }
 
+    for _, x := range divsAnnual{
+        fmt.Printf("%v\n", x)
+    }
 	return divsAnnual, nil
 }
 
