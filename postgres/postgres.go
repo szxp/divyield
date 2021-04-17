@@ -212,7 +212,9 @@ func (db *DB) Dividends(
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
 		schemaName := schemaName(ticker)
 
-		q := sq.Select("ex_date", "amount", "currency", "frequency", "symbol").
+		q := sq.Select(
+			"ex_date", "amount", "currency",
+			"frequency", "symbol", "payment_type").
 			From(schemaName + ".dividend").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
@@ -223,6 +225,10 @@ func (db *DB) Dividends(
 
 		if f.Limit > 0 {
 			q = q.Limit(f.Limit)
+		}
+
+		if f.CashOnly {
+			q = q.Where("payment_type = ?", "Cash")
 		}
 
 		sql, args, err := q.ToSql()
@@ -242,17 +248,20 @@ func (db *DB) Dividends(
 			var currency string
 			var frequency int
 			var symbol string
+			var paymentType string
 
-			err = rows.Scan(&exDate, &amount, &currency, &frequency, &symbol)
+			err = rows.Scan(&exDate, &amount, &currency,
+				&frequency, &symbol, &paymentType)
 			if err != nil {
 				return err
 			}
 			v := &divyield.Dividend{
-				ExDate:    exDate,
-				Amount:    amount,
-				Currency:  currency,
-				Frequency: frequency,
-				Symbol:    symbol,
+				ExDate:      exDate,
+				Amount:      amount,
+				Currency:    currency,
+				Frequency:   frequency,
+				Symbol:      symbol,
+				PaymentType: paymentType,
 			}
 			dividends = append(dividends, v)
 		}
@@ -299,7 +308,7 @@ func (db *DB) PrependDividends(
 
 		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
 			schemaName, "dividend", "ex_date", "symbol",
-			"amount", "currency", "frequency"))
+			"amount", "currency", "frequency", "payment_type"))
 		if err != nil {
 			return err
 		}
@@ -313,7 +322,8 @@ func (db *DB) PrependDividends(
 			}
 
 			_, err = stmt.ExecContext(ctx,
-				v.ExDate, v.Symbol, v.Amount, v.Currency, v.Frequency)
+				v.ExDate, v.Symbol, v.Amount,
+				v.Currency, v.Frequency, v.PaymentType)
 			if err != nil {
 				return err
 			}
@@ -344,17 +354,21 @@ func (db *DB) DividendYields(
 		schemaName := schemaName(ticker)
 
 		q := sq.Select(
-			"date", 
-            "close", 
-            "(select coalesce(amount, 0) from "+schemaName+".dividend where ex_date <= date order by ex_date desc limit 1) as div_amount", 
-            "(select coalesce(frequency, 0) from "+schemaName+".dividend where ex_date <= date order by ex_date desc limit 1) as div_freq", 
-        ).
+			"date",
+			"close",
+			"(select coalesce(amount, 0) from "+schemaName+".dividend where ex_date <= date and payment_type = 'Cash' order by ex_date desc limit 1) as div_amount",
+			"(select coalesce(frequency, 0) from "+schemaName+".dividend where ex_date <= date and payment_type = 'Cash' order by ex_date desc limit 1) as div_freq",
+		).
 			From(schemaName + ".price").
 			OrderBy("date desc").
 			PlaceholderFormat(sq.Dollar)
 
 		if !f.From.IsZero() {
 			q = q.Where("date >= ?", f.From)
+		}
+
+		if f.Limit > 0 {
+			q = q.Limit(f.Limit)
 		}
 
 		sql, args, err := q.ToSql()
@@ -379,10 +393,10 @@ func (db *DB) DividendYields(
 				return err
 			}
 			v := &divyield.DividendYield{
-				Date:   date,
-				Close:  close,
-				Dividend:   dividend,
-				Frequency:   frequency,
+				Date:      date,
+				Close:     close,
+				Dividend:  dividend,
+				Frequency: frequency,
 			}
 			yields = append(yields, v)
 		}
@@ -393,6 +407,7 @@ func (db *DB) DividendYields(
 	}
 	return yields, nil
 }
+
 type runner interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	PrepareContext(context.Context, string) (*sql.Stmt, error)
@@ -444,11 +459,12 @@ create table {{.SchemaName}}.price (
 );
 
 create table {{.SchemaName}}.dividend (
-    ex_date     date not null,
-    symbol      varchar(10) not null,
-    amount      numeric not null,
-    currency    char(3) not null,
-    frequency   smallint not null,
+    ex_date      date not null,
+    symbol       varchar(10) not null,
+    amount       numeric not null,
+    currency     char(3) not null,
+    frequency    smallint not null,
+    payment_type text not null, 
     PRIMARY KEY(ex_date)	
 );
 `

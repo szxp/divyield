@@ -107,7 +107,7 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-	startDate:   time.Date(2021, time.January, 1, 1, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2010, time.January, 1, 1, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -269,7 +269,7 @@ func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
 		return err
 	}
 
-	if len(newDividends) > 1 {
+	if len(newDividends) > 0 {
 		err = f.opts.db.PrependDividends(
 			ctx, ticker, toDBDividends(newDividends))
 		if err != nil {
@@ -284,12 +284,17 @@ func toDBDividends(dividends []*dividend) []*divyield.Dividend {
 	ret := make([]*divyield.Dividend, 0, len(dividends))
 
 	for _, v := range dividends {
+		if v.Flag != "Cash" {
+			panic("non cash dividend: " + v.String())
+		}
+
 		nv := &divyield.Dividend{
-			ExDate:    time.Time(v.ExDate),
-			Symbol:    v.Symbol,
-			Amount:    v.Amount,
-			Currency:  v.Currency,
-			Frequency: v.FrequencyNumber(),
+			ExDate:      time.Time(v.ExDate),
+			Symbol:      v.Symbol,
+			Amount:      v.Amount,
+			Currency:    v.Currency,
+			Frequency:   v.FrequencyNumber(),
+			PaymentType: v.Flag,
 		}
 		ret = append(ret, nv)
 	}
@@ -435,7 +440,7 @@ func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
 		return err
 	}
 
-	if len(newPrices) > 1 {
+	if len(newPrices) > 0 {
 		err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
 		if err != nil {
 			return fmt.Errorf("save prices: %s", err)

@@ -40,39 +40,39 @@ func main() {
 		ctxCancel()
 	}()
 
-	dbConnStr := flag.CommandLine.String("db", 
-        "postgres://postgres:postgres@localhost/divyield?sslmode=disable", 
-        "database connection string")
+	dbConnStr := flag.CommandLine.String("db",
+		"postgres://postgres:postgres@localhost/divyield?sslmode=disable",
+		"database connection string")
 
 	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
 		fmt.Println(usageFetch)
 		os.Exit(1)
 	}
-	fetchOutputDir := fetchCmd.String("outputDir", 
-        defaultStocksDir, "output dir")
-	fetchForce := fetchCmd.Bool("force", false, 
-        "force downloading stock data even if it is already downloaded")
-	fetchIEXCloudAPIToken := fetchCmd.String("iexCloudAPIToken", "", 
-        "IEXCloud API Token, see https://iexcloud.io/docs/api/#authentication")
+	fetchOutputDir := fetchCmd.String("outputDir",
+		defaultStocksDir, "output dir")
+	fetchForce := fetchCmd.Bool("force", false,
+		"force downloading stock data even if it is already downloaded")
+	fetchIEXCloudAPIToken := fetchCmd.String("iexCloudAPIToken", "",
+		"IEXCloud API Token, see https://iexcloud.io/docs/api/#authentication")
 
 	statsCmd := flag.NewFlagSet("stats", flag.ExitOnError)
 	statsCmd.Usage = func() {
 		fmt.Println(usageStats)
 		os.Exit(1)
 	}
-	statsStocksDir := statsCmd.String("stocksDir", 
-        defaultStocksDir, "stocks dir")
+	statsStocksDir := statsCmd.String("stocksDir",
+		defaultStocksDir, "stocks dir")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
 		fmt.Println(usageChart)
 		os.Exit(1)
 	}
-	chartOutputDir := chartCmd.String("outputDir", 
-        defaultChartOutputDir, "output dir")
-	startDateFlag := chartCmd.String("startDate", 
-        "-10y", "start date of the chart period, format 2010-06-05 or relative -10y")
+	chartOutputDir := chartCmd.String("outputDir",
+		defaultChartOutputDir, "output dir")
+	startDateFlag := chartCmd.String("startDate",
+		"-10y", "start date of the chart period, format 2010-06-05 or relative -10y")
 	var startDate time.Time
 
 	if len(os.Args) < 2 {
@@ -136,6 +136,7 @@ func main() {
 			stats.StocksDir(*statsStocksDir),
 			stats.Now(now),
 			stats.Log(&StdoutLogger{}),
+			stats.DB(pdb),
 		)
 		stats, err := statsGenerator.Generate(ctx, tickers)
 		if err != nil {
@@ -156,15 +157,15 @@ func main() {
 		if *startDateFlag != "" {
 			if relDateRE.MatchString(*startDateFlag) {
 				nYears, err := strconv.ParseInt(
-                    (*startDateFlag)[1:len(*startDateFlag)-1], 10, 64)
+					(*startDateFlag)[1:len(*startDateFlag)-1], 10, 64)
 				if err != nil {
 					fmt.Println("invalid start date: ", *startDateFlag)
 					return
 				}
 				startDate = time.Date(
-                    now.Year()-int(nYears), time.January, 1, 
-                    0, 0, 0, 0, time.UTC,
-                )
+					now.Year()-int(nYears), time.January, 1,
+					0, 0, 0, 0, time.UTC,
+				)
 			} else {
 				startDate, err = time.Parse("2006-01-02", *startDateFlag)
 				if err != nil {

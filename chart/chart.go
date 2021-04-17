@@ -99,7 +99,7 @@ func (f *ChartGenerator) Generate(ctx context.Context, tickers []string) error {
 
 		err = writeYields(d, yields)
 		if err != nil {
-			return fmt.Errorf("create data file: %s: %s", dataPath, err)
+			return fmt.Errorf("write data file: %s: %s", dataPath, err)
 		}
 
 		plotParams := plotParams{

@@ -36,11 +36,11 @@ type DB interface {
 		dividends []*Dividend,
 	) error
 
-    DividendYields(
-        ctx context.Context,
-        ticker string,
+	DividendYields(
+		ctx context.Context,
+		ticker string,
 		f *DividendYieldFilter,
-    ) ([]*DividendYield, error)
+	) ([]*DividendYield, error)
 }
 
 type Price struct {
@@ -68,11 +68,12 @@ type PriceFilter struct {
 }
 
 type Dividend struct {
-	ExDate    time.Time
-	Amount    float64
-	Currency  string
-	Frequency int
-	Symbol    string
+	ExDate      time.Time
+	Amount      float64
+	Currency    string
+	Frequency   int
+	Symbol      string
+	PaymentType string
 }
 
 func (d *Dividend) String() string {
@@ -83,22 +84,23 @@ func (d *Dividend) String() string {
 }
 
 type DividendFilter struct {
-	From  time.Time
-	Limit uint64
+	From     time.Time
+	Limit    uint64
+	CashOnly bool
 }
 
 type DividendYield struct {
-    Date time.Time
-    Close float64
-    Dividend float64
-    Frequency int
+	Date      time.Time
+	Close     float64
+	Dividend  float64
+	Frequency int
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
-    return ((y.Dividend * float64(y.Frequency)) / y.Close) * 100
+	return ((y.Dividend * float64(y.Frequency)) / y.Close) * 100
 }
-
 
 type DividendYieldFilter struct {
 	From  time.Time
+	Limit uint64
 }

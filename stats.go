@@ -2,7 +2,7 @@ package divyield
 
 import (
 	"context"
-    "time"
+	"time"
 )
 
 type StatsGenerator interface {

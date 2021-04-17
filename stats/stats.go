@@ -3,24 +3,21 @@ package stats
 import (
 	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
-	"strconv"
 	"sync"
 	"text/tabwriter"
 	"time"
 
+	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"
-	"szakszon.com/divyield/payout"
 )
 
 type options struct {
 	stocksDir string
 	now       time.Time
 	logger    logger.Logger
+	db        divyield.DB
 }
 
 type Option func(o options) options
@@ -46,6 +43,13 @@ func Log(l logger.Logger) Option {
 	}
 }
 
+func DB(db divyield.DB) Option {
+	return func(o options) options {
+		o.db = db
+		return o
+	}
+}
+
 var defaultOptions = options{
 	logger: nil,
 }
@@ -66,7 +70,7 @@ type StatsGenerator struct {
 
 type StatsRow struct {
 	Ticker           string
-	DivYield         float64
+	DividendYield    float64
 	DividendChangeMR *DividendChangeMR
 	DGR1y            float64
 	DGR3y            float64
@@ -110,7 +114,7 @@ func (s *Stats) String() string {
 	b.WriteByte('\t')
 	b.WriteString("MR%")
 	b.WriteByte('\t')
-	b.WriteString("MR% Ex-Div Date")
+    b.WriteString("MR% Ex-Div Date")
 	b.WriteByte('\t')
 	b.WriteString("DGR-1y")
 	b.WriteByte('\t')
@@ -133,7 +137,7 @@ func (s *Stats) String() string {
 		b.Reset()
 		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DivYield))
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendYield))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendChangeMR.Amount))
 		b.WriteByte('\t')
@@ -160,8 +164,9 @@ func (s *Stats) String() string {
 }
 
 type result struct {
-	Row *StatsRow
-	Err error
+	Ticker string
+	Row    *StatsRow
+	Err    error
 }
 
 type StatsError struct {
@@ -186,7 +191,8 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 		defer resultWg.Done()
 		for res := range resultCh {
 			if res.Err != nil {
-				errs = append(errs, &StatsError{Ticker: res.Row.Ticker, Err: res.Err})
+				se := &StatsError{Ticker: res.Ticker, Err: res.Err}
+				errs = append(errs, se)
 			} else {
 				stats.Rows = append(stats.Rows, res.Row)
 			}
@@ -211,8 +217,8 @@ LOOP:
 		workerWg.Add(1)
 		go func(ticker string) {
 			defer workerWg.Done()
-			row, err := f.generateStatsRow(ticker)
-			resultCh <- result{Row: row, Err: err}
+			row, err := f.generateStatsRow(ctx, ticker)
+			resultCh <- result{Ticker: ticker, Row: row, Err: err}
 		}(ticker)
 	}
 
@@ -227,11 +233,34 @@ LOOP:
 	return stats, nil
 }
 
-func (f *StatsGenerator) generateStatsRow(ticker string) (*StatsRow, error) {
-	dividendsPath := filepath.Join(f.opts.stocksDir, ticker, "dividends.csv")
-	dividends, err := parseDividends(dividendsPath)
+func (f *StatsGenerator) generateStatsRow(
+	ctx context.Context,
+	ticker string,
+) (*StatsRow, error) {
+
+	dyf := &divyield.DividendYieldFilter{
+		Limit: 1,
+	}
+	dividendYields, err := f.opts.db.DividendYields(ctx, ticker, dyf)
 	if err != nil {
-		return nil, fmt.Errorf("parse dividends: %s: %s", dividendsPath, err)
+		return nil, fmt.Errorf("get dividend yields: %s", err)
+	}
+
+	yield := float64(0)
+	if len(dividendYields) >= 0 {
+		yield = dividendYields[0].ForwardTTM()
+	}
+
+	from := time.Date(
+		f.opts.now.UTC().Year()-11, time.January, 1,
+		1, 0, 0, 0, time.UTC)
+	df := &divyield.DividendFilter{
+		From:     from,
+		CashOnly: true,
+	}
+	dividends, err := f.opts.db.Dividends(ctx, ticker, df)
+	if err != nil {
+		return nil, fmt.Errorf("get dividends: %s", err)
 	}
 
 	mr, err := f.dividendChangeMostRecent(dividends)
@@ -244,14 +273,9 @@ func (f *StatsGenerator) generateStatsRow(ticker string) (*StatsRow, error) {
 		return nil, fmt.Errorf("dividends annual: %s", err)
 	}
 
-	for _, a := range divsAnnual {
-		if payout.PerYear(ticker) != a.PayoutPerYear {
-		}
-		fmt.Println(ticker, a.Year, a.PayoutPerYear, a.Amount, a.ChangeRate)
-	}
-
 	row := &StatsRow{
 		Ticker:           ticker,
+		DividendYield:    yield,
 		DividendChangeMR: mr,
 		DividendsAnnual:  divsAnnual,
 	}
@@ -259,7 +283,9 @@ func (f *StatsGenerator) generateStatsRow(ticker string) (*StatsRow, error) {
 	return row, nil
 }
 
-func (f *StatsGenerator) dividendChangeMostRecent(dividends []*Dividend) (*DividendChangeMR, error) {
+func (f *StatsGenerator) dividendChangeMostRecent(
+	dividends []*divyield.Dividend,
+) (*DividendChangeMR, error) {
 	mr := &DividendChangeMR{
 		Amount: float64(0),
 		Date:   time.Time{},
@@ -275,7 +301,7 @@ func (f *StatsGenerator) dividendChangeMostRecent(dividends []*Dividend) (*Divid
 		if (d1.Amount - d0.Amount) != 0 {
 			mr = &DividendChangeMR{
 				Amount: ((d1.Amount - d0.Amount) / d0.Amount) * 100,
-				Date:   d1.Date,
+				Date:   d1.ExDate,
 			}
 			break
 		}
@@ -284,7 +310,9 @@ func (f *StatsGenerator) dividendChangeMostRecent(dividends []*Dividend) (*Divid
 	return mr, nil
 }
 
-func (f *StatsGenerator) dividendsAnnual(dividends []*Dividend) ([]*DividendAnnual, error) {
+func (f *StatsGenerator) dividendsAnnual(
+	dividends []*divyield.Dividend,
+) ([]*DividendAnnual, error) {
 	divsAnnualMap := map[int]*DividendAnnual{}
 
 	startYear := f.opts.now.Year() - 12
@@ -295,15 +323,15 @@ func (f *StatsGenerator) dividendsAnnual(dividends []*Dividend) ([]*DividendAnnu
 	}
 
 	for _, d := range dividends {
-		if d.Date.Year() < startYear {
+		if d.ExDate.Year() < startYear {
 			break
 		}
 
-		if d.Date.Year() > endYear {
+		if d.ExDate.Year() > endYear {
 			continue
 		}
 
-		a := divsAnnualMap[d.Date.Year()]
+		a := divsAnnualMap[d.ExDate.Year()]
 		a.Amount += d.Amount
 		a.PayoutPerYear += 1
 	}
@@ -329,47 +357,6 @@ func (f *StatsGenerator) dividendsAnnual(dividends []*Dividend) ([]*DividendAnnu
 type Dividend struct {
 	Date   time.Time
 	Amount float64
-}
-
-func parseDividends(p string) ([]*Dividend, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, fmt.Errorf("open: %s", err)
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	rows, err := r.ReadAll()
-	if err != nil {
-		return nil, fmt.Errorf("parse csv: %s", err)
-	}
-
-	records := make([]*Dividend, 0)
-
-	for _, row := range rows[1:] {
-		div := float64(0)
-
-		date, err := time.Parse("2006-01-02", row[0])
-		if err != nil {
-			return nil, err
-		}
-
-		if row[1] != "null" {
-			div, err = strconv.ParseFloat(row[1], 64)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		record := &Dividend{Date: date, Amount: div}
-		records = append(records, record)
-	}
-
-	sort.SliceStable(records, func(i, j int) bool {
-		return records[i].Date.After(records[j].Date)
-	})
-
-	return records, nil
 }
 
 func (f *StatsGenerator) log(format string, v ...interface{}) {
