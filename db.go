@@ -100,6 +100,10 @@ func (y *DividendYield) ForwardTTM() float64 {
 	return ((y.Dividend * float64(y.Frequency)) / y.Close) * 100
 }
 
+func (y *DividendYield) ForwardDividend() float64 {
+	return y.Dividend * float64(y.Frequency)
+}
+
 type DividendYieldFilter struct {
 	From  time.Time
 	Limit uint64

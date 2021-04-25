@@ -107,7 +107,7 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-	startDate:   time.Date(2010, time.January, 1, 1, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2020, time.July, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -229,11 +229,11 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	err = f.getPrices(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download prices: %s", err)
-	}
-	err = f.getDividends(ctx, ticker)
+	//err = f.getPrices(ctx, ticker)
+	//if err != nil {
+	//	return fmt.Errorf("download prices: %s", err)
+	//}
+    err = f.getDividends(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download dividends: %s", err)
 	}
@@ -284,10 +284,6 @@ func toDBDividends(dividends []*dividend) []*divyield.Dividend {
 	ret := make([]*divyield.Dividend, 0, len(dividends))
 
 	for _, v := range dividends {
-		if v.Flag != "Cash" {
-			panic("non cash dividend: " + v.String())
-		}
-
 		nv := &divyield.Dividend{
 			ExDate:      time.Time(v.ExDate),
 			Symbol:      v.Symbol,
@@ -312,7 +308,7 @@ func (f *StockFetcher) downloadDividends(
 	apiToken string,
 ) ([]*dividend, error) {
 	u := dividendsURL(ticker, from, apiToken)
-	fmt.Println(u)
+	//fmt.Println(u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -367,8 +363,22 @@ func (d *dividend) String() string {
 }
 
 func (d *dividend) FrequencyNumber() int {
+	if d.Frequency == "monthly" {
+		return 12
+	}
 	if d.Frequency == "quarterly" {
 		return 4
+	}
+	if d.Frequency == "semi-annual" {
+		return 2
+	}
+	if d.Frequency == "annual" {
+		return 1
+	}
+	if d.Frequency == "blank" || 
+        d.Frequency == "unspecified" || 
+        d.Frequency == "irregular" {
+		return 0
 	}
 
 	panic(fmt.Sprintf("unexpected frequency: %v: %v: %v",
@@ -385,6 +395,8 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 		return nil, fmt.Errorf("open bracket: %s", err)
 	}
 
+    processed := make(map[int64]struct{})
+
 	// while the array contains values
 	for dec.More() {
 		var v dividend
@@ -393,9 +405,10 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 			return nil, fmt.Errorf("decode: %s", err)
 		}
 
-        if !v.PaymentDate.IsZero() {
-    		dividends = append(dividends, &v)
-    }
+        if _, ok := processed[v.Refid]; !ok {
+            dividends = append(dividends, &v)
+            processed[v.Refid] = struct{}{}
+        }
 	}
 
 	// read closing bracket

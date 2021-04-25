@@ -70,7 +70,8 @@ type StatsGenerator struct {
 
 type StatsRow struct {
 	Ticker           string
-	DividendYield    float64
+	ForwardDividendYield    float64
+	ForwardDividend    float64
 	DividendChangeMR *DividendChangeMR
 	DGR1y            float64
 	DGR3y            float64
@@ -82,9 +83,6 @@ type StatsRow struct {
 func (r *StatsRow) DGR(n int) float64 {
 	sum := float64(0)
 	for _, a := range r.DividendsAnnual[0:n] {
-		if n==3 {
-            fmt.Println("change", a.ChangeRate)
-        }
         sum += a.ChangeRate
 	}
 	return sum / float64(n)
@@ -113,7 +111,9 @@ func (s *Stats) String() string {
 	b := &bytes.Buffer{}
 	b.WriteString("Ticker")
 	b.WriteByte('\t')
-	b.WriteString("DivYield")
+	b.WriteString("Forward Yield")
+	b.WriteByte('\t')
+	b.WriteString("Forward Dividend")
 	b.WriteByte('\t')
 	b.WriteString("MR%")
 	b.WriteByte('\t')
@@ -123,10 +123,10 @@ func (s *Stats) String() string {
 	b.WriteByte('\t')
 	b.WriteString("DGR-3y")
 	b.WriteByte('\t')
-	b.WriteString("DGR-5y")
-	b.WriteByte('\t')
-	b.WriteString("DGR-10y")
-	b.WriteByte('\t')
+	//b.WriteString("DGR-5y")
+	//b.WriteByte('\t')
+	//b.WriteString("DGR-10y")
+	//b.WriteByte('\t')
 
 	// if len(s.Rows) > 0 {
 	// 	for _, d := range s.Rows[0].DividendsAnnual {
@@ -140,7 +140,9 @@ func (s *Stats) String() string {
 		b.Reset()
 		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendYield))
+		b.WriteString(fmt.Sprintf("%.2f%%", row.ForwardDividendYield))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f", row.ForwardDividend))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendChangeMR.Amount))
 		b.WriteByte('\t')
@@ -150,10 +152,10 @@ func (s *Stats) String() string {
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DGR(3)))
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DGR(5)))
-		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DGR(10)))
-		b.WriteByte('\t')
+		//b.WriteString(fmt.Sprintf("%.2f%%", row.DGR(5)))
+		//b.WriteByte('\t')
+		//b.WriteString(fmt.Sprintf("%.2f%%", row.DGR(10)))
+		//b.WriteByte('\t')
 
 		// for _, d := range row.DividendsAnnual {
 		// 	b.WriteString(fmt.Sprintf("%.2f%% (%.2f)", d.ChangeRate, d.Amount))
@@ -249,9 +251,11 @@ func (f *StatsGenerator) generateStatsRow(
 		return nil, fmt.Errorf("get dividend yields: %s", err)
 	}
 
-	yield := float64(0)
+	forwardDivYield := float64(0)
+	forwardDiv := float64(0)
 	if len(dividendYields) >= 0 {
-		yield = dividendYields[0].ForwardTTM()
+		forwardDivYield = dividendYields[0].ForwardTTM()
+		forwardDiv = dividendYields[0].ForwardDividend()
 	}
 
 	from := time.Date(
@@ -278,7 +282,8 @@ func (f *StatsGenerator) generateStatsRow(
 
 	row := &StatsRow{
 		Ticker:           ticker,
-		DividendYield:    yield,
+		ForwardDividendYield:    forwardDivYield,
+		ForwardDividend:    forwardDiv,
 		DividendChangeMR: mr,
 		DividendsAnnual:  divsAnnual,
 	}
@@ -338,10 +343,6 @@ func (f *StatsGenerator) dividendsAnnual(
 		a.Amount += d.Amount
 		a.PayoutPerYear += 1
 	}
-	
-    for _, x := range divsAnnualMap{
-        fmt.Printf("%v\n", x)
-    }
 
 	divsAnnual := []*DividendAnnual{}
 	for _, a := range divsAnnualMap {
@@ -356,14 +357,8 @@ func (f *StatsGenerator) dividendsAnnual(
 		a1 := divsAnnual[i]
 		a0 := divsAnnual[i+1]
 		a1.ChangeRate = ((a1.Amount - a0.Amount) / a0.Amount) * 100
-	
-           fmt.Printf("change from %v to %v: %v\n", 
-           a0.Year, a1.Year, a1.ChangeRate)
     }
 
-    for _, x := range divsAnnual{
-        fmt.Printf("%v\n", x)
-    }
 	return divsAnnual, nil
 }
 

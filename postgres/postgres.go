@@ -23,44 +23,79 @@ func (db *DB) InitSchema(
 	ctx context.Context,
 	tickers []string,
 ) error {
-	err := execTx(ctx, db.DB, func(runner runner) error {
-		tmpl := template.Must(template.New("init").Parse(initSchemaTmpl))
+	schemas := make([]string, 0, len(tickers))
+	schemasExists := make([]string, 0, len(tickers))
+	schemasMissing := make([]string, 0, len(tickers))
 
-		for _, ticker := range tickers {
-			schemaName := schemaName(ticker)
+	for _, t := range tickers {
+		schemas = append(schemas, schemaName(t))
+	}
 
-			var exists bool
-			row := runner.QueryRowContext(ctx,
-				"select true from information_schema.schemata "+
-					"where schema_name = $1;", schemaName)
-			err := row.Scan(&exists)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
+	err := execNonTx(ctx, db.DB, func(runner runner) error {
+		q := sq.Select("schema_name").
+			From("information_schema.schemata").
+			Where(sq.Eq{"schema_name": schemas}).
+			PlaceholderFormat(sq.Dollar)
 
-			if exists {
-				continue
-			}
+		sql, args, err := q.ToSql()
+		if err != nil {
+			return err
+		}
 
-			params := map[string]string{
-				"SchemaName": schemaName,
-			}
-			buf := &bytes.Buffer{}
-			err = tmpl.Execute(buf, params)
+		rows, err := runner.QueryContext(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var schema string
+			err = rows.Scan(&schema)
 			if err != nil {
 				return err
 			}
-
-			_, err = runner.ExecContext(ctx, buf.String())
-			return err
+			schemasExists = append(schemasExists, schema)
 		}
+
 		return nil
 	})
+
+OUTER_LOOP:
+	for _, schema := range schemas {
+		for _, schemaExists := range schemasExists {
+			if schema == schemaExists {
+				continue OUTER_LOOP
+			}
+		}
+		schemasMissing = append(schemasMissing, schema)
+	}
+
+	if len(schemasMissing) > 0 {
+		tmpl := template.Must(template.New("init").Parse(initSchemaTmpl))
+
+		for _, schema := range schemasMissing {
+			err := execTx(ctx, db.DB, func(runner runner) error {
+				params := map[string]string{"Schema": schema}
+				buf := &bytes.Buffer{}
+				err := tmpl.Execute(buf, params)
+				if err != nil {
+					return err
+				}
+				_, err = runner.ExecContext(ctx, buf.String())
+				return err
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return err
 }
 
 func schemaName(ticker string) string {
-	return "s_" + strings.ToLower(ticker)
+    s := strings.ToLower(ticker)
+    s = strings.ReplaceAll(s, "-", "_")
+    return "s_" + s
 }
 
 func (db *DB) Prices(
@@ -445,9 +480,9 @@ func execNonTx(
 }
 
 const initSchemaTmpl = `
-create schema {{.SchemaName}};
+create schema {{.Schema}};
 
-create table {{.SchemaName}}.price (
+create table {{.Schema}}.price (
     date        date not null,
     symbol      varchar(10) not null,
     close       numeric not null,
@@ -458,7 +493,7 @@ create table {{.SchemaName}}.price (
     PRIMARY KEY(date)	
 );
 
-create table {{.SchemaName}}.dividend (
+create table {{.Schema}}.dividend (
     ex_date      date not null,
     symbol       varchar(10) not null,
     amount       numeric not null,
