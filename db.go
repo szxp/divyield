@@ -84,10 +84,15 @@ func (d *Dividend) String() string {
 	)
 }
 
+func (d *Dividend) AmountNorm() float64 {
+    return d.Amount * float64(d.Frequency)
+}
+
 type DividendFilter struct {
 	From     time.Time
 	Limit    uint64
 	CashOnly bool
+	Regular  bool
 }
 
 type DividendYield struct {

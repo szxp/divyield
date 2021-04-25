@@ -8,6 +8,7 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+    "math"
 
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"
@@ -69,28 +70,28 @@ type StatsGenerator struct {
 }
 
 type StatsRow struct {
-	Ticker           string
-	ForwardDividendYield    float64
-	ForwardDividend    float64
-	DividendChangeMR *DividendChangeMR
-	DGR1y            float64
-	DGR3y            float64
-	DGR5y            float64
-	DGR10y           float64
-	DividendsAnnual  []*DividendAnnual
+	Ticker               string
+	ForwardDividendYield float64
+	ForwardDividend      float64
+	DividendChangeMR     *DividendChangeMR
+	DGR1y                float64
+	DGR3y                float64
+	DGR5y                float64
+	DGR10y               float64
+	DividendsAnnual      []*DividendAnnual
 }
 
 func (r *StatsRow) DGR(n int) float64 {
 	sum := float64(0)
 	for _, a := range r.DividendsAnnual[0:n] {
-        sum += a.ChangeRate
+		sum += a.ChangeRate
 	}
 	return sum / float64(n)
 }
 
 type DividendChangeMR struct {
-	Amount float64
-	Date   time.Time
+	ChangePercent float64
+	Date          time.Time
 }
 
 type DividendAnnual struct {
@@ -117,7 +118,7 @@ func (s *Stats) String() string {
 	b.WriteByte('\t')
 	b.WriteString("MR%")
 	b.WriteByte('\t')
-    b.WriteString("MR% Ex-Div Date")
+	b.WriteString("MR% Ex-Div Date")
 	b.WriteByte('\t')
 	b.WriteString("DGR-1y")
 	b.WriteByte('\t')
@@ -144,7 +145,7 @@ func (s *Stats) String() string {
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.ForwardDividend))
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendChangeMR.Amount))
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendChangeMR.ChangePercent))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%s", row.DividendChangeMR.Date.Format("2006-01-02")))
 		b.WriteByte('\t')
@@ -264,6 +265,7 @@ func (f *StatsGenerator) generateStatsRow(
 	df := &divyield.DividendFilter{
 		From:     from,
 		CashOnly: true,
+		Regular:  true,
 	}
 	dividends, err := f.opts.db.Dividends(ctx, ticker, df)
 	if err != nil {
@@ -281,11 +283,11 @@ func (f *StatsGenerator) generateStatsRow(
 	}
 
 	row := &StatsRow{
-		Ticker:           ticker,
-		ForwardDividendYield:    forwardDivYield,
-		ForwardDividend:    forwardDiv,
-		DividendChangeMR: mr,
-		DividendsAnnual:  divsAnnual,
+		Ticker:               ticker,
+		ForwardDividendYield: forwardDivYield,
+		ForwardDividend:      forwardDiv,
+		DividendChangeMR:     mr,
+		DividendsAnnual:      divsAnnual,
 	}
 
 	return row, nil
@@ -295,8 +297,8 @@ func (f *StatsGenerator) dividendChangeMostRecent(
 	dividends []*divyield.Dividend,
 ) (*DividendChangeMR, error) {
 	mr := &DividendChangeMR{
-		Amount: float64(0),
-		Date:   time.Time{},
+		ChangePercent: float64(0),
+		Date:          time.Time{},
 	}
 
 	if len(dividends) < 2 {
@@ -306,10 +308,17 @@ func (f *StatsGenerator) dividendChangeMostRecent(
 	for i := 0; i <= len(dividends)-2; i++ {
 		d1 := dividends[i]
 		d0 := dividends[i+1]
-		if (d1.Amount - d0.Amount) != 0 {
+
+		if (d1.AmountNorm() - d0.AmountNorm()) != 0 {
+			changePercent := math.NaN()
+			if d1.Currency == "USD" && d0.Currency == "USD" {
+				changePercent = ((d1.AmountNorm() - d0.AmountNorm()) /
+					d0.AmountNorm()) * 100
+			}
+
 			mr = &DividendChangeMR{
-				Amount: ((d1.Amount - d0.Amount) / d0.Amount) * 100,
-				Date:   d1.ExDate,
+				ChangePercent: changePercent,
+				Date:          d1.ExDate,
 			}
 			break
 		}
@@ -357,7 +366,7 @@ func (f *StatsGenerator) dividendsAnnual(
 		a1 := divsAnnual[i]
 		a0 := divsAnnual[i+1]
 		a1.ChangeRate = ((a1.Amount - a0.Amount) / a0.Amount) * 100
-    }
+	}
 
 	return divsAnnual, nil
 }

@@ -269,6 +269,10 @@ func (db *DB) Dividends(
 		if f.CashOnly {
 			q = q.Where("payment_type = ?", "Cash")
 		}
+		
+        if f.Regular {
+			q = q.Where("frequency > ?", 0)
+		}
 
 		sql, args, err := q.ToSql()
 		if err != nil {
@@ -395,8 +399,8 @@ func (db *DB) DividendYields(
 		q := sq.Select(
 			"date",
 			"close",
-			"(select coalesce(amount, 0) from "+schemaName+".dividend where ex_date <= date and payment_type = 'Cash' order by ex_date desc limit 1) as div_amount",
-			"(select coalesce(frequency, 0) from "+schemaName+".dividend where ex_date <= date and payment_type = 'Cash' order by ex_date desc limit 1) as div_freq",
+			"(select coalesce(amount, 0) from "+schemaName+".dividend where ex_date <= date and payment_type = 'Cash' and frequency > 0 order by ex_date desc limit 1) as div_amount",
+			"(select coalesce(frequency, 0) from "+schemaName+".dividend where ex_date <= date and payment_type = 'Cash' and frequency > 0 order by ex_date desc limit 1) as div_freq",
 		).
 			From(schemaName + ".price").
 			OrderBy("date desc").

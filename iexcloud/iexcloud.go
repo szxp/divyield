@@ -107,8 +107,8 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-	startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
-	//startDate:   time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC),
+	//startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -231,14 +231,14 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	err = f.getPrices(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download prices: %s", err)
-	}
-//    err = f.getDividends(ctx, ticker)
+//	err = f.getPrices(ctx, ticker)
 //	if err != nil {
-//		return fmt.Errorf("download dividends: %s", err)
+//		return fmt.Errorf("download prices: %s", err)
 //	}
+    err = f.getDividends(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download dividends: %s", err)
+	}
 	return err
 }
 
@@ -408,6 +408,11 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decode: %s", err)
 		}
+
+        // skip future dividend dates
+        if v.Amount <= 0 {
+            continue
+        }
 
         if _, ok := processed[v.Refid]; !ok {
             dividends = append(dividends, &v)
