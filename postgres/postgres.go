@@ -30,6 +30,7 @@ func (db *DB) InitSchema(
 	for _, t := range tickers {
 		schemas = append(schemas, schemaName(t))
 	}
+    //fmt.Printf("schemas: %+v\n", schemas)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
 		q := sq.Select("schema_name").
@@ -60,6 +61,8 @@ func (db *DB) InitSchema(
 		return nil
 	})
 
+    //fmt.Println("schemas exists: ", schemasExists)
+
 OUTER_LOOP:
 	for _, schema := range schemas {
 		for _, schemaExists := range schemasExists {
@@ -70,6 +73,7 @@ OUTER_LOOP:
 		schemasMissing = append(schemasMissing, schema)
 	}
 
+    //fmt.Println("schemas missing: ", schemasMissing)
 	if len(schemasMissing) > 0 {
 		tmpl := template.Must(template.New("init").Parse(initSchemaTmpl))
 
@@ -342,7 +346,7 @@ func (db *DB) PrependDividends(
 		}
 
 		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
-			schemaName, "dividend", "ex_date", "symbol",
+			schemaName, "dividend", "id", "ex_date", "symbol",
 			"amount", "currency", "frequency", "payment_type"))
 		if err != nil {
 			return err
@@ -357,7 +361,7 @@ func (db *DB) PrependDividends(
 			}
 
 			_, err = stmt.ExecContext(ctx,
-				v.ExDate, v.Symbol, v.Amount,
+				v.ID, v.ExDate, v.Symbol, v.Amount,
 				v.Currency, v.Frequency, v.PaymentType)
 			if err != nil {
 				return err
@@ -494,12 +498,13 @@ create table {{.Schema}}.price (
 );
 
 create table {{.Schema}}.dividend (
+    id           bigint not null,
     ex_date      date not null,
     symbol       varchar(10) not null,
     amount       numeric not null,
     currency     char(3) not null,
     frequency    smallint not null,
     payment_type text not null, 
-    PRIMARY KEY(ex_date)	
+    PRIMARY KEY(id)	
 );
 `

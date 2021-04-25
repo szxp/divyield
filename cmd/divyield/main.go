@@ -93,6 +93,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+    db.SetMaxOpenConns(50)
 
 	pdb := &postgres.DB{
 		DB: db,
@@ -110,8 +111,8 @@ func main() {
 
 		fetcher := iexcloud.NewStockFetcher(
 			iexcloud.OutputDir(*fetchOutputDir),
-			iexcloud.Workers(2),
-			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
+			iexcloud.Workers(10),
+			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(200*time.Millisecond), 1)),
 			iexcloud.Timeout(10*time.Second),
 			iexcloud.IEXCloudAPIToken(*fetchIEXCloudAPIToken),
 			iexcloud.Force(*fetchForce),
@@ -120,7 +121,7 @@ func main() {
 		)
 		fetcher.Fetch(ctx, tickers)
 		for _, err := range fetcher.Errs() {
-			fmt.Println("Error:", err)
+			fmt.Println("Error:",  err)
 		}
 
 	case "stats":

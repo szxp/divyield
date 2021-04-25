@@ -253,7 +253,7 @@ func (f *StatsGenerator) generateStatsRow(
 
 	forwardDivYield := float64(0)
 	forwardDiv := float64(0)
-	if len(dividendYields) >= 0 {
+	if len(dividendYields) > 0 {
 		forwardDivYield = dividendYields[0].ForwardTTM()
 		forwardDiv = dividendYields[0].ForwardDividend()
 	}

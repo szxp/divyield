@@ -63,9 +63,9 @@ func Workers(n int) Option {
 	}
 }
 
-func RateLimiter(rl *rate.Limiter) Option {
+func RateLimiter(l *rate.Limiter) Option {
 	return func(o options) options {
-		o.rateLimiter = rl
+		o.rateLimiter = l
 		return o
 	}
 }
@@ -107,7 +107,8 @@ func DB(db divyield.DB) Option {
 
 var defaultOptions = options{
 	outputDir:   "",
-	startDate:   time.Date(2020, time.July, 1, 0, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
+	//startDate:   time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -178,8 +179,9 @@ func (f *StockFetcher) Fetch(ctx context.Context, tickers []string) {
 			if res.Err != nil {
 				e := &FetchError{Ticker: res.Ticker, Err: res.Err}
 				f.errs = append(f.errs, e)
+				f.log("%v", e)
 			} else {
-				f.log("%s: %s", res.Ticker, "OK")
+				f.log("%v: %v", res.Ticker, "OK")
 			}
 			pendingWg.Done()
 		}
@@ -196,7 +198,7 @@ LOOP:
 			// noop
 		}
 
-		time.Sleep(time.Second * 1)
+		//time.Sleep(time.Second * 1)
 		pendingWg.Add(1)
 		jobCh <- job{Ticker: ticker}
 	}
@@ -229,14 +231,14 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	//err = f.getPrices(ctx, ticker)
-	//if err != nil {
-	//	return fmt.Errorf("download prices: %s", err)
-	//}
-    err = f.getDividends(ctx, ticker)
+	err = f.getPrices(ctx, ticker)
 	if err != nil {
-		return fmt.Errorf("download dividends: %s", err)
+		return fmt.Errorf("download prices: %s", err)
 	}
+//    err = f.getDividends(ctx, ticker)
+//	if err != nil {
+//		return fmt.Errorf("download dividends: %s", err)
+//	}
 	return err
 }
 
@@ -285,6 +287,7 @@ func toDBDividends(dividends []*dividend) []*divyield.Dividend {
 
 	for _, v := range dividends {
 		nv := &divyield.Dividend{
+            ID:       v.Refid,
 			ExDate:      time.Time(v.ExDate),
 			Symbol:      v.Symbol,
 			Amount:      v.Amount,
@@ -308,7 +311,6 @@ func (f *StockFetcher) downloadDividends(
 	apiToken string,
 ) ([]*dividend, error) {
 	u := dividendsURL(ticker, from, apiToken)
-	//fmt.Println(u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -318,6 +320,8 @@ func (f *StockFetcher) downloadDividends(
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+    //f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -492,7 +496,6 @@ func (f *StockFetcher) downloadPrices(
 	apiToken string,
 ) ([]*price, error) {
 	u := pricesURL(ticker, from, apiToken)
-	//fmt.Println(u)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -502,6 +505,8 @@ func (f *StockFetcher) downloadPrices(
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+    //f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -697,5 +702,5 @@ type FetchError struct {
 }
 
 func (e *FetchError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Ticker, e.Err)
+    return fmt.Sprintf("%v: %v", e.Ticker, e.Err)
 }

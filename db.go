@@ -68,7 +68,8 @@ type PriceFilter struct {
 }
 
 type Dividend struct {
-	ExDate      time.Time
+	ID       int64
+    ExDate      time.Time
 	Amount      float64
 	Currency    string
 	Frequency   int
