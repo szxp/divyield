@@ -13,11 +13,13 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+    "sync"
 
 	"szakszon.com/divyield/chart"
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/stats"
+	"szakszon.com/divyield/yahoo"
 )
 
 var relDateRE *regexp.Regexp = regexp.MustCompile("^-[0-9]+y$")
@@ -31,6 +33,7 @@ func main() {
 	ctx, ctxCancel := context.WithCancel(ctx)
 
 	now := time.Now()
+    stdoutLogger := &StdoutLogger{mu: &sync.RWMutex{}}
 
 	termCh := make(chan os.Signal)
 	signal.Notify(termCh, os.Interrupt, syscall.SIGTERM)
@@ -99,7 +102,13 @@ func main() {
 		DB: db,
 	}
 
-	switch os.Args[subIdx] {
+    splitFetcher := yahoo.NewSplitFetcher(
+			yahoo.RateLimiter(rate.NewLimiter(rate.Every(1*time.Second), 1)),
+			yahoo.Timeout(10*time.Second),
+			yahoo.Log(stdoutLogger),
+        )
+
+    switch os.Args[subIdx] {
 	case "fetch":
 		fetchCmd.Parse(os.Args[subIdx+1:])
 
@@ -116,8 +125,9 @@ func main() {
 			iexcloud.Timeout(10*time.Second),
 			iexcloud.IEXCloudAPIToken(*fetchIEXCloudAPIToken),
 			iexcloud.Force(*fetchForce),
-			iexcloud.Log(&StdoutLogger{}),
+			iexcloud.Log(stdoutLogger),
 			iexcloud.DB(pdb),
+			iexcloud.SplitFetcher(splitFetcher),
 		)
 		fetcher.Fetch(ctx, tickers)
 		for _, err := range fetcher.Errs() {
@@ -136,7 +146,7 @@ func main() {
 		statsGenerator := stats.NewStatsGenerator(
 			stats.StocksDir(*statsStocksDir),
 			stats.Now(now),
-			stats.Log(&StdoutLogger{}),
+			stats.Log(stdoutLogger),
 			stats.DB(pdb),
 		)
 		stats, err := statsGenerator.Generate(ctx, tickers)
@@ -179,7 +189,7 @@ func main() {
 		chartGener := chart.NewChartGenerator(
 			chart.OutputDir(*chartOutputDir),
 			chart.StartDate(startDate),
-			chart.Log(&StdoutLogger{}),
+			chart.Log(stdoutLogger),
 			chart.DB(pdb),
 		)
 		err := chartGener.Generate(ctx, tickers)
@@ -244,9 +254,13 @@ Flags:
       stocks dir (default "work/stocks")
 `
 
-type StdoutLogger struct{}
+type StdoutLogger struct{
+    mu *sync.RWMutex
+}
 
 func (l *StdoutLogger) Logf(format string, v ...interface{}) {
-	fmt.Printf(format, v...)
+    l.mu.Lock()
+    defer l.mu.Unlock()
+    fmt.Printf(format, v...)
 	fmt.Println()
 }

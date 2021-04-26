@@ -269,7 +269,7 @@ func (db *DB) Dividends(
 		if f.CashOnly {
 			q = q.Where("payment_type = ?", "Cash")
 		}
-		
+
         if f.Regular {
 			q = q.Where("frequency > ?", 0)
 		}
@@ -451,6 +451,129 @@ func (db *DB) DividendYields(
 	return yields, nil
 }
 
+func (db *DB) PrependSplits(
+	ctx context.Context,
+	ticker string,
+	splits []*divyield.Split,
+) error {
+	if len(splits) == 0 {
+		return nil
+	}
+
+	err := execTx(ctx, db.DB, func(runner runner) error {
+		schemaName := schemaName(ticker)
+
+		var date time.Time
+		err := runner.QueryRowContext(ctx,
+			"select ex_date from "+schemaName+".split "+
+				"order by ex_date desc limit 1").
+			Scan(&date)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		if !date.IsZero() {
+			newBottom := splits[len(splits)-1]
+			if !newBottom.ExDate.Equal(date) {
+				return fmt.Errorf(
+					"non-overlapping split ex dates %v vs %v",
+					newBottom.ExDate, date)
+			}
+
+			// forget the last one
+			splits = splits[:len(splits)-1]
+		}
+
+		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
+			schemaName, "split", "ex_date", "to_factor", "from_factor"))
+		if err != nil {
+			return err
+		}
+
+		for _, v := range splits {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("interrupted")
+			default:
+				// noop
+			}
+
+			_, err = stmt.ExecContext(
+                ctx, v.ExDate, v.ToFactor, v.FromFactor)
+			if err != nil {
+				return err
+			}
+		}
+
+		_, err = stmt.ExecContext(ctx)
+		if err != nil {
+			return err
+		}
+
+		err = stmt.Close()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return err
+}
+
+func (db *DB) Splits(
+	ctx context.Context,
+	ticker string,
+	f *divyield.SplitFilter,
+) ([]*divyield.Split, error) {
+	splits := make([]*divyield.Split, 0)
+
+	err := execNonTx(ctx, db.DB, func(runner runner) error {
+		schemaName := schemaName(ticker)
+
+		q := sq.Select(
+			"ex_date", "to_factor", "from_factor").
+			From(schemaName + ".split").
+			OrderBy("ex_date desc").
+			PlaceholderFormat(sq.Dollar)
+
+		if f.Limit > 0 {
+			q = q.Limit(f.Limit)
+		}
+
+		sql, args, err := q.ToSql()
+		if err != nil {
+			return err
+		}
+
+		rows, err := runner.QueryContext(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var exDate time.Time
+			var toFactor int
+			var fromFactor int
+
+			err = rows.Scan(&exDate, &toFactor, &fromFactor)
+			if err != nil {
+				return err
+			}
+			v := &divyield.Split{
+				ExDate:      exDate,
+				ToFactor:     toFactor,
+				FromFactor:    fromFactor,
+			}
+			splits = append(splits, v)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return splits, nil
+}
+
 type runner interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	PrepareContext(context.Context, string) (*sql.Stmt, error)
@@ -498,6 +621,8 @@ create table {{.Schema}}.price (
     low         numeric not null,
     open        numeric not null,
     volume      numeric not null,
+    factor_adj  numeric not null default 1,
+    close_adj   numeric not null default 0,
     PRIMARY KEY(date)	
 );
 
@@ -509,6 +634,15 @@ create table {{.Schema}}.dividend (
     currency     char(3) not null,
     frequency    smallint not null,
     payment_type text not null, 
+    factor_adj   numeric not null default 1,
+    amount_adj   numeric not null default 0,
     PRIMARY KEY(id)	
+);
+
+create table {{.Schema}}.split (
+    ex_date      date not null,
+    to_factor     numeric not null,
+    from_factor   numeric not null,
+    PRIMARY KEY(ex_date)	
 );
 `

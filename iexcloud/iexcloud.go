@@ -31,6 +31,7 @@ type options struct {
 	rateLimiter      *rate.Limiter
 	workers          int
 	db               divyield.DB
+	splitFetcher     divyield.SplitFetcher
 }
 
 type Option func(o options) options
@@ -105,10 +106,16 @@ func DB(db divyield.DB) Option {
 	}
 }
 
+func SplitFetcher(f divyield.SplitFetcher) Option {
+	return func(o options) options {
+		o.splitFetcher = f
+		return o
+	}
+}
 var defaultOptions = options{
 	outputDir:   "",
 	//startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
-	startDate:   time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC),
+	startDate:   time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -116,13 +123,13 @@ var defaultOptions = options{
 	logger:      nil,
 }
 
-func NewStockFetcher(os ...Option) StockFetcher {
+func NewStockFetcher(os ...Option) *StockFetcher {
 	opts := defaultOptions
 	for _, o := range os {
 		opts = o(opts)
 	}
 
-	return StockFetcher{
+	return &StockFetcher{
 		client: &httprate.RLClient{
 			Client: &http.Client{
 				Timeout: opts.timeout,
@@ -231,18 +238,65 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-//	err = f.getPrices(ctx, ticker)
+	err = f.fetchSplits(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download splits: %s", err)
+	}
+//	err = f.fetchPrices(ctx, ticker)
 //	if err != nil {
 //		return fmt.Errorf("download prices: %s", err)
 //	}
-    err = f.getDividends(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download dividends: %s", err)
-	}
+//    err = f.fetchDividends(ctx, ticker)
+//	if err != nil {
+//		return fmt.Errorf("download dividends: %s", err)
+//	}
 	return err
 }
 
-func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
+func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
+	latestSplits, err := f.opts.db.Splits(
+		ctx, ticker, &divyield.SplitFilter{Limit: 1})
+	if err != nil {
+		return fmt.Errorf("latest split: %s", err)
+	}
+
+	downloadFrom := f.opts.startDate
+	if len(latestSplits) > 0 {
+		downloadFrom = latestSplits[0].ExDate
+	}
+
+	f.log("%v: download splits from %v",
+		ticker, downloadFrom.Format(divyield.DateFormat))
+
+	now := time.Now().UTC()
+	today := timeDate(now)
+
+	if downloadFrom.Equal(today) {
+		f.log("%s: %s", ticker, "up to date, skip download")
+		return nil // up-to-date
+	}
+
+	newSplits, err := f.opts.splitFetcher.Fetch(
+        ctx, ticker, downloadFrom, today)
+	if err != nil {
+		return err
+	}
+
+
+    f.log("%v: new splits: %v", ticker, len(newSplits))
+
+	if len(newSplits) > 0 {
+		err = f.opts.db.PrependSplits(ctx, ticker, newSplits)
+		if err != nil {
+			return fmt.Errorf("save splits: %s", err)
+		}
+	}
+
+	return nil
+}
+
+
+func (f *StockFetcher) fetchDividends(ctx context.Context, ticker string) error {
 	latestDividends, err := f.opts.db.Dividends(
 		ctx, ticker, &divyield.DividendFilter{Limit: 1})
 	if err != nil {
@@ -258,9 +312,9 @@ func (f *StockFetcher) getDividends(ctx context.Context, ticker string) error {
 		ticker, downloadFrom.Format(divyield.DateFormat))
 
 	now := time.Now().UTC()
-	nowDate := timeDate(now)
+	today := timeDate(now)
 
-	if downloadFrom.Equal(nowDate) {
+	if downloadFrom.Equal(today) {
 		f.log("%s: %s", ticker, "up to date, skip download")
 		return nil // up-to-date
 	}
@@ -437,7 +491,7 @@ func sortDividendsDesc(dividends []*dividend) {
 	})
 }
 
-func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
+func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 	latestPrices, err := f.opts.db.Prices(
 		ctx, ticker, &divyield.PriceFilter{Limit: 1})
 	if err != nil {
@@ -453,9 +507,9 @@ func (f *StockFetcher) getPrices(ctx context.Context, ticker string) error {
 		ticker, downloadFrom.Format(divyield.DateFormat))
 
 	now := time.Now().UTC()
-	nowDate := timeDate(now)
+	today := timeDate(now)
 
-	if downloadFrom.Equal(nowDate) {
+	if downloadFrom.Equal(today) {
 		f.log("%s: %s", ticker, "up to date, skip download")
 		return nil // up-to-date
 	}
