@@ -37,5 +37,8 @@ begin
             ', close_adj = close * factor_adj * ' || factor || 
             ' where date <= ''' || r.ex_date || '''';
     end loop;
+
+    -- todo adjust by dividends (cash, stock, cash&stock)
+
 end $$;
 
