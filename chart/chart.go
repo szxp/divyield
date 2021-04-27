@@ -140,15 +140,15 @@ func (f *ChartGenerator) log(format string, v ...interface{}) {
 func writeYields(out io.Writer, yields []*divyield.DividendYield) error {
 	w := &writer{W: bufio.NewWriter(out)}
 
-	w.WriteString("Date,Close,DividendYieldForwardTTM,Dividend")
+	w.WriteString("Date,CloseAdj,DividendYieldForwardTTM,DividendAdj")
 	for _, y := range yields {
 		w.WriteString("\n")
 
 		row := fmt.Sprintf("%s,%.2f,%.2f,%.2f",
 			y.Date.Format("2006-01-02"),
-			y.Close,
+			y.CloseAdj,
 			y.ForwardTTM(),
-			y.Dividend,
+			y.DividendAdj,
 		)
 		w.WriteString(row)
 	}

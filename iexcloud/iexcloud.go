@@ -242,14 +242,14 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("download splits: %s", err)
 	}
-//	err = f.fetchPrices(ctx, ticker)
-//	if err != nil {
-//		return fmt.Errorf("download prices: %s", err)
-//	}
-//    err = f.fetchDividends(ctx, ticker)
-//	if err != nil {
-//		return fmt.Errorf("download dividends: %s", err)
-//	}
+	err = f.fetchPrices(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download prices: %s", err)
+	}
+    err = f.fetchDividends(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download dividends: %s", err)
+	}
 	return err
 }
 

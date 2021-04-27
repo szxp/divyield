@@ -59,6 +59,7 @@ type Price struct {
 	Date   time.Time
 	Symbol string
 	Close  float64
+	CloseAdj  float64
 	High   float64
 	Low    float64
 	Open   float64
@@ -109,17 +110,17 @@ type DividendFilter struct {
 
 type DividendYield struct {
 	Date      time.Time
-	Close     float64
-	Dividend  float64
+	CloseAdj     float64
+	DividendAdj  float64
 	Frequency int
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
-	return ((y.Dividend * float64(y.Frequency)) / y.Close) * 100
+	return ((y.DividendAdj * float64(y.Frequency)) / y.CloseAdj) * 100
 }
 
 func (y *DividendYield) ForwardDividend() float64 {
-	return y.Dividend * float64(y.Frequency)
+	return y.DividendAdj * float64(y.Frequency)
 }
 
 type DividendYieldFilter struct {
