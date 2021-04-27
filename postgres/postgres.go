@@ -254,7 +254,7 @@ func (db *DB) Dividends(
 		schemaName := schemaName(ticker)
 
 		q := sq.Select(
-			"ex_date", "amount", "currency",
+			"ex_date", "amount", "amount_adj", "currency",
 			"frequency", "symbol", "payment_type").
 			From(schemaName + ".dividend").
 			OrderBy("ex_date desc").
@@ -290,12 +290,13 @@ func (db *DB) Dividends(
 		for rows.Next() {
 			var exDate time.Time
 			var amount float64
+			var amountAdj float64
 			var currency string
 			var frequency int
 			var symbol string
 			var paymentType string
 
-			err = rows.Scan(&exDate, &amount, &currency,
+			err = rows.Scan(&exDate, &amount, &amountAdj, &currency,
 				&frequency, &symbol, &paymentType)
 			if err != nil {
 				return err
@@ -303,6 +304,7 @@ func (db *DB) Dividends(
 			v := &divyield.Dividend{
 				ExDate:      exDate,
 				Amount:      amount,
+				AmountAdj:      amountAdj,
 				Currency:    currency,
 				Frequency:   frequency,
 				Symbol:      symbol,

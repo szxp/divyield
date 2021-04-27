@@ -84,6 +84,7 @@ type Dividend struct {
 	ID       int64
     ExDate      time.Time
 	Amount      float64
+	AmountAdj      float64
 	Currency    string
 	Frequency   int
 	Symbol      string
@@ -93,12 +94,12 @@ type Dividend struct {
 func (d *Dividend) String() string {
 	return fmt.Sprintf("%v: %v",
 		time.Time(d.ExDate).Format(DateFormat),
-		d.Amount,
+		d.AmountAdj,
 	)
 }
 
 func (d *Dividend) AmountNorm() float64 {
-    return d.Amount * float64(d.Frequency)
+    return d.AmountAdj * float64(d.Frequency)
 }
 
 type DividendFilter struct {
