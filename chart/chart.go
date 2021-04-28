@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -102,12 +103,22 @@ func (f *ChartGenerator) Generate(ctx context.Context, tickers []string) error {
 			return fmt.Errorf("write data file: %s: %s", dataPath, err)
 		}
 
+		minPrice, maxPrice := rangePrices(yields)
+		minYield, maxYield := rangeYields(yields)
+		minDiv, maxDiv := rangeDividends(yields)
+
 		plotParams := plotParams{
-			Datafile:       path.Join(f.opts.outputDir, ticker+".csv"),
-			Imgfile:        path.Join(f.opts.outputDir, ticker+".png"),
-			TitlePrices:    ticker + " prices",
-			TitleDivYield:  ticker + " forward dividend yield",
-			TitleDividends: ticker + " dividends",
+			Datafile:           path.Join(f.opts.outputDir, ticker+".csv"),
+			Imgfile:            path.Join(f.opts.outputDir, ticker+".png"),
+			TitlePrices:        ticker + " prices",
+			TitleDivYield:      ticker + " forward dividend yields",
+			TitleDividends:     ticker + " dividends",
+			PricesYRangeMin:    math.Max(minPrice-((maxPrice-minPrice)*0.1), 0),
+			PricesYRangeMax:    maxPrice + ((maxPrice - minPrice) * 0.1),
+			YieldsYRangeMin:    math.Max(minYield-((maxYield-minYield)*0.1), 0),
+			YieldsYRangeMax:    maxYield + ((maxYield - minYield) * 0.1),
+			DividendsYRangeMin: math.Max(minDiv-((maxDiv-minDiv)*0.1), 0),
+			DividendsYRangeMax: maxDiv + ((maxDiv - minDiv) * 0.1),
 		}
 		plotCommandsTmpl, err := template.New("plot").Parse(plotCommandsTmpl)
 		if err != nil {
@@ -160,6 +171,49 @@ func writeYields(out io.Writer, yields []*divyield.DividendYield) error {
 	return err
 }
 
+func rangePrices(yields []*divyield.DividendYield) (float64, float64) {
+	min := yields[0].CloseAdj
+	max := yields[0].CloseAdj
+	for _, v := range yields {
+		if v.CloseAdj < min {
+			min = v.CloseAdj
+		}
+		if v.CloseAdj > max {
+			max = v.CloseAdj
+		}
+	}
+	return min, max
+}
+
+func rangeYields(yields []*divyield.DividendYield) (float64, float64) {
+	min := yields[0].ForwardTTM()
+	max := yields[0].ForwardTTM()
+	for _, v := range yields {
+		fwd := v.ForwardTTM()
+		if fwd < min {
+			min = fwd
+		}
+		if fwd > max {
+			max = fwd
+		}
+	}
+	return min, max
+}
+
+func rangeDividends(yields []*divyield.DividendYield) (float64, float64) {
+	min := yields[0].DividendAdj
+	max := yields[0].DividendAdj
+	for _, v := range yields {
+		if v.DividendAdj < min {
+			min = v.DividendAdj
+		}
+		if v.DividendAdj > max {
+			max = v.DividendAdj
+		}
+	}
+	return min, max
+}
+
 type writer struct {
 	W   *bufio.Writer
 	Err error
@@ -188,11 +242,17 @@ func (w *writer) WriteString(s string) error {
 var nlRE = regexp.MustCompile(`\r?\n`)
 
 type plotParams struct {
-	Datafile       string
-	Imgfile        string
-	TitlePrices    string
-	TitleDivYield  string
-	TitleDividends string
+	Datafile           string
+	Imgfile            string
+	TitlePrices        string
+	TitleDivYield      string
+	TitleDividends     string
+	PricesYRangeMin    float64
+	PricesYRangeMax    float64
+	YieldsYRangeMin    float64
+	YieldsYRangeMax    float64
+	DividendsYRangeMin float64
+	DividendsYRangeMax float64
 }
 
 const plotCommandsTmpl = `
@@ -224,14 +284,17 @@ set size 1, 0.33;
 
 set origin 0.0,0.66;
 set title titleprices;
+set yrange [{{.PricesYRangeMin}}:{{.PricesYRangeMax}}];
 plot datafile using 1:2 with filledcurves above y = 0;
 
 set origin 0.0,0.33;
 set title titledivyield;
+set yrange [{{.YieldsYRangeMin}}:{{.YieldsYRangeMax}}];
 plot datafile using 1:3 with filledcurves above y = 0;
 
 set origin 0.0,0.0;
 set title titledividends;
+set yrange [{{.DividendsYRangeMin}}:{{.DividendsYRangeMax}}];
 plot datafile using 1:4 with lines lw 3;
 
 unset multiplot;
