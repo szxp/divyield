@@ -403,8 +403,8 @@ func (db *DB) DividendYields(
 		q := sq.Select(
 			"date",
 			"close_adj",
-			"(select coalesce(amount_adj, 0) from "+schemaName+".dividend where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1) as div_amount_adj",
-			"(select coalesce(frequency, 0) from "+schemaName+".dividend where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1) as div_freq",
+			"coalesce((select amount_adj from "+schemaName+".dividend where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_amount_adj",
+			"coalesce((select frequency from "+schemaName+".dividend where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_freq",
 		).
 			From(schemaName + ".price").
 			OrderBy("date desc").
