@@ -112,8 +112,9 @@ func SplitFetcher(f divyield.SplitFetcher) Option {
 		return o
 	}
 }
+
 var defaultOptions = options{
-	outputDir:   "",
+	outputDir: "",
 	//startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
 	startDate:   time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
@@ -246,7 +247,7 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("download prices: %s", err)
 	}
-    err = f.fetchDividends(ctx, ticker)
+	err = f.fetchDividends(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download dividends: %s", err)
 	}
@@ -277,13 +278,12 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 	}
 
 	newSplits, err := f.opts.splitFetcher.Fetch(
-        ctx, ticker, downloadFrom, today)
+		ctx, ticker, downloadFrom, today)
 	if err != nil {
 		return err
 	}
 
-
-    f.log("%v: new splits: %v", ticker, len(newSplits))
+	f.log("%v: new splits: %v", ticker, len(newSplits))
 
 	if len(newSplits) > 0 {
 		err = f.opts.db.PrependSplits(ctx, ticker, newSplits)
@@ -294,7 +294,6 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 
 	return nil
 }
-
 
 func (f *StockFetcher) fetchDividends(ctx context.Context, ticker string) error {
 	latestDividends, err := f.opts.db.Dividends(
@@ -341,7 +340,7 @@ func toDBDividends(dividends []*dividend) []*divyield.Dividend {
 
 	for _, v := range dividends {
 		nv := &divyield.Dividend{
-            ID:       v.Refid,
+			ID:          v.Refid,
 			ExDate:      time.Time(v.ExDate),
 			Symbol:      v.Symbol,
 			Amount:      v.Amount,
@@ -375,7 +374,7 @@ func (f *StockFetcher) downloadDividends(
 	}
 	defer resp.Body.Close()
 
-    //f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	//f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -403,14 +402,14 @@ func dividendsURL(ticker string, from time.Time, apiToken string) string {
 }
 
 type dividend struct {
-	ExDate    Time    `json:"exDate"`
-	PaymentDate    Time    `json:"paymentDate"`
-	Amount    float64 `json:"amount"`
-	Currency  string  `json:"currency"`
-	Flag      string  `json:"flag"`
-	Frequency string  `json:"frequency"`
-	Refid     int64   `json:"refid"`
-	Symbol    string  `json:"symbol"`
+	ExDate      Time    `json:"exDate"`
+	PaymentDate Time    `json:"paymentDate"`
+	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"`
+	Flag        string  `json:"flag"`
+	Frequency   string  `json:"frequency"`
+	Refid       int64   `json:"refid"`
+	Symbol      string  `json:"symbol"`
 }
 
 func (d *dividend) String() string {
@@ -433,9 +432,9 @@ func (d *dividend) FrequencyNumber() int {
 	if d.Frequency == "annual" {
 		return 1
 	}
-	if d.Frequency == "blank" || 
-        d.Frequency == "unspecified" || 
-        d.Frequency == "irregular" {
+	if d.Frequency == "blank" ||
+		d.Frequency == "unspecified" ||
+		d.Frequency == "irregular" {
 		return 0
 	}
 
@@ -453,7 +452,7 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 		return nil, fmt.Errorf("open bracket: %s", err)
 	}
 
-    processed := make(map[int64]struct{})
+	processed := make(map[int64]struct{})
 
 	// while the array contains values
 	for dec.More() {
@@ -463,15 +462,15 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 			return nil, fmt.Errorf("decode: %s", err)
 		}
 
-        // skip future dividend dates
-        if v.Amount <= 0 {
-            continue
-        }
+		// skip future dividend dates
+		if v.Amount <= 0 {
+			continue
+		}
 
-        if _, ok := processed[v.Refid]; !ok {
-            dividends = append(dividends, &v)
-            processed[v.Refid] = struct{}{}
-        }
+		if _, ok := processed[v.Refid]; !ok {
+			dividends = append(dividends, &v)
+			processed[v.Refid] = struct{}{}
+		}
 	}
 
 	// read closing bracket
@@ -565,7 +564,7 @@ func (f *StockFetcher) downloadPrices(
 	}
 	defer resp.Body.Close()
 
-    //f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	//f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -761,5 +760,5 @@ type FetchError struct {
 }
 
 func (e *FetchError) Error() string {
-    return fmt.Sprintf("%v: %v", e.Ticker, e.Err)
+	return fmt.Sprintf("%v: %v", e.Ticker, e.Err)
 }

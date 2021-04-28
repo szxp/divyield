@@ -30,7 +30,7 @@ func (db *DB) InitSchema(
 	for _, t := range tickers {
 		schemas = append(schemas, schemaName(t))
 	}
-    //fmt.Printf("schemas: %+v\n", schemas)
+	//fmt.Printf("schemas: %+v\n", schemas)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
 		q := sq.Select("schema_name").
@@ -61,7 +61,7 @@ func (db *DB) InitSchema(
 		return nil
 	})
 
-    //fmt.Println("schemas exists: ", schemasExists)
+	//fmt.Println("schemas exists: ", schemasExists)
 
 OUTER_LOOP:
 	for _, schema := range schemas {
@@ -73,7 +73,7 @@ OUTER_LOOP:
 		schemasMissing = append(schemasMissing, schema)
 	}
 
-    //fmt.Println("schemas missing: ", schemasMissing)
+	//fmt.Println("schemas missing: ", schemasMissing)
 	if len(schemasMissing) > 0 {
 		tmpl := template.Must(template.New("init").Parse(initSchemaTmpl))
 
@@ -97,9 +97,9 @@ OUTER_LOOP:
 }
 
 func schemaName(ticker string) string {
-    s := strings.ToLower(ticker)
-    s = strings.ReplaceAll(s, "-", "_")
-    return "s_" + s
+	s := strings.ToLower(ticker)
+	s = strings.ReplaceAll(s, "-", "_")
+	return "s_" + s
 }
 
 func (db *DB) Prices(
@@ -154,14 +154,14 @@ func (db *DB) Prices(
 				return err
 			}
 			np := &divyield.Price{
-				Date:   date,
-				Symbol: symbol,
-				Close:  close,
-				CloseAdj:  closeAdj,
-				High:   high,
-				Low:    low,
-				Open:   open,
-				Volume: volume,
+				Date:     date,
+				Symbol:   symbol,
+				Close:    close,
+				CloseAdj: closeAdj,
+				High:     high,
+				Low:      low,
+				Open:     open,
+				Volume:   volume,
 			}
 			prices = append(prices, np)
 		}
@@ -272,7 +272,7 @@ func (db *DB) Dividends(
 			q = q.Where("payment_type = ?", []string{"Cash", "Cash&Stock"})
 		}
 
-        if f.Regular {
+		if f.Regular {
 			q = q.Where("frequency > ?", 0)
 		}
 
@@ -304,7 +304,7 @@ func (db *DB) Dividends(
 			v := &divyield.Dividend{
 				ExDate:      exDate,
 				Amount:      amount,
-				AmountAdj:      amountAdj,
+				AmountAdj:   amountAdj,
 				Currency:    currency,
 				Frequency:   frequency,
 				Symbol:      symbol,
@@ -438,14 +438,14 @@ func (db *DB) DividendYields(
 			err = rows.Scan(&date, &closeAdj, &dividendAdj, &frequency)
 			if err != nil {
 
-                fmt.Println("err: ", date.Format(divyield.DateFormat))
+				fmt.Println("err: ", date.Format(divyield.DateFormat))
 				return err
 			}
 			v := &divyield.DividendYield{
-				Date:      date,
-				CloseAdj:     closeAdj,
-				DividendAdj:  dividendAdj,
-				Frequency: frequency,
+				Date:        date,
+				CloseAdj:    closeAdj,
+				DividendAdj: dividendAdj,
+				Frequency:   frequency,
 			}
 			yields = append(yields, v)
 		}
@@ -505,7 +505,7 @@ func (db *DB) PrependSplits(
 			}
 
 			_, err = stmt.ExecContext(
-                ctx, v.ExDate, v.ToFactor, v.FromFactor)
+				ctx, v.ExDate, v.ToFactor, v.FromFactor)
 			if err != nil {
 				return err
 			}
@@ -566,9 +566,9 @@ func (db *DB) Splits(
 				return err
 			}
 			v := &divyield.Split{
-				ExDate:      exDate,
-				ToFactor:     toFactor,
-				FromFactor:    fromFactor,
+				ExDate:     exDate,
+				ToFactor:   toFactor,
+				FromFactor: fromFactor,
 			}
 			splits = append(splits, v)
 		}

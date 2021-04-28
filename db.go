@@ -42,13 +42,13 @@ type DB interface {
 		f *DividendYieldFilter,
 	) ([]*DividendYield, error)
 
-    Splits(
+	Splits(
 		ctx context.Context,
 		ticker string,
 		f *SplitFilter,
 	) ([]*Split, error)
 
-    PrependSplits(
+	PrependSplits(
 		ctx context.Context,
 		ticker string,
 		splits []*Split,
@@ -56,14 +56,14 @@ type DB interface {
 }
 
 type Price struct {
-	Date   time.Time
-	Symbol string
-	Close  float64
-	CloseAdj  float64
-	High   float64
-	Low    float64
-	Open   float64
-	Volume float64
+	Date     time.Time
+	Symbol   string
+	Close    float64
+	CloseAdj float64
+	High     float64
+	Low      float64
+	Open     float64
+	Volume   float64
 }
 
 const DateFormat = "2006-01-02"
@@ -81,10 +81,10 @@ type PriceFilter struct {
 }
 
 type Dividend struct {
-	ID       int64
-    ExDate      time.Time
+	ID          int64
+	ExDate      time.Time
 	Amount      float64
-	AmountAdj      float64
+	AmountAdj   float64
 	Currency    string
 	Frequency   int
 	Symbol      string
@@ -99,7 +99,7 @@ func (d *Dividend) String() string {
 }
 
 func (d *Dividend) AmountNorm() float64 {
-    return d.AmountAdj * float64(d.Frequency)
+	return d.AmountAdj * float64(d.Frequency)
 }
 
 type DividendFilter struct {
@@ -110,10 +110,10 @@ type DividendFilter struct {
 }
 
 type DividendYield struct {
-	Date      time.Time
-	CloseAdj     float64
-	DividendAdj  float64
-	Frequency int
+	Date        time.Time
+	CloseAdj    float64
+	DividendAdj float64
+	Frequency   int
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
@@ -135,26 +135,26 @@ type StockFetcher interface {
 
 type SplitFetcher interface {
 	Fetch(
-        ctx context.Context, 
-        ticker string,
-	    startDate time.Time,
-	    endDate time.Time,
-    ) ([]*Split, error)
+		ctx context.Context,
+		ticker string,
+		startDate time.Time,
+		endDate time.Time,
+	) ([]*Split, error)
 }
 
 type Split struct {
-    ExDate time.Time
-    ToFactor int
-    FromFactor int
+	ExDate     time.Time
+	ToFactor   int
+	FromFactor int
 }
 
 func (s *Split) String() string {
 	return fmt.Sprintf("%v: %v",
 		time.Time(s.ExDate).Format(DateFormat),
-		float64(s.ToFactor) / float64(s.FromFactor),
+		float64(s.ToFactor)/float64(s.FromFactor),
 	)
 }
 
 type SplitFilter struct {
-	Limit    uint64
+	Limit uint64
 }

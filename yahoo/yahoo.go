@@ -1,26 +1,26 @@
 package yahoo
 
 import (
-    "context"
-    "time"
-    "strconv"
-    "strings"
+	"context"
+	"encoding/csv"
+	"fmt"
 	"golang.org/x/time/rate"
-    "net/http"
-    "fmt"
-    "io"
-    "encoding/csv"
-    "sort"
+	"io"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
-    "szakszon.com/divyield"
+	"szakszon.com/divyield"
 	"szakszon.com/divyield/httprate"
 	"szakszon.com/divyield/logger"
 )
 
 type options struct {
-	rateLimiter      *rate.Limiter
-	timeout          time.Duration // http client timeout, 0 means no timeout
-	logger           logger.Logger
+	rateLimiter *rate.Limiter
+	timeout     time.Duration // http client timeout, 0 means no timeout
+	logger      logger.Logger
 }
 
 type Option func(o options) options
@@ -77,22 +77,22 @@ type SplitFetcher struct {
 }
 
 func (f *SplitFetcher) Fetch(
-    ctx context.Context,
-    ticker string,
+	ctx context.Context,
+	ticker string,
 	startDate time.Time,
 	endDate time.Time,
 ) ([]*divyield.Split, error) {
-    if startDate.IsZero(){
-        startDate = time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC)
-    }
-    if endDate.IsZero(){
-        endDate = time.Now().UTC()
-    }
+	if startDate.IsZero() {
+		startDate = time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC)
+	}
+	if endDate.IsZero() {
+		endDate = time.Now().UTC()
+	}
 
 	u := splitsURL(ticker, startDate, endDate)
-    fmt.Println(u)
+	fmt.Println(u)
 
-    req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (f *SplitFetcher) Fetch(
 	}
 	defer resp.Body.Close()
 
-    f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -114,31 +114,30 @@ func (f *SplitFetcher) Fetch(
 	}
 
 	sortSplitsDesc(splits)
-	
-    fmt.Printf("%+v\n", splits)
-    return splits, nil
+
+	fmt.Printf("%+v\n", splits)
+	return splits, nil
 }
 
-
 func splitsURL(
-    ticker string,
+	ticker string,
 	startDate time.Time,
 	endDate time.Time,
 ) string {
-    return "https://query1.finance.yahoo.com"+
-        "/v7/finance/download/"+strings.ToUpper(ticker)+
-        "?period1="+strconv.FormatInt(startDate.Unix(), 10)+
-        "&period2="+strconv.FormatInt(endDate.Unix(), 10)+
-        "&interval=1d"+
-        "&events=split"+
-        "&includeAdjustedClose=true"
+	return "https://query1.finance.yahoo.com" +
+		"/v7/finance/download/" + strings.ToUpper(ticker) +
+		"?period1=" + strconv.FormatInt(startDate.Unix(), 10) +
+		"&period2=" + strconv.FormatInt(endDate.Unix(), 10) +
+		"&interval=1d" +
+		"&events=split" +
+		"&includeAdjustedClose=true"
 }
 
 func parseSplits(in io.Reader) ([]*divyield.Split, error) {
-    splits := make([]*divyield.Split, 0)
+	splits := make([]*divyield.Split, 0)
 
-    records := make([][]string, 0)
-    r := csv.NewReader(in)
+	records := make([][]string, 0)
+	r := csv.NewReader(in)
 	for {
 		record, err := r.Read()
 		if err == io.EOF {
@@ -147,38 +146,38 @@ func parseSplits(in io.Reader) ([]*divyield.Split, error) {
 		if err != nil {
 			return nil, err
 		}
-        records = append(records, record)
+		records = append(records, record)
 	}
 
-    if len(records) > 0 {
-        // forget the header row
-        records = records[1:]
+	if len(records) > 0 {
+		// forget the header row
+		records = records[1:]
 
-        for _, rec := range records {
-            exDate, err := time.Parse(divyield.DateFormat, rec[0])
-            if err != nil {
-                return nil, err
-            }
+		for _, rec := range records {
+			exDate, err := time.Parse(divyield.DateFormat, rec[0])
+			if err != nil {
+				return nil, err
+			}
 
-            factors := strings.Split(rec[1], ":")
-            toFactor, err := strconv.Atoi(factors[0])
-            if err != nil {
-                return nil, err
-            }
-            fromFactor, err := strconv.Atoi(factors[1])
-            if err != nil {
-                return nil, err
-            }
+			factors := strings.Split(rec[1], ":")
+			toFactor, err := strconv.Atoi(factors[0])
+			if err != nil {
+				return nil, err
+			}
+			fromFactor, err := strconv.Atoi(factors[1])
+			if err != nil {
+				return nil, err
+			}
 
-            split := &divyield.Split{
-                ExDate: exDate,
-                ToFactor: toFactor,
-                FromFactor: fromFactor,
-            }
+			split := &divyield.Split{
+				ExDate:     exDate,
+				ToFactor:   toFactor,
+				FromFactor: fromFactor,
+			}
 
-            splits = append(splits, split)
-        }
-    }
+			splits = append(splits, split)
+		}
+	}
 
 	return splits, nil
 }

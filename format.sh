@@ -1,1 +1,1 @@
-find ../../ -type f -name "*.go" -exec go fmt {} \;
+find . -type f -name "*.go" -exec go fmt {} \;

@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"text/tabwriter"
 	"time"
-    "math"
 
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"

@@ -11,9 +11,9 @@ import (
 	"os/signal"
 	"regexp"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
-    "sync"
 
 	"szakszon.com/divyield/chart"
 	"szakszon.com/divyield/iexcloud"
@@ -33,7 +33,7 @@ func main() {
 	ctx, ctxCancel := context.WithCancel(ctx)
 
 	now := time.Now()
-    stdoutLogger := &StdoutLogger{mu: &sync.RWMutex{}}
+	stdoutLogger := &StdoutLogger{mu: &sync.RWMutex{}}
 
 	termCh := make(chan os.Signal)
 	signal.Notify(termCh, os.Interrupt, syscall.SIGTERM)
@@ -96,19 +96,19 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-    db.SetMaxOpenConns(50)
+	db.SetMaxOpenConns(50)
 
 	pdb := &postgres.DB{
 		DB: db,
 	}
 
-    splitFetcher := yahoo.NewSplitFetcher(
-			yahoo.RateLimiter(rate.NewLimiter(rate.Every(1*time.Second), 1)),
-			yahoo.Timeout(10*time.Second),
-			yahoo.Log(stdoutLogger),
-        )
+	splitFetcher := yahoo.NewSplitFetcher(
+		yahoo.RateLimiter(rate.NewLimiter(rate.Every(1*time.Second), 1)),
+		yahoo.Timeout(10*time.Second),
+		yahoo.Log(stdoutLogger),
+	)
 
-    switch os.Args[subIdx] {
+	switch os.Args[subIdx] {
 	case "fetch":
 		fetchCmd.Parse(os.Args[subIdx+1:])
 
@@ -131,7 +131,7 @@ func main() {
 		)
 		fetcher.Fetch(ctx, tickers)
 		for _, err := range fetcher.Errs() {
-			fmt.Println("Error:",  err)
+			fmt.Println("Error:", err)
 		}
 
 	case "stats":
@@ -254,13 +254,13 @@ Flags:
       stocks dir (default "work/stocks")
 `
 
-type StdoutLogger struct{
-    mu *sync.RWMutex
+type StdoutLogger struct {
+	mu *sync.RWMutex
 }
 
 func (l *StdoutLogger) Logf(format string, v ...interface{}) {
-    l.mu.Lock()
-    defer l.mu.Unlock()
-    fmt.Printf(format, v...)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	fmt.Printf(format, v...)
 	fmt.Println()
 }
