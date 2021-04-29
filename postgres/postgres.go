@@ -397,6 +397,10 @@ func (db *DB) PrependDividends(
 			return err
 		}
 
+		err = updateCloseAdj(ctx, runner, schemaName)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	return err
