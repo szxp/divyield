@@ -90,7 +90,6 @@ func (f *SplitFetcher) Fetch(
 	}
 
 	u := splitsURL(ticker, startDate, endDate)
-	fmt.Println(u)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -102,7 +101,7 @@ func (f *SplitFetcher) Fetch(
 	}
 	defer resp.Body.Close()
 
-	f.log("%v: %v %v", ticker, resp.StatusCode, u)
+//	f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -115,7 +114,6 @@ func (f *SplitFetcher) Fetch(
 
 	sortSplitsDesc(splits)
 
-	fmt.Printf("%+v\n", splits)
 	return splits, nil
 }
 

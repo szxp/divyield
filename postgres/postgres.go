@@ -238,6 +238,12 @@ func (db *DB) PrependPrices(
 		if err != nil {
 			return err
 		}
+
+		err = updateCloseAdj(ctx, runner, schemaName)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 	return err
@@ -385,6 +391,12 @@ func (db *DB) PrependDividends(
 		if err != nil {
 			return err
 		}
+
+		err = updateDividendAdj(ctx, runner, schemaName)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 	return err
@@ -520,8 +532,39 @@ func (db *DB) PrependSplits(
 		if err != nil {
 			return err
 		}
+
+		err = updateDividendAdj(ctx, runner, schemaName)
+		if err != nil {
+			return err
+		}
+
+		err = updateCloseAdj(ctx, runner, schemaName)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
+	return err
+}
+
+func updateDividendAdj(
+	ctx context.Context,
+	runner runner,
+	schemaName string,
+) error {
+    _, err := runner.ExecContext(
+		ctx, "call public.update_dividend_adj($1)", schemaName)
+	return err
+}
+
+func updateCloseAdj(
+	ctx context.Context,
+	runner runner,
+	schemaName string,
+) error {
+    _, err := runner.ExecContext(
+		ctx, "call public.update_price_adj($1)", schemaName)
 	return err
 }
 

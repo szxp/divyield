@@ -283,7 +283,7 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 		return err
 	}
 
-	f.log("%v: new splits: %v", ticker, len(newSplits))
+	//f.log("%v: new splits: %v", ticker, len(newSplits))
 
 	if len(newSplits) > 0 {
 		err = f.opts.db.PrependSplits(ctx, ticker, newSplits)
