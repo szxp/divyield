@@ -9,16 +9,19 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+    "strconv"
 
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"
 )
 
 type options struct {
-	stocksDir string
-	now       time.Time
-	logger    logger.Logger
-	db        divyield.DB
+	stocksDir        string
+	now              time.Time
+	logger           logger.Logger
+	db               divyield.DB
+	dividendYieldMin float64
+	dividendYieldMax float64
 }
 
 type Option func(o options) options
@@ -47,6 +50,20 @@ func Log(l logger.Logger) Option {
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db
+		return o
+	}
+}
+
+func DividendYieldMin(v float64) Option {
+	return func(o options) options {
+		o.dividendYieldMin = v
+		return o
+	}
+}
+
+func DividendYieldMax(v float64) Option {
+	return func(o options) options {
+		o.dividendYieldMax = v
 		return o
 	}
 }
@@ -103,6 +120,8 @@ type DividendAnnual struct {
 
 type Stats struct {
 	Rows []*StatsRow
+    DividendYieldMin float64
+	DividendYieldMax float64
 }
 
 func (s *Stats) String() string {
@@ -138,6 +157,16 @@ func (s *Stats) String() string {
 	fmt.Fprintln(w, b.String())
 
 	for _, row := range s.Rows {
+        y := row.ForwardDividendYield 
+        if s.DividendYieldMin > 0 &&
+			(math.IsNaN(y) || math.IsInf(y, 1) || math.IsInf(y, -1) || s.DividendYieldMin > y) {
+			continue
+		}
+		if s.DividendYieldMax > 0 &&
+			(math.IsNaN(y) || math.IsInf(y, 1) || math.IsInf(y, -1) || s.DividendYieldMax < y) {
+			continue
+		}
+
 		b.Reset()
 		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
 		b.WriteByte('\t')
@@ -165,6 +194,18 @@ func (s *Stats) String() string {
 
 		fmt.Fprintln(w, b.String())
 	}
+
+    fmt.Fprintln(w, "")
+
+    if s.DividendYieldMin > 0 {
+        fmt.Fprintln(w, "Min dividend yield:", 
+            strconv.FormatFloat(s.DividendYieldMin, 'f', 2, 64) + "%")
+    }
+    if s.DividendYieldMax > 0 {
+        fmt.Fprintln(w, "Max dividend yield:", 
+            strconv.FormatFloat(s.DividendYieldMax, 'f', 2, 64) + "%")
+    }
+
 	w.Flush()
 	return out.String()
 }
@@ -189,7 +230,11 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 	var resultWg sync.WaitGroup
 	resultCh := make(chan result)
 
-	stats := &Stats{}
+	stats := &Stats{
+        DividendYieldMin: f.opts.dividendYieldMin,
+        DividendYieldMax: f.opts.dividendYieldMax,
+    }
+
 	errs := make([]error, 0)
 
 	resultWg.Add(1)

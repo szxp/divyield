@@ -5,6 +5,7 @@ declare
     r record;
     factor numeric; 
 begin
+    raise notice 'schema_name: %', quote_ident(schema_name); 
     execute 'update ' || quote_ident(schema_name) || '.dividend set ' || 
         ' factor_adj = 1, amount_adj = amount';
 
@@ -31,6 +32,7 @@ declare
     r record;
     factor numeric; 
 begin
+    raise notice 'schema_name: %', quote_ident(schema_name); 
     execute 'update ' || quote_ident(schema_name) || '.price set ' || 
         ' factor_adj = 1, close_adj = close';
 
@@ -43,7 +45,7 @@ begin
             ' where date < ''' || r.ex_date || '''';
     end loop;
 
-    for r in execute 'select d.ex_date, d.amount, p.close from ' || 
+    for r in execute 'select d.ex_date, d.amount, coalesce(p.close, 0) as close from ' || 
         quote_ident(schema_name) || '.dividend d left join ' || 
         quote_ident(schema_name) || '.price p on d.ex_date = p.date where ' || 
         ' d.payment_type in (''Cash'', ''Cash&Stock'') ' || 

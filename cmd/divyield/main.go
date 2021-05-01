@@ -66,6 +66,12 @@ func main() {
 	}
 	statsStocksDir := statsCmd.String("stocksDir",
 		defaultStocksDir, "stocks dir")
+	statsSP500DividendYield := statsCmd.Float64("sp500-dividend-yield",
+		0.0, "S&P 500 dividend yield")
+	statsSP500MinFactor := statsCmd.Float64("sp500-min-factor",
+		1.5, "S&P 500 min factor")
+	statsSP500MaxFactor := statsCmd.Float64("sp500-max-factor",
+		5.0, "S&P 500 max factor")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
@@ -148,6 +154,10 @@ func main() {
 			stats.Now(now),
 			stats.Log(stdoutLogger),
 			stats.DB(pdb),
+			stats.DividendYieldMin(
+				*statsSP500DividendYield**statsSP500MinFactor),
+			stats.DividendYieldMax(
+				*statsSP500DividendYield**statsSP500MaxFactor),
 		)
 		stats, err := statsGenerator.Generate(ctx, tickers)
 		if err != nil {

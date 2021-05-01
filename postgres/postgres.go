@@ -275,7 +275,7 @@ func (db *DB) Dividends(
 		}
 
 		if f.CashOnly {
-			q = q.Where("payment_type = ?", []string{"Cash", "Cash&Stock"})
+			q = q.Where(sq.Eq{"payment_type": []string{"Cash", "Cash&Stock"}})
 		}
 
 		if f.Regular {
@@ -539,11 +539,13 @@ func (db *DB) PrependSplits(
 
 		err = updateDividendAdj(ctx, runner, schemaName)
 		if err != nil {
+            fmt.Println("ERROR", err)
 			return err
 		}
 
 		err = updateCloseAdj(ctx, runner, schemaName)
 		if err != nil {
+            fmt.Println("ERROR", err)
 			return err
 		}
 
@@ -557,8 +559,8 @@ func updateDividendAdj(
 	runner runner,
 	schemaName string,
 ) error {
-    _, err := runner.ExecContext(
-		ctx, "call public.update_dividend_adj($1)", schemaName)
+	_, err := runner.ExecContext(
+		ctx, "call public.update_dividend_adj($1);", schemaName)
 	return err
 }
 
@@ -567,8 +569,8 @@ func updateCloseAdj(
 	runner runner,
 	schemaName string,
 ) error {
-    _, err := runner.ExecContext(
-		ctx, "call public.update_price_adj($1)", schemaName)
+	_, err := runner.ExecContext(
+		ctx, "call public.update_price_adj($1);", schemaName)
 	return err
 }
 

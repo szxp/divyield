@@ -243,13 +243,13 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("download splits: %s", err)
 	}
-	err = f.fetchPrices(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download prices: %s", err)
-	}
 	err = f.fetchDividends(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download dividends: %s", err)
+	}
+	err = f.fetchPrices(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download prices: %s", err)
 	}
 	return err
 }
@@ -413,9 +413,10 @@ type dividend struct {
 }
 
 func (d *dividend) String() string {
-	return fmt.Sprintf("%v: %v",
+	return fmt.Sprintf("%v: %v (refid %v)",
 		time.Time(d.ExDate).Format(DateFormat),
 		d.Amount,
+        d.Refid,
 	)
 }
 
@@ -437,6 +438,11 @@ func (d *dividend) FrequencyNumber() int {
 		d.Frequency == "irregular" {
 		return 0
 	}
+
+    if d.Symbol == "R" && d.Frequency == "weekly" {
+        d.Frequency = "quarterly"
+        return 4 // quarterly, fix data error
+    }
 
 	panic(fmt.Sprintf("unexpected frequency: %v: %v: %v",
 		d.Symbol, d.ExDate, d.Frequency))

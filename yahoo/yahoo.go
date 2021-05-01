@@ -101,7 +101,7 @@ func (f *SplitFetcher) Fetch(
 	}
 	defer resp.Body.Close()
 
-//	f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	//	f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
