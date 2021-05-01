@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+    "encoding/csv"
+    "io"
 
 	"szakszon.com/divyield/chart"
 	"szakszon.com/divyield/iexcloud"
@@ -56,8 +58,8 @@ func main() {
 		defaultStocksDir, "output dir")
 	fetchForce := fetchCmd.Bool("force", false,
 		"force downloading stock data even if it is already downloaded")
-	fetchIEXCloudAPIToken := fetchCmd.String("iexCloudAPIToken", "",
-		"IEXCloud API Token, see https://iexcloud.io/docs/api/#authentication")
+	fetchIEXCloudAPITokensFile := fetchCmd.String("iexCloudAPITokens", "",
+		"IEXCloud API Token csv file")
 
 	statsCmd := flag.NewFlagSet("stats", flag.ExitOnError)
 	statsCmd.Usage = func() {
@@ -124,12 +126,19 @@ func main() {
 			return
 		}
 
+        iexCloudAPITokens, err := parseIEXCloudAPITokens(
+            *fetchIEXCloudAPITokensFile)
+        if err != nil {
+			fmt.Println(err)
+		    os.Exit(1)
+        }
+
 		fetcher := iexcloud.NewStockFetcher(
 			iexcloud.OutputDir(*fetchOutputDir),
 			iexcloud.Workers(10),
 			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(200*time.Millisecond), 1)),
 			iexcloud.Timeout(10*time.Second),
-			iexcloud.IEXCloudAPIToken(*fetchIEXCloudAPIToken),
+			iexcloud.IEXCloudAPITokens(iexCloudAPITokens),
 			iexcloud.Force(*fetchForce),
 			iexcloud.Log(stdoutLogger),
 			iexcloud.DB(pdb),
@@ -211,6 +220,32 @@ func main() {
 		fmt.Println(usage)
 		os.Exit(1)
 	}
+}
+
+func parseIEXCloudAPITokens(p string) (map[string]string, error) {
+    tokens := make(map[string]string)
+
+    f, err := os.Open(p)
+    if err != nil {
+        return nil, err
+    }
+    defer f.Close()
+
+    r := csv.NewReader(f)
+
+    for {
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		tokens[record[0]] = record[1]
+	}
+
+    return tokens, nil
 }
 
 func subcommandIndex(args []string) int {

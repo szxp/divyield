@@ -25,7 +25,7 @@ type options struct {
 	startDate        time.Time
 	endDate          time.Time
 	timeout          time.Duration // http client timeout, 0 means no timeout
-	iexCloudAPIToken string
+	iexCloudAPITokens map[string]string
 	force            bool
 	logger           logger.Logger
 	rateLimiter      *rate.Limiter
@@ -78,9 +78,9 @@ func Timeout(d time.Duration) Option {
 	}
 }
 
-func IEXCloudAPIToken(t string) Option {
+func IEXCloudAPITokens(t map[string]string) Option {
 	return func(o options) options {
-		o.iexCloudAPIToken = t
+		o.iexCloudAPITokens = t
 		return o
 	}
 }
@@ -318,8 +318,9 @@ func (f *StockFetcher) fetchDividends(ctx context.Context, ticker string) error 
 		return nil // up-to-date
 	}
 
+	apiToken := f.opts.iexCloudAPITokens[ticker]
 	newDividends, err := f.downloadDividends(
-		ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
+		ctx, ticker, downloadFrom, apiToken)
 	if err != nil {
 		return err
 	}
@@ -469,7 +470,7 @@ func parseDividends(r io.Reader) ([]*dividend, error) {
 		}
 
 		// skip future dividend dates
-		if v.Amount <= 0 {
+		if v.ExDate.After(time.Now().UTC()) {
 			continue
 		}
 
@@ -519,8 +520,9 @@ func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 		return nil // up-to-date
 	}
 
+	apiToken := f.opts.iexCloudAPITokens[ticker]
 	newPrices, err := f.downloadPrices(
-		ctx, ticker, downloadFrom, f.opts.iexCloudAPIToken)
+        ctx, ticker, downloadFrom, apiToken)
 	if err != nil {
 		return err
 	}
@@ -642,6 +644,10 @@ const DateFormat = "2006-01-02"
 
 func (t Time) IsZero() bool {
 	return time.Time(t).IsZero()
+}
+
+func (t Time) After(o time.Time) bool {
+	return time.Time(t).After(o)
 }
 
 func (t Time) UntilDays(p time.Time) int64 {
