@@ -439,6 +439,8 @@ func (db *DB) DividendYields(
 			return err
 		}
 
+        //fmt.Println(sql)
+
 		rows, err := runner.QueryContext(ctx, sql, args...)
 		if err != nil {
 			return err
@@ -539,13 +541,13 @@ func (db *DB) PrependSplits(
 
 		err = updateDividendAdj(ctx, runner, schemaName)
 		if err != nil {
-            fmt.Println("ERROR", err)
+			fmt.Println("ERROR", err)
 			return err
 		}
 
 		err = updateCloseAdj(ctx, runner, schemaName)
 		if err != nil {
-            fmt.Println("ERROR", err)
+			fmt.Println("ERROR", err)
 			return err
 		}
 

@@ -21,17 +21,17 @@ import (
 )
 
 type options struct {
-	outputDir        string
-	startDate        time.Time
-	endDate          time.Time
-	timeout          time.Duration // http client timeout, 0 means no timeout
+	outputDir         string
+	startDate         time.Time
+	endDate           time.Time
+	timeout           time.Duration // http client timeout, 0 means no timeout
 	iexCloudAPITokens map[string]string
-	force            bool
-	logger           logger.Logger
-	rateLimiter      *rate.Limiter
-	workers          int
-	db               divyield.DB
-	splitFetcher     divyield.SplitFetcher
+	force             bool
+	logger            logger.Logger
+	rateLimiter       *rate.Limiter
+	workers           int
+	db                divyield.DB
+	splitFetcher      divyield.SplitFetcher
 }
 
 type Option func(o options) options
@@ -239,14 +239,14 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	err = f.fetchSplits(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download splits: %s", err)
-	}
-	err = f.fetchDividends(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download dividends: %s", err)
-	}
+	//	err = f.fetchSplits(ctx, ticker)
+	//	if err != nil {
+	//		return fmt.Errorf("download splits: %s", err)
+	//	}
+	//	err = f.fetchDividends(ctx, ticker)
+	//	if err != nil {
+	//		return fmt.Errorf("download dividends: %s", err)
+	//	}
 	err = f.fetchPrices(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download prices: %s", err)
@@ -417,7 +417,7 @@ func (d *dividend) String() string {
 	return fmt.Sprintf("%v: %v (refid %v)",
 		time.Time(d.ExDate).Format(DateFormat),
 		d.Amount,
-        d.Refid,
+		d.Refid,
 	)
 }
 
@@ -440,10 +440,10 @@ func (d *dividend) FrequencyNumber() int {
 		return 0
 	}
 
-    if d.Symbol == "R" && d.Frequency == "weekly" {
-        d.Frequency = "quarterly"
-        return 4 // quarterly, fix data error
-    }
+	if d.Symbol == "R" && d.Frequency == "weekly" {
+		d.Frequency = "quarterly"
+		return 4 // quarterly, fix data error
+	}
 
 	panic(fmt.Sprintf("unexpected frequency: %v: %v: %v",
 		d.Symbol, d.ExDate, d.Frequency))
@@ -499,12 +499,14 @@ func sortDividendsDesc(dividends []*dividend) {
 
 func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 	latestPrices, err := f.opts.db.Prices(
-		ctx, ticker, &divyield.PriceFilter{Limit: 1})
+		ctx, ticker, &divyield.PriceFilter{
+			Limit: 1,
+		})
 	if err != nil {
 		return fmt.Errorf("latest price: %s", err)
 	}
 
-	downloadFrom := f.opts.startDate
+	downloadFrom := timeDate(f.opts.startDate)
 	if len(latestPrices) > 0 {
 		downloadFrom = time.Time(latestPrices[0].Date)
 	}
@@ -512,20 +514,19 @@ func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 	f.log("%v: download prices from %v",
 		ticker, downloadFrom.Format(divyield.DateFormat))
 
-	now := time.Now().UTC()
-	today := timeDate(now)
-
-	if downloadFrom.Equal(today) {
-		f.log("%s: %s", ticker, "up to date, skip download")
-		return nil // up-to-date
-	}
-
 	apiToken := f.opts.iexCloudAPITokens[ticker]
 	newPrices, err := f.downloadPrices(
-        ctx, ticker, downloadFrom, apiToken)
+		ctx, ticker, downloadFrom, apiToken)
 	if err != nil {
 		return err
 	}
+
+	f.log("%v: %v downloaded prices",
+		ticker, len(newPrices))
+
+    fmt.Println(newPrices[0].Date)
+    fmt.Println(newPrices[len(newPrices)-1].Date)
+    return nil
 
 	if len(newPrices) > 0 {
 		err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
@@ -535,6 +536,39 @@ func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 	}
 
 	return nil
+}
+
+func timeRange(d1, d2 time.Time) string {
+	if d1.IsZero() {
+		return "5y"
+	}
+
+	if d1.After(d2) {
+		panic(fmt.Sprintf("%v is greater then %v", d1, d2))
+	}
+
+	days := d2.Sub(d1).Hours() / 24
+
+	if days < 28 {
+		return "1m"
+	}
+	if days < 86 {
+		return "3m"
+	}
+	if days < 178 {
+		return "6m"
+	}
+	if days < 365 {
+		return "1y"
+	}
+	if days < 730 {
+		return "2y"
+	}
+	if days < 1825 {
+		return "5y"
+	}
+
+	panic(fmt.Sprintf("too long time range: %v -> %v", d1, d2))
 }
 
 func toDBPrices(prices []*price) []*divyield.Price {
@@ -558,10 +592,10 @@ func toDBPrices(prices []*price) []*divyield.Price {
 func (f *StockFetcher) downloadPrices(
 	ctx context.Context,
 	ticker string,
-	from time.Time,
+	downloadFrom time.Time,
 	apiToken string,
 ) ([]*price, error) {
-	u := pricesURL(ticker, from, apiToken)
+	u := pricesURL(ticker, downloadFrom, apiToken)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -572,7 +606,7 @@ func (f *StockFetcher) downloadPrices(
 	}
 	defer resp.Body.Close()
 
-	//f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -588,15 +622,57 @@ func (f *StockFetcher) downloadPrices(
 }
 
 func pricesURL(ticker string, from time.Time, apiToken string) string {
-	return "https://cloud.iexapis.com/stable/time-series" +
-		"/HISTORICAL_PRICES/" + ticker +
-		"?from=" + from.Format(divyield.DateFormat) +
-		"&token=" + apiToken
+	ticker = strings.ToLower(ticker)
+// 	return "https://cloud.iexapis.com/stable/stock/" +
+// 		ticker + "/chart/" + timeRange +
+// 		"?token=" + apiToken
+
+	    return "https://cloud.iexapis.com/stable/time-series" +
+			"/HISTORICAL_PRICES/" + ticker +
+			"?from=" + from.Format(divyield.DateFormat) +
+			"&token=" + apiToken
 
 	// return "https://query1.finance.yahoo.com/v7/finance/download/" + ticker +
 	// 	"?period1=" + strconv.FormatInt(sd.Unix(), 10) +
 	// 	"&period2=" + strconv.FormatInt(ed.Unix(), 10) +
 	// 	"&interval=1d&events=history&includeAdjustedClose=true"
+}
+
+func (f *StockFetcher) parsePrices(r io.Reader) ([]*price, error) {
+	prices := make([]*price, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	// while the array contains values
+	for dec.More() {
+		var v price
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode: %s", err)
+		}
+		prices = append(prices, &v)
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	return prices, nil
+}
+
+func sortPricesDesc(prices []*price) {
+	sort.SliceStable(prices, func(i, j int) bool {
+		ti := time.Time(prices[i].Date)
+		tj := time.Time(prices[j].Date)
+		return ti.After(tj)
+	})
 }
 
 func (f *StockFetcher) download(
@@ -723,43 +799,6 @@ func (t *TimeUnix) UnmarshalJSON(b []byte) error {
 	}
 	*t = TimeUnix(time.Unix(i/1000, 0))
 	return nil
-}
-
-func (f *StockFetcher) parsePrices(r io.Reader) ([]*price, error) {
-	prices := make([]*price, 0)
-
-	dec := json.NewDecoder(r)
-	// read open bracket
-	_, err := dec.Token()
-	if err != nil {
-		return nil, fmt.Errorf("open bracket: %s", err)
-	}
-
-	// while the array contains values
-	for dec.More() {
-		var v price
-		err := dec.Decode(&v)
-		if err != nil {
-			return nil, fmt.Errorf("decode: %s", err)
-		}
-		prices = append(prices, &v)
-	}
-
-	// read closing bracket
-	_, err = dec.Token()
-	if err != nil {
-		return nil, fmt.Errorf("closing bracket: %s", err)
-	}
-
-	return prices, nil
-}
-
-func sortPricesDesc(prices []*price) {
-	sort.SliceStable(prices, func(i, j int) bool {
-		ti := time.Time(prices[i].Date)
-		tj := time.Time(prices[j].Date)
-		return ti.After(tj)
-	})
 }
 
 func (f *StockFetcher) Errs() []error {

@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"flag"
 	"fmt"
 	_ "github.com/lib/pq"
 	"golang.org/x/time/rate"
+	"io"
 	"os"
 	"os/signal"
 	"regexp"
@@ -14,8 +16,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-    "encoding/csv"
-    "io"
 
 	"szakszon.com/divyield/chart"
 	"szakszon.com/divyield/iexcloud"
@@ -126,12 +126,12 @@ func main() {
 			return
 		}
 
-        iexCloudAPITokens, err := parseIEXCloudAPITokens(
-            *fetchIEXCloudAPITokensFile)
-        if err != nil {
+		iexCloudAPITokens, err := parseIEXCloudAPITokens(
+			*fetchIEXCloudAPITokensFile)
+		if err != nil {
 			fmt.Println(err)
-		    os.Exit(1)
-        }
+			os.Exit(1)
+		}
 
 		fetcher := iexcloud.NewStockFetcher(
 			iexcloud.OutputDir(*fetchOutputDir),
@@ -223,17 +223,17 @@ func main() {
 }
 
 func parseIEXCloudAPITokens(p string) (map[string]string, error) {
-    tokens := make(map[string]string)
+	tokens := make(map[string]string)
 
-    f, err := os.Open(p)
-    if err != nil {
-        return nil, err
-    }
-    defer f.Close()
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
 
-    r := csv.NewReader(f)
+	r := csv.NewReader(f)
 
-    for {
+	for {
 		record, err := r.Read()
 		if err == io.EOF {
 			break
@@ -245,7 +245,7 @@ func parseIEXCloudAPITokens(p string) (map[string]string, error) {
 		tokens[record[0]] = record[1]
 	}
 
-    return tokens, nil
+	return tokens, nil
 }
 
 func subcommandIndex(args []string) int {

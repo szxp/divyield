@@ -117,7 +117,10 @@ type DividendYield struct {
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
-    return ((y.DividendAdj * float64(y.Frequency)) / y.CloseAdj) * 100
+    if y.CloseAdj == 0 {
+        return 0
+    }
+	return ((y.DividendAdj * float64(y.Frequency)) / y.CloseAdj) * 100
 }
 
 func (y *DividendYield) ForwardDividend() float64 {

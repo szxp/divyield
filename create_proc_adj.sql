@@ -5,7 +5,6 @@ declare
     r record;
     factor numeric; 
 begin
-    raise notice 'schema_name: %', quote_ident(schema_name); 
     execute 'update ' || quote_ident(schema_name) || '.dividend set ' || 
         ' factor_adj = 1, amount_adj = amount';
 
@@ -32,7 +31,6 @@ declare
     r record;
     factor numeric; 
 begin
-    raise notice 'schema_name: %', quote_ident(schema_name); 
     execute 'update ' || quote_ident(schema_name) || '.price set ' || 
         ' factor_adj = 1, close_adj = close';
 
@@ -60,8 +58,6 @@ begin
     execute 'update ' || quote_ident(schema_name) || '.price set ' || 
         ' factor_adj = round(factor_adj, 4) ' 
         ', close_adj = round(close * factor_adj, 4) ';
-
-    -- todo adjust by dividends (stock, cash&stock)
 
 end $$;
 

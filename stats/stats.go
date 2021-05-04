@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"sync"
 	"text/tabwriter"
 	"time"
-    "strconv"
 
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"
@@ -119,8 +119,8 @@ type DividendAnnual struct {
 }
 
 type Stats struct {
-	Rows []*StatsRow
-    DividendYieldMin float64
+	Rows             []*StatsRow
+	DividendYieldMin float64
 	DividendYieldMax float64
 }
 
@@ -157,8 +157,8 @@ func (s *Stats) String() string {
 	fmt.Fprintln(w, b.String())
 
 	for _, row := range s.Rows {
-        y := row.ForwardDividendYield 
-        if s.DividendYieldMin > 0 &&
+		y := row.ForwardDividendYield
+		if s.DividendYieldMin > 0 &&
 			(math.IsNaN(y) || math.IsInf(y, 1) || math.IsInf(y, -1) || s.DividendYieldMin > y) {
 			continue
 		}
@@ -195,16 +195,16 @@ func (s *Stats) String() string {
 		fmt.Fprintln(w, b.String())
 	}
 
-    fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "")
 
-    if s.DividendYieldMin > 0 {
-        fmt.Fprintln(w, "Min dividend yield:", 
-            strconv.FormatFloat(s.DividendYieldMin, 'f', 2, 64) + "%")
-    }
-    if s.DividendYieldMax > 0 {
-        fmt.Fprintln(w, "Max dividend yield:", 
-            strconv.FormatFloat(s.DividendYieldMax, 'f', 2, 64) + "%")
-    }
+	if s.DividendYieldMin > 0 {
+		fmt.Fprintln(w, "Min dividend yield:",
+			strconv.FormatFloat(s.DividendYieldMin, 'f', 2, 64)+"%")
+	}
+	if s.DividendYieldMax > 0 {
+		fmt.Fprintln(w, "Max dividend yield:",
+			strconv.FormatFloat(s.DividendYieldMax, 'f', 2, 64)+"%")
+	}
 
 	w.Flush()
 	return out.String()
@@ -231,9 +231,9 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 	resultCh := make(chan result)
 
 	stats := &Stats{
-        DividendYieldMin: f.opts.dividendYieldMin,
-        DividendYieldMax: f.opts.dividendYieldMax,
-    }
+		DividendYieldMin: f.opts.dividendYieldMin,
+		DividendYieldMax: f.opts.dividendYieldMax,
+	}
 
 	errs := make([]error, 0)
 
