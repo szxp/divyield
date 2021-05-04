@@ -116,7 +116,7 @@ func SplitFetcher(f divyield.SplitFetcher) Option {
 var defaultOptions = options{
 	outputDir: "",
 	//startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
-	startDate:   time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -239,14 +239,14 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	//	err = f.fetchSplits(ctx, ticker)
-	//	if err != nil {
-	//		return fmt.Errorf("download splits: %s", err)
-	//	}
-	//	err = f.fetchDividends(ctx, ticker)
-	//	if err != nil {
-	//		return fmt.Errorf("download dividends: %s", err)
-	//	}
+	err = f.fetchSplits(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download splits: %s", err)
+	}
+	err = f.fetchDividends(ctx, ticker)
+	if err != nil {
+		return fmt.Errorf("download dividends: %s", err)
+	}
 	err = f.fetchPrices(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download prices: %s", err)
@@ -524,9 +524,9 @@ func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 	f.log("%v: %v downloaded prices",
 		ticker, len(newPrices))
 
-    fmt.Println(newPrices[0].Date)
-    fmt.Println(newPrices[len(newPrices)-1].Date)
-    return nil
+	//fmt.Println(newPrices[0].Date)
+	//fmt.Println(newPrices[len(newPrices)-1].Date)
+	return nil
 
 	if len(newPrices) > 0 {
 		err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
@@ -623,14 +623,14 @@ func (f *StockFetcher) downloadPrices(
 
 func pricesURL(ticker string, from time.Time, apiToken string) string {
 	ticker = strings.ToLower(ticker)
-// 	return "https://cloud.iexapis.com/stable/stock/" +
-// 		ticker + "/chart/" + timeRange +
-// 		"?token=" + apiToken
+	// 	return "https://cloud.iexapis.com/stable/stock/" +
+	// 		ticker + "/chart/" + timeRange +
+	// 		"?token=" + apiToken
 
-	    return "https://cloud.iexapis.com/stable/time-series" +
-			"/HISTORICAL_PRICES/" + ticker +
-			"?from=" + from.Format(divyield.DateFormat) +
-			"&token=" + apiToken
+	return "https://cloud.iexapis.com/stable/time-series" +
+		"/HISTORICAL_PRICES/" + ticker +
+		"?from=" + from.Format(divyield.DateFormat) +
+		"&token=" + apiToken
 
 	// return "https://query1.finance.yahoo.com/v7/finance/download/" + ticker +
 	// 	"?period1=" + strconv.FormatInt(sd.Unix(), 10) +

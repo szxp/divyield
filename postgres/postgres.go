@@ -439,7 +439,7 @@ func (db *DB) DividendYields(
 			return err
 		}
 
-        //fmt.Println(sql)
+		//fmt.Println(sql)
 
 		rows, err := runner.QueryContext(ctx, sql, args...)
 		if err != nil {

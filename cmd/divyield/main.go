@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -242,7 +243,7 @@ func parseIEXCloudAPITokens(p string) (map[string]string, error) {
 			return nil, err
 		}
 
-		tokens[record[0]] = record[1]
+		tokens[record[0]] = strings.TrimSpace(record[1])
 	}
 
 	return tokens, nil
