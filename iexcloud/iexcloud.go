@@ -116,7 +116,7 @@ func SplitFetcher(f divyield.SplitFetcher) Option {
 var defaultOptions = options{
 	outputDir: "",
 	//startDate:   time.Date(2021, time.April, 23, 0, 0, 0, 0, time.UTC),
-	startDate:   time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC),
+	startDate:   time.Date(2016, time.January, 1, 0, 0, 0, 0, time.UTC),
 	endDate:     time.Time{},
 	workers:     1,
 	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
@@ -526,7 +526,6 @@ func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 
 	//fmt.Println(newPrices[0].Date)
 	//fmt.Println(newPrices[len(newPrices)-1].Date)
-	return nil
 
 	if len(newPrices) > 0 {
 		err = f.opts.db.PrependPrices(ctx, ticker, toDBPrices(newPrices))
