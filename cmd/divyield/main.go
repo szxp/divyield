@@ -75,6 +75,12 @@ func main() {
 		1.5, "S&P 500 min factor")
 	statsSP500MaxFactor := statsCmd.Float64("sp500-max-factor",
 		5.0, "S&P 500 max factor")
+	statsExpectedROI := statsCmd.Float64("expected-roi",
+		10.0, "expected return on investment as a percentage")
+//	statsGordonGrowthRateMin := statsCmd.Float64("gordon-growth-rate-min",
+//		0.0, "minimum Gordon growth rate")
+//	statsGordonGrowthRateMax := statsCmd.Float64("gordon-growth-rate-max",
+//		0.0, "maximum Gordon growth rate")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
@@ -168,6 +174,7 @@ func main() {
 				*statsSP500DividendYield**statsSP500MinFactor),
 			stats.DividendYieldMax(
 				*statsSP500DividendYield**statsSP500MaxFactor),
+			stats.ExpectedROI(*statsExpectedROI),
 		)
 		stats, err := statsGenerator.Generate(ctx, tickers)
 		if err != nil {

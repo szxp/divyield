@@ -22,6 +22,7 @@ type options struct {
 	db               divyield.DB
 	dividendYieldMin float64
 	dividendYieldMax float64
+    expectedROI      float64
 }
 
 type Option func(o options) options
@@ -68,6 +69,12 @@ func DividendYieldMax(v float64) Option {
 	}
 }
 
+func ExpectedROI(v float64) Option {
+	return func(o options) options {
+		o.expectedROI = v
+		return o
+	}
+}
 var defaultOptions = options{
 	logger: nil,
 }
@@ -89,6 +96,7 @@ type StatsGenerator struct {
 type StatsRow struct {
 	Ticker               string
 	ForwardDividendYield float64
+	GordonGrowthRate     float64
 	ForwardDividend      float64
 	DividendChangeMR     *DividendChangeMR
 	DGR1y                float64
@@ -135,6 +143,8 @@ func (s *Stats) String() string {
 	b.WriteByte('\t')
 	b.WriteString("Forward Dividend")
 	b.WriteByte('\t')
+	b.WriteString("Gordon growth rate")
+	b.WriteByte('\t')
 	b.WriteString("MR%")
 	b.WriteByte('\t')
 	b.WriteString("MR% Ex-Div Date")
@@ -173,6 +183,8 @@ func (s *Stats) String() string {
 		b.WriteString(fmt.Sprintf("%.2f%%", row.ForwardDividendYield))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.ForwardDividend))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f", row.GordonGrowthRate))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendChangeMR.ChangePercent))
 		b.WriteByte('\t')
@@ -299,9 +311,11 @@ func (f *StatsGenerator) generateStatsRow(
 
 	forwardDivYield := float64(0)
 	forwardDiv := float64(0)
+    gordonGrowthRate := float64(0)
 	if len(dividendYields) > 0 {
 		forwardDivYield = dividendYields[0].ForwardTTM()
 		forwardDiv = dividendYields[0].ForwardDividend()
+        gordonGrowthRate = f.opts.expectedROI - forwardDivYield
 	}
 
 	from := time.Date(
@@ -331,6 +345,7 @@ func (f *StatsGenerator) generateStatsRow(
 		Ticker:               ticker,
 		ForwardDividendYield: forwardDivYield,
 		ForwardDividend:      forwardDiv,
+		GordonGrowthRate:     gordonGrowthRate,
 		DividendChangeMR:     mr,
 		DividendsAnnual:      divsAnnual,
 	}
