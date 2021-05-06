@@ -10,6 +10,7 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+    "io"
 
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"
@@ -23,6 +24,8 @@ type options struct {
 	dividendYieldMin float64
 	dividendYieldMax float64
     expectedROI      float64
+	gordonGrowthRateMin float64
+    gordonGrowthRateMax float64
 }
 
 type Option func(o options) options
@@ -75,6 +78,22 @@ func ExpectedROI(v float64) Option {
 		return o
 	}
 }
+
+func GordonGrowthRateMin(v float64) Option {
+	return func(o options) options {
+		o.gordonGrowthRateMin = v
+		return o
+	}
+}
+
+func GordonGrowthRateMax(v float64) Option {
+	return func(o options) options {
+		o.gordonGrowthRateMax = v
+		return o
+	}
+}
+
+
 var defaultOptions = options{
 	logger: nil,
 }
@@ -91,6 +110,7 @@ func NewStatsGenerator(os ...Option) StatsGenerator {
 
 type StatsGenerator struct {
 	opts options
+    stats *Stats
 }
 
 type StatsRow struct {
@@ -130,6 +150,8 @@ type Stats struct {
 	Rows             []*StatsRow
 	DividendYieldMin float64
 	DividendYieldMax float64
+    GordonGrowthRateMin float64
+    GordonGrowthRateMax float64
 }
 
 func (s *Stats) String() string {
@@ -167,16 +189,6 @@ func (s *Stats) String() string {
 	fmt.Fprintln(w, b.String())
 
 	for _, row := range s.Rows {
-		y := row.ForwardDividendYield
-		if s.DividendYieldMin > 0 &&
-			(math.IsNaN(y) || math.IsInf(y, 1) || math.IsInf(y, -1) || s.DividendYieldMin > y) {
-			continue
-		}
-		if s.DividendYieldMax > 0 &&
-			(math.IsNaN(y) || math.IsInf(y, 1) || math.IsInf(y, -1) || s.DividendYieldMax < y) {
-			continue
-		}
-
 		b.Reset()
 		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
 		b.WriteByte('\t')
@@ -209,6 +221,52 @@ func (s *Stats) String() string {
 
 	fmt.Fprintln(w, "")
 
+    s.printFooter(w)
+
+	w.Flush()
+	return out.String()
+}
+
+func (s *Stats) filter() {
+    filtered := make([]*StatsRow, 0, len(s.Rows))
+    removable := make(map[int]struct{})
+
+	for i, row := range s.Rows {
+		y := row.ForwardDividendYield
+		ggr := row.GordonGrowthRate
+
+		if s.DividendYieldMin > 0 &&
+			(isNaN(y) || y < s.DividendYieldMin) {
+			removable[i] = struct{}{}
+            continue
+		}
+		if s.DividendYieldMax > 0 &&
+			(isNaN(y) || s.DividendYieldMax < y) {
+			removable[i] = struct{}{}
+			continue
+		}
+
+        if s.GordonGrowthRateMin > 0 &&
+			(isNaN(ggr) || ggr < s.GordonGrowthRateMin) {
+			removable[i] = struct{}{}
+            continue
+		}
+        if s.GordonGrowthRateMax > 0 &&
+			(isNaN(ggr) || s.GordonGrowthRateMax < ggr) {
+			removable[i] = struct{}{}
+            continue
+		}
+    }
+
+	for i, row := range s.Rows {
+        if _, ok := removable[i]; !ok {
+           filtered = append(filtered, row)
+        }
+    }
+    s.Rows = filtered
+}
+
+func (s *Stats) printFooter(w io.Writer) {
 	if s.DividendYieldMin > 0 {
 		fmt.Fprintln(w, "Min dividend yield:",
 			strconv.FormatFloat(s.DividendYieldMin, 'f', 2, 64)+"%")
@@ -218,8 +276,20 @@ func (s *Stats) String() string {
 			strconv.FormatFloat(s.DividendYieldMax, 'f', 2, 64)+"%")
 	}
 
-	w.Flush()
-	return out.String()
+    if s.GordonGrowthRateMin > 0 {
+		fmt.Fprintln(w, "Min Gordon growth rate:",
+			strconv.FormatFloat(s.GordonGrowthRateMin, 'f', 2, 64)+"%")
+	}
+    if s.GordonGrowthRateMax > 0 {
+		fmt.Fprintln(w, "Max Gordon growth rate:",
+			strconv.FormatFloat(s.GordonGrowthRateMax, 'f', 2, 64)+"%")
+	}
+
+    return
+}
+
+func isNaN(v float64) bool {
+    return math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1)
 }
 
 type result struct {
@@ -245,6 +315,8 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 	stats := &Stats{
 		DividendYieldMin: f.opts.dividendYieldMin,
 		DividendYieldMax: f.opts.dividendYieldMax,
+        GordonGrowthRateMin: f.opts.gordonGrowthRateMin,
+        GordonGrowthRateMax: f.opts.gordonGrowthRateMax,
 	}
 
 	errs := make([]error, 0)
@@ -293,8 +365,10 @@ LOOP:
 		return nil, errs[0]
 	}
 
+    stats.filter()
 	return stats, nil
 }
+
 
 func (f *StatsGenerator) generateStatsRow(
 	ctx context.Context,
