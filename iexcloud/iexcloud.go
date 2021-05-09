@@ -302,7 +302,7 @@ func (f *StockFetcher) fetchDividends(ctx context.Context, ticker string) error 
 		return fmt.Errorf("latest dividend: %s", err)
 	}
 
-	downloadFrom := f.opts.startDate
+	downloadFrom := time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC)
 	if len(latestDividends) > 0 {
 		downloadFrom = latestDividends[0].ExDate
 	}
@@ -506,7 +506,7 @@ func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 		return fmt.Errorf("latest price: %s", err)
 	}
 
-	downloadFrom := timeDate(f.opts.startDate)
+	downloadFrom := time.Date(2016, time.January, 1, 0, 0, 0, 0, time.UTC)
 	if len(latestPrices) > 0 {
 		downloadFrom = time.Time(latestPrices[0].Date)
 	}
