@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/lib/pq"
 	"strings"
-	"text/template"
 	"time"
 
 	"szakszon.com/divyield"
@@ -75,17 +73,15 @@ OUTER_LOOP:
 
 	//fmt.Println("schemas missing: ", schemasMissing)
 	if len(schemasMissing) > 0 {
-		tmpl := template.Must(template.New("init").Parse(initSchemaTmpl))
-
 		for _, schema := range schemasMissing {
 			err := execTx(ctx, db.DB, func(runner runner) error {
-				params := map[string]string{"Schema": schema}
-				buf := &bytes.Buffer{}
-				err := tmpl.Execute(buf, params)
-				if err != nil {
-					return err
-				}
-				_, err = runner.ExecContext(ctx, buf.String())
+				sql := fmt.Sprintf(
+					"call public.init_schema_tables('%s');"+
+						"call public.init_schema_views('%s');",
+					schema,
+					schema,
+				)
+				_, err := runner.ExecContext(ctx, sql)
 				return err
 			})
 			if err != nil {
@@ -263,7 +259,7 @@ func (db *DB) Dividends(
 		q := sq.Select(
 			"ex_date", "amount", "amount_adj", "currency",
 			"frequency", "symbol", "payment_type").
-			From(schemaName + ".dividend").
+			From(schemaName + ".dividend_view").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
 
@@ -277,6 +273,7 @@ func (db *DB) Dividends(
 
 		if f.CashOnly {
 			q = q.Where(sq.Eq{"payment_type": []string{"Cash", "Cash&Stock"}})
+			q = q.Where("frequency > ?", 0)
 		}
 
 		if f.Regular {
@@ -341,7 +338,7 @@ func (db *DB) PrependDividends(
 
 		var date time.Time
 		err := runner.QueryRowContext(ctx,
-			"select ex_date from "+schemaName+".dividend "+
+			"select ex_date from "+schemaName+".dividend_view "+
 				"order by ex_date desc limit 1").
 			Scan(&date)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -420,8 +417,8 @@ func (db *DB) DividendYields(
 		q := sq.Select(
 			"date",
 			"close_adj",
-			"coalesce((select amount_adj from "+schemaName+".dividend where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_amount_adj",
-			"coalesce((select frequency from "+schemaName+".dividend where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_freq",
+			"coalesce((select amount_adj from "+schemaName+".dividend_view where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_amount_adj",
+			"coalesce((select frequency from "+schemaName+".dividend_view where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_freq",
 		).
 			From(schemaName + ".price").
 			OrderBy("date desc").
@@ -667,40 +664,3 @@ func execNonTx(
 ) error {
 	return fn(db)
 }
-
-const initSchemaTmpl = `
-create schema {{.Schema}};
-
-create table {{.Schema}}.price (
-    date        date not null,
-    symbol      varchar(10) not null,
-    close       numeric not null,
-    high        numeric not null,
-    low         numeric not null,
-    open        numeric not null,
-    volume      numeric not null,
-    factor_adj  numeric not null default 1,
-    close_adj   numeric not null default 0,
-    PRIMARY KEY(date)	
-);
-
-create table {{.Schema}}.dividend (
-    id           bigint not null,
-    ex_date      date not null,
-    symbol       varchar(10) not null,
-    amount       numeric not null,
-    currency     char(3) not null,
-    frequency    smallint not null,
-    payment_type text not null, 
-    factor_adj   numeric not null default 1,
-    amount_adj   numeric not null default 0,
-    PRIMARY KEY(id)	
-);
-
-create table {{.Schema}}.split (
-    ex_date      date not null,
-    to_factor     numeric not null,
-    from_factor   numeric not null,
-    PRIMARY KEY(ex_date)	
-);
-`

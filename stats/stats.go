@@ -301,9 +301,9 @@ func isNoCutDividend(dividends []*DividendChange) bool {
 }
 
 func (s *Stats) printFooter(w io.Writer) {
-    if s.NoCutDividend {
-        fmt.Fprintln(w, "No cut dividend")
-    }
+	if s.NoCutDividend {
+		fmt.Fprintln(w, "No cut dividend")
+	}
 	if s.DividendYieldMin > 0 {
 		fmt.Fprintln(w, "Min dividend yield:",
 			strconv.FormatFloat(s.DividendYieldMin, 'f', 2, 64)+"%")
