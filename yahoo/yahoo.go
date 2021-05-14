@@ -84,14 +84,14 @@ func (f *SplitFetcher) Fetch(
 ) ([]*divyield.Split, error) {
 	if startDate.IsZero() {
 		startDate = time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC)
-    }
+	}
 	if endDate.IsZero() {
 		endDate = time.Now().UTC()
 	}
 
-    if ticker == "BF.B" {
-        ticker = "BF-B"
-    }
+	if ticker == "BF.B" {
+		ticker = "BF-B"
+	}
 
 	u := splitsURL(ticker, startDate, endDate)
 

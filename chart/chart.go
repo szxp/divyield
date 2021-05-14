@@ -136,16 +136,16 @@ func (f *ChartGenerator) Generate(ctx context.Context, tickers []string) error {
 			TitleDGR:       ticker + " dividend growth rates",
 
 			PriceYrMin: math.Max(minPrice-((maxPrice-minPrice)*0.1), 0),
-			PriceYrMax: math.Max(maxPrice + ((maxPrice - minPrice) * 0.1), 0.01),
+			PriceYrMax: math.Max(maxPrice+((maxPrice-minPrice)*0.1), 0.01),
 
 			YieldYrMin: math.Max(minYield-((maxYield-minYield)*0.1), 0),
-			YieldYrMax: math.Max(maxYield + ((maxYield - minYield) * 0.1), 0.01),
+			YieldYrMax: math.Max(maxYield+((maxYield-minYield)*0.1), 0.01),
 
 			DivYrMin: math.Max(minDiv-((maxDiv-minDiv)*0.1), 0),
-			DivYrMax: math.Max(maxDiv + ((maxDiv - minDiv) * 0.1), 0.01),
+			DivYrMax: math.Max(maxDiv+((maxDiv-minDiv)*0.1), 0.01),
 
 			DGRYrMin: minDGR - ((maxDGR - minDGR) * 0.1),
-			DGRYrMax: math.Max(maxDGR + ((maxDGR - minDGR) * 0.1), 0.01),
+			DGRYrMax: math.Max(maxDGR+((maxDGR-minDGR)*0.1), 0.01),
 		}
 		plotCommandsTmpl, err := template.New("plot").Parse(plotCommandsTmpl)
 		if err != nil {
@@ -215,9 +215,9 @@ func writeYields(out io.Writer, yields []*dividendYield) error {
 }
 
 func rangePrices(yields []*dividendYield) (float64, float64) {
-    if len(yields) == 0 {
-        return 0,0
-    }
+	if len(yields) == 0 {
+		return 0, 0
+	}
 	min := yields[0].CloseAdj
 	max := yields[0].CloseAdj
 	for _, v := range yields {
@@ -232,9 +232,9 @@ func rangePrices(yields []*dividendYield) (float64, float64) {
 }
 
 func rangeYields(yields []*dividendYield) (float64, float64) {
-    if len(yields) == 0 {
-        return 0,0
-    }
+	if len(yields) == 0 {
+		return 0, 0
+	}
 	min := yields[0].ForwardTTM()
 	max := yields[0].ForwardTTM()
 	for _, v := range yields {
@@ -250,9 +250,9 @@ func rangeYields(yields []*dividendYield) (float64, float64) {
 }
 
 func rangeDividends(yields []*dividendYield) (float64, float64) {
-    if len(yields) == 0 {
-        return 0,0
-    }
+	if len(yields) == 0 {
+		return 0, 0
+	}
 	min := yields[0].DividendAdj
 	max := yields[0].DividendAdj
 	for _, v := range yields {
@@ -267,9 +267,9 @@ func rangeDividends(yields []*dividendYield) (float64, float64) {
 }
 
 func rangeGrowthRates(yields []*dividendYield) (float64, float64) {
-    if len(yields) == 0 {
-        return 0,0
-    }
+	if len(yields) == 0 {
+		return 0, 0
+	}
 	min := yields[0].DividendGrowthRate
 	max := yields[0].DividendGrowthRate
 	for _, v := range yields {

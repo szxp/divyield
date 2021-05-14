@@ -25,8 +25,6 @@ import (
 	"szakszon.com/divyield/yahoo"
 )
 
-var relDateRE *regexp.Regexp = regexp.MustCompile("^-[0-9]+y$")
-
 const defaultStocksDir = "work/stocks"
 const defaultChartOutputDir = "work/charts"
 
@@ -46,9 +44,23 @@ func main() {
 		ctxCancel()
 	}()
 
-	dbConnStr := flag.CommandLine.String("db",
+	dbConnStr := flag.CommandLine.String(
+		"db",
 		"postgres://postgres:postgres@localhost/divyield?sslmode=disable",
 		"database connection string")
+
+	startDateFlag := flag.CommandLine.String(
+		"startDate",
+		"-10y",
+		"start date of the chart period, "+
+			"format 2010-06-05 or relative -10y",
+	)
+
+	noCutDividend := flag.CommandLine.Bool(
+		"no-cut-dividend",
+		false,
+		"Dividends were not decreased",
+	)
 
 	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
@@ -89,9 +101,6 @@ func main() {
 	}
 	chartOutputDir := chartCmd.String("outputDir",
 		defaultChartOutputDir, "output dir")
-	startDateFlag := chartCmd.String("startDate",
-		"-10y", "start date of the chart period, format 2010-06-05 or relative -10y")
-	var startDate time.Time
 
 	if len(os.Args) < 2 {
 		fmt.Println(usage)
@@ -177,6 +186,7 @@ func main() {
 			stats.ExpectedROI(*statsExpectedROI),
 			stats.GordonGrowthRateMin(*statsGordonGrowthRateMin),
 			stats.GordonGrowthRateMax(*statsGordonGrowthRateMax),
+			stats.NoCutDividend(*noCutDividend),
 		)
 		stats, err := statsGenerator.Generate(ctx, tickers)
 		if err != nil {
@@ -194,25 +204,10 @@ func main() {
 			return
 		}
 
-		if *startDateFlag != "" {
-			if relDateRE.MatchString(*startDateFlag) {
-				nYears, err := strconv.ParseInt(
-					(*startDateFlag)[1:len(*startDateFlag)-1], 10, 64)
-				if err != nil {
-					fmt.Println("invalid start date: ", *startDateFlag)
-					return
-				}
-				startDate = time.Date(
-					now.Year()-int(nYears), time.January, 1,
-					0, 0, 0, 0, time.UTC,
-				)
-			} else {
-				startDate, err = time.Parse("2006-01-02", *startDateFlag)
-				if err != nil {
-					fmt.Println("invalid start date: ", *startDateFlag)
-					return
-				}
-			}
+		startDate, err := parseDate(*startDateFlag)
+		if err != nil {
+			fmt.Println("invalid start date: ", *startDateFlag)
+			return
 		}
 
 		chartGener := chart.NewChartGenerator(
@@ -221,7 +216,7 @@ func main() {
 			chart.Log(stdoutLogger),
 			chart.DB(pdb),
 		)
-		err := chartGener.Generate(ctx, tickers)
+		err = chartGener.Generate(ctx, tickers)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
@@ -230,6 +225,31 @@ func main() {
 		fmt.Println(usage)
 		os.Exit(1)
 	}
+}
+
+var relDateRE *regexp.Regexp = regexp.MustCompile("^-[0-9]+y$")
+
+func parseDate(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+
+	if relDateRE.MatchString(s) {
+		nYears, err := strconv.ParseInt(s[1:len(s)-1], 10, 64)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return time.Date(
+			time.Now().UTC().Year()-int(nYears), time.January, 1,
+			0, 0, 0, 0, time.UTC,
+		), nil
+	}
+
+	date, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return date, nil
 }
 
 func parseIEXCloudAPITokens(p string) (map[string]string, error) {
@@ -303,8 +323,6 @@ Flags:
       end date of the chart period, format 2010-06-05
   -outputDir string
       output dir (default "work/charts")
-  -startDate string
-      start date of the chart period, format 2010-06-05 or relative -10y (default "-10y")
   -stocksDir string
       stocks dir (default "work/stocks")
 `

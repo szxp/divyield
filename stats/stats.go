@@ -26,6 +26,7 @@ type options struct {
 	expectedROI         float64
 	gordonGrowthRateMin float64
 	gordonGrowthRateMax float64
+	noCutDividend       bool
 }
 
 type Option func(o options) options
@@ -89,6 +90,13 @@ func GordonGrowthRateMin(v float64) Option {
 func GordonGrowthRateMax(v float64) Option {
 	return func(o options) options {
 		o.gordonGrowthRateMax = v
+		return o
+	}
+}
+
+func NoCutDividend(v bool) Option {
+	return func(o options) options {
+		o.noCutDividend = v
 		return o
 	}
 }
@@ -161,6 +169,7 @@ type Stats struct {
 	DividendYieldMax    float64
 	GordonGrowthRateMin float64
 	GordonGrowthRateMax float64
+	NoCutDividend       bool
 }
 
 func (s *Stats) String() string {
@@ -241,6 +250,12 @@ func (s *Stats) filter() {
 	removable := make(map[int]struct{})
 
 	for i, row := range s.Rows {
+
+		if s.NoCutDividend && !isNoCutDividend(row.DividendChanges) {
+			removable[i] = struct{}{}
+			continue
+		}
+
 		y := row.ForwardDividendYield
 		ggr := row.GordonGrowthRate
 
@@ -277,24 +292,9 @@ func (s *Stats) filter() {
 	s.Rows = filtered
 }
 
-func isNoCutDividends(dividends []*DividendChange, nyears int) bool {
-	if nyears < 2 {
-		panic(fmt.Errorf("nyears must be greater than 1: %v", nyears))
-	}
-
-	n := int(math.Min(float64(len(dividends)), float64(nyears)))
-	dividends = dividends[0:n]
-
+func isNoCutDividend(dividends []*DividendChange) bool {
 	for i := 0; i <= len(dividends)-2; i++ {
 		d0 := dividends[i]
-		d1 := dividends[i+1]
-		fmt.Println(
-			d0.Year(),
-			d0.AmountAdj,
-			d1.Year(),
-			d1.AmountAdj,
-			d0.ChangeRate,
-		)
 		if d0.ChangeRate < 0 {
 			return false
 		}
@@ -303,6 +303,9 @@ func isNoCutDividends(dividends []*DividendChange, nyears int) bool {
 }
 
 func (s *Stats) printFooter(w io.Writer) {
+    if s.NoCutDividend {
+        fmt.Fprintln(w, "No cut dividend")
+    }
 	if s.DividendYieldMin > 0 {
 		fmt.Fprintln(w, "Min dividend yield:",
 			strconv.FormatFloat(s.DividendYieldMin, 'f', 2, 64)+"%")
@@ -353,6 +356,7 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 		DividendYieldMax:    f.opts.dividendYieldMax,
 		GordonGrowthRateMin: f.opts.gordonGrowthRateMin,
 		GordonGrowthRateMax: f.opts.gordonGrowthRateMax,
+		NoCutDividend:       f.opts.noCutDividend,
 	}
 
 	errs := make([]error, 0)
