@@ -285,8 +285,6 @@ func (s *Stats) filter() {
 	for i, row := range s.Rows {
 		if _, ok := removable[i]; !ok {
 			filtered = append(filtered, row)
-
-			//fmt.Println(isNoCutDividends(row.DividendChanges, 5))
 		}
 	}
 	s.Rows = filtered
