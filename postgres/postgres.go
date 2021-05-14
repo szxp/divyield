@@ -99,6 +99,7 @@ OUTER_LOOP:
 func schemaName(ticker string) string {
 	s := strings.ToLower(ticker)
 	s = strings.ReplaceAll(s, "-", "_")
+	s = strings.ReplaceAll(s, ".", "_")
 	return "s_" + s
 }
 

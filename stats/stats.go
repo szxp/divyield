@@ -205,7 +205,7 @@ func (s *Stats) String() string {
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.ForwardDividend))
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f", row.GordonGrowthRate))
+		b.WriteString(fmt.Sprintf("%.2f%%", row.GordonGrowthRate))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DividendChangeMR.ChangePercent))
 		b.WriteByte('\t')

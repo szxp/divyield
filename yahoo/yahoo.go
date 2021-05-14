@@ -84,10 +84,14 @@ func (f *SplitFetcher) Fetch(
 ) ([]*divyield.Split, error) {
 	if startDate.IsZero() {
 		startDate = time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC)
-	}
+    }
 	if endDate.IsZero() {
 		endDate = time.Now().UTC()
 	}
+
+    if ticker == "BF.B" {
+        ticker = "BF-B"
+    }
 
 	u := splitsURL(ticker, startDate, endDate)
 
@@ -101,7 +105,7 @@ func (f *SplitFetcher) Fetch(
 	}
 	defer resp.Body.Close()
 
-	//	f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)

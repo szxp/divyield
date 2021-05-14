@@ -38,6 +38,7 @@ begin
         quote_ident(schema_name) || '.split order by ex_date desc'
     loop
         factor := 1.0 / (r.to_factor / r.from_factor);        
+
         execute 'update ' || quote_ident(schema_name) || '.price set ' || 
             ' factor_adj = factor_adj * ' || factor ||  
             ' where date < ''' || r.ex_date || '''';
@@ -49,10 +50,13 @@ begin
         ' d.payment_type in (''Cash'', ''Cash&Stock'') ' || 
         ' order by d.ex_date desc'
     loop
-        factor :=  r.close / (r.close + r.amount);
-        execute 'update ' || quote_ident(schema_name) || '.price set ' || 
-            ' factor_adj = factor_adj * ' || factor || 
-            ' where date < ''' || r.ex_date || '''';
+        if r.close > 0 then
+            factor :=  r.close / (r.close + r.amount);
+            
+            execute 'update ' || quote_ident(schema_name) || '.price set ' || 
+                ' factor_adj = factor_adj * ' || factor || 
+                ' where date < ''' || r.ex_date || '''';
+        end if;
     end loop;
 
     execute 'update ' || quote_ident(schema_name) || '.price set ' || 

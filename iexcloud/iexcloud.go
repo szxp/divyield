@@ -261,7 +261,7 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 		return fmt.Errorf("latest split: %s", err)
 	}
 
-	downloadFrom := f.opts.startDate
+	downloadFrom := time.Time{}
 	if len(latestSplits) > 0 {
 		downloadFrom = latestSplits[0].ExDate
 	}
