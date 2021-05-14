@@ -91,6 +91,10 @@ type Dividend struct {
 	PaymentType string
 }
 
+func (d *Dividend) Year() int {
+	return d.ExDate.Year()
+}
+
 func (d *Dividend) String() string {
 	return fmt.Sprintf("%v: %v",
 		time.Time(d.ExDate).Format(DateFormat),

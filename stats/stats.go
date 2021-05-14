@@ -4,28 +4,28 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"sort"
 	"strconv"
 	"sync"
 	"text/tabwriter"
 	"time"
-    "io"
 
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/logger"
 )
 
 type options struct {
-	stocksDir        string
-	now              time.Time
-	logger           logger.Logger
-	db               divyield.DB
-	dividendYieldMin float64
-	dividendYieldMax float64
-    expectedROI      float64
+	stocksDir           string
+	now                 time.Time
+	logger              logger.Logger
+	db                  divyield.DB
+	dividendYieldMin    float64
+	dividendYieldMax    float64
+	expectedROI         float64
 	gordonGrowthRateMin float64
-    gordonGrowthRateMax float64
+	gordonGrowthRateMax float64
 }
 
 type Option func(o options) options
@@ -93,7 +93,6 @@ func GordonGrowthRateMax(v float64) Option {
 	}
 }
 
-
 var defaultOptions = options{
 	logger: nil,
 }
@@ -109,8 +108,8 @@ func NewStatsGenerator(os ...Option) StatsGenerator {
 }
 
 type StatsGenerator struct {
-	opts options
-    stats *Stats
+	opts  options
+	stats *Stats
 }
 
 type StatsRow struct {
@@ -123,15 +122,27 @@ type StatsRow struct {
 	DGR3y                float64
 	DGR5y                float64
 	DGR10y               float64
-	DividendsAnnual      []*DividendAnnual
+	DividendChanges      []*DividendChange
 }
 
 func (r *StatsRow) DGR(n int) float64 {
-	sum := float64(0)
-	for _, a := range r.DividendsAnnual[0:n] {
-		sum += a.ChangeRate
+	if len(r.DividendChanges) == 0 {
+		return 0
 	}
-	return sum / float64(n)
+
+	return 0
+
+	//     endYear := r.DividendChanges[0].Year()
+	//     startYear := endYear - n
+	// 	sum := float64(0)
+	//     c := 0
+	// 	for _, a := range r.DividendChanges {
+	// 		if startYear < a.Year() && a.Year() <= endYear {
+	//             sum += a.ChangeRate
+	//             c += 1
+	//         }
+	// 	}
+	// 	return sum / float64(c)
 }
 
 type DividendChangeMR struct {
@@ -139,19 +150,17 @@ type DividendChangeMR struct {
 	Date          time.Time
 }
 
-type DividendAnnual struct {
-	Year          int
-	Amount        float64
-	PayoutPerYear int
-	ChangeRate    float64 // compared to the year before
+type DividendChange struct {
+	*divyield.Dividend
+	ChangeRate float64 // compared to the year before
 }
 
 type Stats struct {
-	Rows             []*StatsRow
-	DividendYieldMin float64
-	DividendYieldMax float64
-    GordonGrowthRateMin float64
-    GordonGrowthRateMax float64
+	Rows                []*StatsRow
+	DividendYieldMin    float64
+	DividendYieldMax    float64
+	GordonGrowthRateMin float64
+	GordonGrowthRateMax float64
 }
 
 func (s *Stats) String() string {
@@ -181,7 +190,7 @@ func (s *Stats) String() string {
 	//b.WriteByte('\t')
 
 	// if len(s.Rows) > 0 {
-	// 	for _, d := range s.Rows[0].DividendsAnnual {
+	// 	for _, d := range s.Rows[0].DividendChanges {
 	// 		b.WriteString("DGR-" + strconv.Itoa(d.Year) + " (DPS)")
 	// 		b.WriteByte('\t')
 	// 	}
@@ -211,7 +220,7 @@ func (s *Stats) String() string {
 		//b.WriteString(fmt.Sprintf("%.2f%%", row.DGR(10)))
 		//b.WriteByte('\t')
 
-		// for _, d := range row.DividendsAnnual {
+		// for _, d := range row.DividendChanges {
 		// 	b.WriteString(fmt.Sprintf("%.2f%% (%.2f)", d.ChangeRate, d.Amount))
 		// 	b.WriteByte('\t')
 		// }
@@ -221,15 +230,15 @@ func (s *Stats) String() string {
 
 	fmt.Fprintln(w, "")
 
-    s.printFooter(w)
+	s.printFooter(w)
 
 	w.Flush()
 	return out.String()
 }
 
 func (s *Stats) filter() {
-    filtered := make([]*StatsRow, 0, len(s.Rows))
-    removable := make(map[int]struct{})
+	filtered := make([]*StatsRow, 0, len(s.Rows))
+	removable := make(map[int]struct{})
 
 	for i, row := range s.Rows {
 		y := row.ForwardDividendYield
@@ -238,7 +247,7 @@ func (s *Stats) filter() {
 		if s.DividendYieldMin > 0 &&
 			(isNaN(y) || y < s.DividendYieldMin) {
 			removable[i] = struct{}{}
-            continue
+			continue
 		}
 		if s.DividendYieldMax > 0 &&
 			(isNaN(y) || s.DividendYieldMax < y) {
@@ -246,24 +255,51 @@ func (s *Stats) filter() {
 			continue
 		}
 
-        if s.GordonGrowthRateMin > 0 &&
+		if s.GordonGrowthRateMin > 0 &&
 			(isNaN(ggr) || ggr < s.GordonGrowthRateMin) {
 			removable[i] = struct{}{}
-            continue
+			continue
 		}
-        if s.GordonGrowthRateMax > 0 &&
+		if s.GordonGrowthRateMax > 0 &&
 			(isNaN(ggr) || s.GordonGrowthRateMax < ggr) {
 			removable[i] = struct{}{}
-            continue
+			continue
 		}
-    }
+	}
 
 	for i, row := range s.Rows {
-        if _, ok := removable[i]; !ok {
-           filtered = append(filtered, row)
-        }
-    }
-    s.Rows = filtered
+		if _, ok := removable[i]; !ok {
+			filtered = append(filtered, row)
+
+			//fmt.Println(isNoCutDividends(row.DividendChanges, 5))
+		}
+	}
+	s.Rows = filtered
+}
+
+func isNoCutDividends(dividends []*DividendChange, nyears int) bool {
+	if nyears < 2 {
+		panic(fmt.Errorf("nyears must be greater than 1: %v", nyears))
+	}
+
+	n := int(math.Min(float64(len(dividends)), float64(nyears)))
+	dividends = dividends[0:n]
+
+	for i := 0; i <= len(dividends)-2; i++ {
+		d0 := dividends[i]
+		d1 := dividends[i+1]
+		fmt.Println(
+			d0.Year(),
+			d0.AmountAdj,
+			d1.Year(),
+			d1.AmountAdj,
+			d0.ChangeRate,
+		)
+		if d0.ChangeRate < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Stats) printFooter(w io.Writer) {
@@ -276,20 +312,20 @@ func (s *Stats) printFooter(w io.Writer) {
 			strconv.FormatFloat(s.DividendYieldMax, 'f', 2, 64)+"%")
 	}
 
-    if s.GordonGrowthRateMin > 0 {
+	if s.GordonGrowthRateMin > 0 {
 		fmt.Fprintln(w, "Min Gordon growth rate:",
 			strconv.FormatFloat(s.GordonGrowthRateMin, 'f', 2, 64)+"%")
 	}
-    if s.GordonGrowthRateMax > 0 {
+	if s.GordonGrowthRateMax > 0 {
 		fmt.Fprintln(w, "Max Gordon growth rate:",
 			strconv.FormatFloat(s.GordonGrowthRateMax, 'f', 2, 64)+"%")
 	}
 
-    return
+	return
 }
 
 func isNaN(v float64) bool {
-    return math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1)
+	return math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1)
 }
 
 type result struct {
@@ -313,10 +349,10 @@ func (f *StatsGenerator) Generate(ctx context.Context, tickers []string) (*Stats
 	resultCh := make(chan result)
 
 	stats := &Stats{
-		DividendYieldMin: f.opts.dividendYieldMin,
-		DividendYieldMax: f.opts.dividendYieldMax,
-        GordonGrowthRateMin: f.opts.gordonGrowthRateMin,
-        GordonGrowthRateMax: f.opts.gordonGrowthRateMax,
+		DividendYieldMin:    f.opts.dividendYieldMin,
+		DividendYieldMax:    f.opts.dividendYieldMax,
+		GordonGrowthRateMin: f.opts.gordonGrowthRateMin,
+		GordonGrowthRateMax: f.opts.gordonGrowthRateMax,
 	}
 
 	errs := make([]error, 0)
@@ -365,10 +401,9 @@ LOOP:
 		return nil, errs[0]
 	}
 
-    stats.filter()
+	stats.filter()
 	return stats, nil
 }
-
 
 func (f *StatsGenerator) generateStatsRow(
 	ctx context.Context,
@@ -385,11 +420,11 @@ func (f *StatsGenerator) generateStatsRow(
 
 	forwardDivYield := float64(0)
 	forwardDiv := float64(0)
-    gordonGrowthRate := float64(0)
+	gordonGrowthRate := float64(0)
 	if len(dividendYields) > 0 {
 		forwardDivYield = dividendYields[0].ForwardTTM()
 		forwardDiv = dividendYields[0].ForwardDividend()
-        gordonGrowthRate = f.opts.expectedROI - forwardDivYield
+		gordonGrowthRate = f.opts.expectedROI - forwardDivYield
 	}
 
 	from := time.Date(
@@ -410,7 +445,7 @@ func (f *StatsGenerator) generateStatsRow(
 		return nil, fmt.Errorf("most recent dividend change: %s", err)
 	}
 
-	divsAnnual, err := f.dividendsAnnual(dividends)
+	divChanges, err := f.dividendChanges(dividends)
 	if err != nil {
 		return nil, fmt.Errorf("dividends annual: %s", err)
 	}
@@ -421,7 +456,7 @@ func (f *StatsGenerator) generateStatsRow(
 		ForwardDividend:      forwardDiv,
 		GordonGrowthRate:     gordonGrowthRate,
 		DividendChangeMR:     mr,
-		DividendsAnnual:      divsAnnual,
+		DividendChanges:      divChanges,
 	}
 
 	return row, nil
@@ -461,17 +496,14 @@ func (f *StatsGenerator) dividendChangeMostRecent(
 	return mr, nil
 }
 
-func (f *StatsGenerator) dividendsAnnual(
+func (f *StatsGenerator) dividendChanges(
 	dividends []*divyield.Dividend,
-) ([]*DividendAnnual, error) {
-	divsAnnualMap := map[int]*DividendAnnual{}
+) ([]*DividendChange, error) {
+
+	changes := make([]*DividendChange, 0, len(dividends))
 
 	endYear := f.opts.now.Year() - 1
 	startYear := f.opts.now.Year() - 12
-
-	for i := startYear; i <= endYear; i++ {
-		divsAnnualMap[i] = &DividendAnnual{Year: i}
-	}
 
 	for _, d := range dividends {
 		if d.ExDate.Year() < startYear {
@@ -482,32 +514,16 @@ func (f *StatsGenerator) dividendsAnnual(
 			continue
 		}
 
-		a := divsAnnualMap[d.ExDate.Year()]
-		a.Amount += d.Amount
-		a.PayoutPerYear += 1
+		changes = append(changes, &DividendChange{Dividend: d})
 	}
 
-	divsAnnual := []*DividendAnnual{}
-	for _, a := range divsAnnualMap {
-		divsAnnual = append(divsAnnual, a)
+	for i := 0; i <= len(changes)-2; i++ {
+		a0 := changes[i]
+		a1 := changes[i+1]
+		a0.ChangeRate = ((a0.AmountAdj - a1.AmountAdj) / a1.AmountAdj) * 100
 	}
 
-	sort.SliceStable(divsAnnual, func(i, j int) bool {
-		return divsAnnual[i].Year > divsAnnual[j].Year
-	})
-
-	for i := 0; i <= len(divsAnnual)-2; i++ {
-		a1 := divsAnnual[i]
-		a0 := divsAnnual[i+1]
-		a1.ChangeRate = ((a1.Amount - a0.Amount) / a0.Amount) * 100
-	}
-
-	return divsAnnual, nil
-}
-
-type Dividend struct {
-	Date   time.Time
-	Amount float64
+	return changes, nil
 }
 
 func (f *StatsGenerator) log(format string, v ...interface{}) {
