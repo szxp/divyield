@@ -151,8 +151,8 @@ func main() {
 
 		fetcher := iexcloud.NewStockFetcher(
 			iexcloud.OutputDir(*fetchOutputDir),
-			iexcloud.Workers(10),
-			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(200*time.Millisecond), 1)),
+			iexcloud.Workers(2),
+			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 2)),
 			iexcloud.Timeout(10*time.Second),
 			iexcloud.IEXCloudAPITokens(iexCloudAPITokens),
 			iexcloud.Force(*fetchForce),
