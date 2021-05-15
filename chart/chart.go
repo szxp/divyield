@@ -123,23 +123,28 @@ func (f *ChartGenerator) Generate(ctx context.Context, tickers []string) error {
 		}
 
 		minPrice, maxPrice := rangePrices(yields)
-		minYield, maxYield := rangeYields(yields)
+		minYieldFwd, maxYieldFwd := rangeYieldsFwd(yields)
+		minYieldTrail, maxYieldTrail := rangeYieldsFwd(yields)
 		minDiv, maxDiv := rangeDividends(yields)
 		minDGR, maxDGR := rangeGrowthRates(yields)
 
 		plotParams := plotParams{
-			Datafile:       path.Join(f.opts.outputDir, ticker+".csv"),
-			Imgfile:        path.Join(f.opts.outputDir, ticker+".png"),
-			TitlePrices:    ticker + " prices",
-			TitleDivYield:  ticker + " forward dividend yields",
-			TitleDividends: ticker + " dividends",
-			TitleDGR:       ticker + " dividend growth rates",
+			Datafile:           path.Join(f.opts.outputDir, ticker+".csv"),
+			Imgfile:            path.Join(f.opts.outputDir, ticker+".png"),
+			TitlePrices:        ticker + " prices",
+			TitleDivYieldFwd:   ticker + " forward dividend yields",
+			TitleDivYieldTrail: ticker + " trailing dividend yields",
+			TitleDividends:     ticker + " dividends",
+			TitleDGR:           ticker + " dividend growth rates",
 
 			PriceYrMin: math.Max(minPrice-((maxPrice-minPrice)*0.1), 0),
 			PriceYrMax: math.Max(maxPrice+((maxPrice-minPrice)*0.1), 0.01),
 
-			YieldYrMin: math.Max(minYield-((maxYield-minYield)*0.1), 0),
-			YieldYrMax: math.Max(maxYield+((maxYield-minYield)*0.1), 0.01),
+			YieldFwdYrMin: math.Max(minYieldFwd-((maxYieldFwd-minYieldFwd)*0.1), 0),
+			YieldFwdYrMax: math.Max(maxYieldFwd+((maxYieldFwd-minYieldFwd)*0.1), 0.01),
+
+			YieldTrailYrMin: math.Max(minYieldTrail-((maxYieldTrail-minYieldTrail)*0.1), 0),
+			YieldTrailYrMax: math.Max(maxYieldTrail+((maxYieldTrail-minYieldTrail)*0.1), 0.01),
 
 			DivYrMin: math.Max(minDiv-((maxDiv-minDiv)*0.1), 0),
 			DivYrMax: math.Max(maxDiv+((maxDiv-minDiv)*0.1), 0.01),
@@ -188,21 +193,23 @@ func writeYields(out io.Writer, yields []*dividendYield) error {
 	w.WriteString(
 		"Date," +
 			"CloseAdj," +
-			"DivYield," +
-			"DivdAdj," +
-			"DGR",
+			"DivYieldForwardTTM," +
+			"DivAdj," +
+			"DGR," +
+			"DivYieldTrailTTM",
 	)
 
 	for i := 0; i < len(yields); i++ {
 		y := yields[i]
 		w.WriteString("\n")
 
-		row := fmt.Sprintf("%s,%.2f,%.2f,%.2f,%.2f",
+		row := fmt.Sprintf("%s,%.2f,%.2f,%.2f,%.2f,%.2f",
 			y.Date.Format("2006-01-02"),
 			y.CloseAdj,
 			y.ForwardTTM(),
 			y.DividendAdj,
 			y.DividendGrowthRate,
+			y.TrailingTTM(),
 		)
 		w.WriteString(row)
 	}
@@ -231,7 +238,7 @@ func rangePrices(yields []*dividendYield) (float64, float64) {
 	return min, max
 }
 
-func rangeYields(yields []*dividendYield) (float64, float64) {
+func rangeYieldsFwd(yields []*dividendYield) (float64, float64) {
 	if len(yields) == 0 {
 		return 0, 0
 	}
@@ -249,6 +256,23 @@ func rangeYields(yields []*dividendYield) (float64, float64) {
 	return min, max
 }
 
+func rangeYieldsTrail(yields []*dividendYield) (float64, float64) {
+	if len(yields) == 0 {
+		return 0, 0
+	}
+	min := yields[0].TrailingTTM()
+	max := yields[0].TrailingTTM()
+	for _, v := range yields {
+		y := v.TrailingTTM()
+		if y < min {
+			min = y
+		}
+		if y > max {
+			max = y
+		}
+	}
+	return min, max
+}
 func rangeDividends(yields []*dividendYield) (float64, float64) {
 	if len(yields) == 0 {
 		return 0, 0
@@ -314,16 +338,20 @@ type plotParams struct {
 	Datafile string
 	Imgfile  string
 
-	TitlePrices    string
-	TitleDivYield  string
-	TitleDividends string
-	TitleDGR       string
+	TitlePrices        string
+	TitleDivYieldFwd   string
+	TitleDivYieldTrail string
+	TitleDividends     string
+	TitleDGR           string
 
 	PriceYrMin float64
 	PriceYrMax float64
 
-	YieldYrMin float64
-	YieldYrMax float64
+	YieldFwdYrMin float64
+	YieldFwdYrMax float64
+
+	YieldTrailYrMin float64
+	YieldTrailYrMax float64
 
 	DivYrMin float64
 	DivYrMax float64
@@ -335,9 +363,6 @@ type plotParams struct {
 const plotCommandsTmpl = `
 datafile='{{.Datafile}}';
 imgfile='{{.Imgfile}}';
-titlep='{{.TitlePrices}}';
-titledy='{{.TitleDivYield}}';
-titled='{{.TitleDividends}}';
 
 set terminal png size 1920,1080;
 set output imgfile;
@@ -360,17 +385,18 @@ set multiplot;
 set size 1, 0.25;
 
 set origin 0.0,0.75;
-set title titlep;
+set title '{{.TitlePrices}}';
 set yrange [{{.PriceYrMin}}:{{.PriceYrMax}}];
 plot datafile using 1:2 with filledcurves above y = 0;
 
 set origin 0.0,0.50;
-set title titledy;
-set yrange [{{.YieldYrMin}}:{{.YieldYrMax}}];
+set title '{{.TitleDivYieldFwd}}';
+set yrange [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
 plot datafile using 1:3 with filledcurves above y = 0;
 
-set origin 0.0,0.25;
-set title titled;
+
+set origin 0.0,0.20;
+set title '{{.TitleDividends}}';
 set yrange [{{.DivYrMin}}:{{.DivYrMax}}];
 plot datafile using 1:4 with lines lw 4;
 
@@ -383,3 +409,8 @@ plot datafile using 1:5 with boxes lw 4;
 
 unset multiplot;
 `
+
+// set origin 0.0,0.50;
+// set title '{{.TitleDivYieldTrail}}';
+// set yrange [{{.YieldTrailYrMin}}:{{.YieldTrailYrMax}}];
+// plot datafile using 1:6 with filledcurves above y = 0;

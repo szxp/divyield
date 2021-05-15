@@ -114,10 +114,11 @@ type DividendFilter struct {
 }
 
 type DividendYield struct {
-	Date        time.Time
-	CloseAdj    float64
-	DividendAdj float64
-	Frequency   int
+	Date                   time.Time
+	CloseAdj               float64
+	DividendAdj            float64
+	Frequency              int
+	DividendAdjTrailingTTM float64
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
@@ -129,6 +130,13 @@ func (y *DividendYield) ForwardTTM() float64 {
 
 func (y *DividendYield) ForwardDividend() float64 {
 	return y.DividendAdj * float64(y.Frequency)
+}
+
+func (y *DividendYield) TrailingTTM() float64 {
+	if y.CloseAdj == 0 {
+		return 0
+	}
+	return (y.DividendAdjTrailingTTM / y.CloseAdj) * 100
 }
 
 type DividendYieldFilter struct {

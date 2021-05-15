@@ -417,8 +417,38 @@ func (db *DB) DividendYields(
 		q := sq.Select(
 			"date",
 			"close_adj",
-			"coalesce((select amount_adj from "+schemaName+".dividend_view where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_amount_adj",
-			"coalesce((select frequency from "+schemaName+".dividend_view where ex_date <= date and payment_type in ('Cash', 'Cash&Stock') and frequency > 0 order by ex_date desc limit 1), 0) as div_freq",
+			`coalesce(
+                (select amount_adj from `+
+				schemaName+`.dividend_view 
+                where 
+                    ex_date <= date and 
+                    payment_type in ('Cash', 'Cash&Stock') and 
+                    frequency > 0 
+                order by ex_date desc limit 1), 0) 
+                as div_amount_adj`,
+			`coalesce(
+                (select frequency from `+
+				schemaName+`.dividend_view 
+                where 
+                    ex_date <= date and 
+                    payment_type in ('Cash', 'Cash&Stock') and 
+                    frequency > 0 
+                order by ex_date desc limit 1), 0) 
+                as div_freq`,
+			`coalesce(
+                (select sum(amount_adj) from `+
+				schemaName+`.dividend_view 
+                where 
+                    ex_date >= (
+                        date_trunc('month', CURRENT_DATE) 
+                        - INTERVAL '12 months'
+                    )::date and 
+                    ex_date <= date_trunc(
+                        'month', CURRENT_DATE
+                    )::date and 
+                    payment_type in ('Cash', 'Cash&Stock') and 
+                    frequency > 0), 0) 
+                as div_trail_ttm`,
 		).
 			From(schemaName + ".price").
 			OrderBy("date desc").
@@ -448,20 +478,25 @@ func (db *DB) DividendYields(
 		for rows.Next() {
 			var date time.Time
 			var closeAdj float64
-			var dividendAdj float64
+			var divAdj float64
 			var frequency int
+			var divTrailTTM float64
 
-			err = rows.Scan(&date, &closeAdj, &dividendAdj, &frequency)
+			err = rows.Scan(
+				&date, &closeAdj, &divAdj,
+				&frequency, &divTrailTTM,
+			)
 			if err != nil {
 
 				fmt.Println("err: ", date.Format(divyield.DateFormat))
 				return err
 			}
 			v := &divyield.DividendYield{
-				Date:        date,
-				CloseAdj:    closeAdj,
-				DividendAdj: dividendAdj,
-				Frequency:   frequency,
+				Date:                   date,
+				CloseAdj:               closeAdj,
+				DividendAdj:            divAdj,
+				Frequency:              frequency,
+				DividendAdjTrailingTTM: divTrailTTM,
 			}
 			yields = append(yields, v)
 		}
