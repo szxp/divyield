@@ -19,15 +19,17 @@ type options struct {
 	now       time.Time
 	logger    logger.Logger
 	db        divyield.DB
+	startDate time.Time
 
 	// filters
-	divYieldFwdMin float64
-	divYieldFwdMax float64
-	ggrROI         float64
-	ggrMin         float64
-	ggrMax         float64
-	noCutDividend  bool
-	noDecliningDGR bool
+	divYieldFwdMin   float64
+	divYieldFwdMax   float64
+	divYieldTotalMin float64
+	ggrROI           float64
+	ggrMin           float64
+	ggrMax           float64
+	noCutDividend    bool
+	noDecliningDGR   bool
 }
 
 type Option func(o options) options
@@ -60,9 +62,23 @@ func DB(db divyield.DB) Option {
 	}
 }
 
+func StartDate(d time.Time) Option {
+	return func(o options) options {
+		o.startDate = d
+		return o
+	}
+}
+
 func DividendYieldForwardMin(v float64) Option {
 	return func(o options) options {
 		o.divYieldFwdMin = v
+		return o
+	}
+}
+
+func DividendYieldTotalMin(v float64) Option {
+	return func(o options) options {
+		o.divYieldTotalMin = v
 		return o
 	}
 }
@@ -186,11 +202,13 @@ LOOP:
 
 	f.filter(
 		stats,
+		f.filterDivYieldFwdMinMax,
+        f.filterDivYieldTotalMin,
+		f.filterGGRMinMax,
 		f.filterNoCutDividend,
 		f.filterNoDecliningDGR,
-		f.filterDivYieldFwdMinMax,
-		f.filterGGRMinMax,
 	)
+
 	return stats, nil
 }
 
@@ -322,6 +340,15 @@ func (f *StatsGenerator) filterDivYieldFwdMinMax(row *StatsRow) bool {
 	return true
 }
 
+func (f *StatsGenerator) filterDivYieldTotalMin(row *StatsRow) bool {
+	min := f.opts.divYieldTotalMin
+	if min <= 0 {
+		return true
+	}
+
+	return min <= row.DivYieldFwd+row.DGR(5)
+}
+
 func (f *StatsGenerator) filterGGRMinMax(row *StatsRow) bool {
 	min := f.opts.ggrMin
 	max := f.opts.ggrMax
@@ -348,8 +375,8 @@ func (f *StatsGenerator) filterNoDecliningDGR(row *StatsRow) bool {
 		return true
 	}
 
-    dgrs := []float64{
-        row.DGR(5),
+	dgrs := []float64{
+		row.DGR(5),
 		row.DGR(4),
 		row.DGR(3),
 		row.DGR(2),
@@ -358,11 +385,11 @@ func (f *StatsGenerator) filterNoDecliningDGR(row *StatsRow) bool {
 	}
 
 	dgrsPos := make([]float64, 0, len(dgrs))
-    for _, v := range dgrs {
-        if v > 0 {
-            dgrsPos = append(dgrsPos, v)
-        }
-    }
+	for _, v := range dgrs {
+		if v > 0 {
+			dgrsPos = append(dgrsPos, v)
+		}
+	}
 
 	for i := 0; i <= len(dgrsPos)-2; i++ {
 		v0 := dgrsPos[i]
@@ -393,9 +420,9 @@ func (s *Stats) String() string {
 	b := &bytes.Buffer{}
 	b.WriteString("Ticker")
 	b.WriteByte('\t')
-	b.WriteString("Forward yield")
-	b.WriteByte('\t')
 	b.WriteString("Forward dividend")
+	b.WriteByte('\t')
+	b.WriteString("Forward yield")
 	b.WriteByte('\t')
 	b.WriteString("GGR")
 	b.WriteByte('\t')
@@ -420,9 +447,9 @@ func (s *Stats) String() string {
 		b.Reset()
 		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DivYieldFwd))
-		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DivYieldFwd))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.GordonGrowthRate))
 		b.WriteByte('\t')

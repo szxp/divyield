@@ -13,14 +13,16 @@ tickers="$(cat tickers.csv | cut -d',' -f1 | tr '\r\n' ' ' | tr '\n', ' ')"
 
 go build cmd/divyield/main.go && \
     ./main.exe \
-    -no-cut-dividend=true \
-    -no-declining-dgr=true \
     -dividend-yield-forward-min=$divYieldFwdMin \
     -dividend-yield-forward-max=$divYieldFwdMax \
+    -dividend-yield-total-min=9.0 \
     -gordon-roi=10.0 \
     -gordon-growth-rate-min=3.0 \
     -gordon-growth-rate-max=5.0 \
+    -no-cut-dividend=true \
+    -no-declining-dgr=true \
     -startDate=2010-01-01 \
     stats \
-    $tickers
+    EVA HNNA MFC MGP OKE
+    #$tickers
 

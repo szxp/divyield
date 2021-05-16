@@ -75,6 +75,12 @@ func main() {
 		0.0,
 		"maximum forward dividend yield")
 
+	divYieldTotalMin := flag.CommandLine.Float64(
+		"dividend-yield-total-min",
+		9.0,
+		"forward dividend yield + DGR-5y average yield "+
+			"must be a greater than or equal to the given total yield")
+
 	ggrROI := flag.CommandLine.Float64(
 		"gordon-roi",
 		10.0,
@@ -91,7 +97,19 @@ func main() {
 		0.0,
 		"maximum Gordon growth rate as a percentage")
 
-	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
+//	chartFlag := flag.CommandLine.Bool(
+//		"chart",
+//		false,
+//		"generate chart")
+
+	chartOutputDir := flag.CommandLine.String(
+        "chart-output-dir",
+		defaultChartOutputDir, 
+        "chart output dir")
+
+
+
+    fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
 		fmt.Println(usageFetch)
 		os.Exit(1)
@@ -116,8 +134,6 @@ func main() {
 		fmt.Println(usageChart)
 		os.Exit(1)
 	}
-	chartOutputDir := chartCmd.String("outputDir",
-		defaultChartOutputDir, "output dir")
 
 	if len(os.Args) < 2 {
 		fmt.Println(usage)
@@ -148,6 +164,13 @@ func main() {
 		yahoo.Timeout(10*time.Second),
 		yahoo.Log(stdoutLogger),
 	)
+
+    startDate, err := parseDate(*startDateFlag)
+	if err != nil {
+		fmt.Println("invalid start date: ", *startDateFlag)
+		return
+	}
+
 
 	switch os.Args[subIdx] {
 	case "fetch":
@@ -196,8 +219,10 @@ func main() {
 			stats.Now(now),
 			stats.Log(stdoutLogger),
 			stats.DB(pdb),
+			stats.StartDate(startDate),
 			stats.DividendYieldForwardMin(*divYieldFwdMin),
 			stats.DividendYieldForwardMax(*divYieldFwdMax),
+			stats.DividendYieldTotalMin(*divYieldTotalMin),
 			stats.GordonROI(*ggrROI),
 			stats.GordonGrowthRateMin(*ggrMin),
 			stats.GordonGrowthRateMax(*ggrMax),
@@ -220,11 +245,6 @@ func main() {
 			return
 		}
 
-		startDate, err := parseDate(*startDateFlag)
-		if err != nil {
-			fmt.Println("invalid start date: ", *startDateFlag)
-			return
-		}
 
 		chartGener := chart.NewChartGenerator(
 			chart.OutputDir(*chartOutputDir),
