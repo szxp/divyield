@@ -348,8 +348,8 @@ func (f *StatsGenerator) filterNoDecliningDGR(row *StatsRow) bool {
 		return true
 	}
 
-	dgrs := []float64{
-		row.DGR(5),
+    dgrs := []float64{
+        row.DGR(5),
 		row.DGR(4),
 		row.DGR(3),
 		row.DGR(2),
@@ -357,9 +357,16 @@ func (f *StatsGenerator) filterNoDecliningDGR(row *StatsRow) bool {
 		row.DividendChangeMR(),
 	}
 
-	for i := 0; i <= len(dgrs)-2; i++ {
-		v0 := dgrs[i]
-		v1 := dgrs[i+1]
+	dgrsPos := make([]float64, 0, len(dgrs))
+    for _, v := range dgrs {
+        if v > 0 {
+            dgrsPos = append(dgrsPos, v)
+        }
+    }
+
+	for i := 0; i <= len(dgrsPos)-2; i++ {
+		v0 := dgrsPos[i]
+		v1 := dgrsPos[i+1]
 
 		if v0 < v1 {
 			return true
