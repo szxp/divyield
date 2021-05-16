@@ -53,14 +53,43 @@ func main() {
 		"startDate",
 		"-10y",
 		"start date of the chart period, "+
-			"format 2010-06-05 or relative -10y",
-	)
+			"format 2010-06-05 or relative -10y")
 
 	noCutDividend := flag.CommandLine.Bool(
 		"no-cut-dividend",
 		false,
-		"Dividends were not decreased",
-	)
+		"Dividends were not decreased")
+
+	noDecliningDGR := flag.CommandLine.Bool(
+		"no-declining-dgr",
+		false,
+		"no declining DGR")
+
+	divYieldFwdMin := flag.CommandLine.Float64(
+		"dividend-yield-forward-min",
+		0.0,
+		"minimum forward dividend yield")
+
+	divYieldFwdMax := flag.CommandLine.Float64(
+		"dividend-yield-forward-max",
+		0.0,
+		"maximum forward dividend yield")
+
+	ggrROI := flag.CommandLine.Float64(
+		"gordon-roi",
+		10.0,
+		"expected return on investment (ROI) "+
+			"in the Gordon formula as a percentage")
+
+	ggrMin := flag.CommandLine.Float64(
+		"gordon-growth-rate-min",
+		0.0,
+		"minimum Gordon growth rate as a percentage")
+
+	ggrMax := flag.CommandLine.Float64(
+		"gordon-growth-rate-max",
+		0.0,
+		"maximum Gordon growth rate as a percentage")
 
 	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
@@ -81,18 +110,6 @@ func main() {
 	}
 	statsStocksDir := statsCmd.String("stocksDir",
 		defaultStocksDir, "stocks dir")
-	statsSP500DividendYield := statsCmd.Float64("sp500-dividend-yield",
-		0.0, "S&P 500 dividend yield, see https://www.multpl.com/s-p-500-dividend-yield")
-	statsSP500FactorMin := statsCmd.Float64("sp500-factor-min",
-		1.5, "minimum S&P 500 factor")
-	statsSP500FactorMax := statsCmd.Float64("sp500-factor-max",
-		5.0, "maximum S&P 500 factor")
-	statsExpectedROI := statsCmd.Float64("expected-roi",
-		10.0, "expected return on investment (ROI) as a percentage")
-	statsGordonGrowthRateMin := statsCmd.Float64("gordon-growth-rate-min",
-		0.0, "minimum Gordon growth rate")
-	statsGordonGrowthRateMax := statsCmd.Float64("gordon-growth-rate-max",
-		0.0, "maximum Gordon growth rate")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
@@ -179,14 +196,13 @@ func main() {
 			stats.Now(now),
 			stats.Log(stdoutLogger),
 			stats.DB(pdb),
-			stats.DividendYieldMin(
-				*statsSP500DividendYield**statsSP500FactorMin),
-			stats.DividendYieldMax(
-				*statsSP500DividendYield**statsSP500FactorMax),
-			stats.ExpectedROI(*statsExpectedROI),
-			stats.GordonGrowthRateMin(*statsGordonGrowthRateMin),
-			stats.GordonGrowthRateMax(*statsGordonGrowthRateMax),
+			stats.DividendYieldForwardMin(*divYieldFwdMin),
+			stats.DividendYieldForwardMax(*divYieldFwdMax),
+			stats.GordonROI(*ggrROI),
+			stats.GordonGrowthRateMin(*ggrMin),
+			stats.GordonGrowthRateMax(*ggrMax),
 			stats.NoCutDividend(*noCutDividend),
+			stats.NoDecliningDGR(*noDecliningDGR),
 		)
 		stats, err := statsGenerator.Generate(ctx, tickers)
 		if err != nil {

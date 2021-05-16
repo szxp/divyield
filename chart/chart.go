@@ -124,6 +124,7 @@ func (f *ChartGenerator) Generate(ctx context.Context, tickers []string) error {
 
 		minPrice, maxPrice := rangePrices(yields)
 		minYieldFwd, maxYieldFwd := rangeYieldsFwd(yields)
+		yieldStart := yields[0].ForwardTTM()
 		minYieldTrail, maxYieldTrail := rangeYieldsFwd(yields)
 		minDiv, maxDiv := rangeDividends(yields)
 		minDGR, maxDGR := rangeGrowthRates(yields)
@@ -142,6 +143,7 @@ func (f *ChartGenerator) Generate(ctx context.Context, tickers []string) error {
 
 			YieldFwdYrMin: math.Max(minYieldFwd-((maxYieldFwd-minYieldFwd)*0.1), 0),
 			YieldFwdYrMax: math.Max(maxYieldFwd+((maxYieldFwd-minYieldFwd)*0.1), 0.01),
+			YieldStart:    yieldStart,
 
 			YieldTrailYrMin: math.Max(minYieldTrail-((maxYieldTrail-minYieldTrail)*0.1), 0),
 			YieldTrailYrMax: math.Max(maxYieldTrail+((maxYieldTrail-minYieldTrail)*0.1), 0.01),
@@ -349,6 +351,7 @@ type plotParams struct {
 
 	YieldFwdYrMin float64
 	YieldFwdYrMax float64
+	YieldStart    float64
 
 	YieldTrailYrMin float64
 	YieldTrailYrMax float64
@@ -392,7 +395,7 @@ plot datafile using 1:2 with filledcurves above y = 0;
 set origin 0.0,0.50;
 set title '{{.TitleDivYieldFwd}}';
 set yrange [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
-plot datafile using 1:3 with filledcurves above y = 0;
+plot datafile using 1:3 with filledcurves above y = 0, {{.YieldStart}} title '' lw 4 lc 'red';
 
 
 set origin 0.0,0.20;
