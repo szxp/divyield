@@ -505,20 +505,33 @@ func (r *StatsRow) DGR(n int) float64 {
 	ed := time.Date(y-1, time.December, 31, 0, 0, 0, 0, time.UTC)
 	sd := time.Date(y-n, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-	sum := float64(0)
-	c := 0
+    changes := make([]float64, 0, n)
+
+	//sum := float64(0)
+	//c := 0
 	for _, v := range r.Dividends {
 		if v.Change > 0 &&
 			sd.Unix() < v.ExDate.Unix() &&
 			v.ExDate.Unix() < ed.Unix() {
-			sum += v.Change
-			c += 1
+			//sum += v.Change
+			//c += 1
+            changes = append(changes, v.Change)
 		}
 	}
 
 	dgr := float64(0)
-	if 0 < c {
-		dgr = sum / float64(c)
+	if 0 < len(changes) {
+        sort.Float64s(changes)
+
+		//dgr = sum / float64(c)
+
+        if len(changes) % 2 == 1 {
+            dgr = changes[(len(changes)/2)]
+        } else {
+            vl := changes[len(changes)/2-1]
+            vr := changes[len(changes)/2]
+            dgr = (vl + vr) / 2.0
+        }
 	}
 
 	r.dgrCache[n] = dgr
