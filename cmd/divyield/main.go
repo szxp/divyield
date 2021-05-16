@@ -77,7 +77,7 @@ func main() {
 
 	divYieldTotalMin := flag.CommandLine.Float64(
 		"dividend-yield-total-min",
-		9.0,
+		0.0,
 		"forward dividend yield + DGR-5y average yield "+
 			"must be a greater than or equal to the given total yield")
 
