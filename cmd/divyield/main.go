@@ -18,10 +18,12 @@ import (
 	"syscall"
 	"time"
 
+	//"szakszon.com/divyield"
 	"szakszon.com/divyield/chart"
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/stats"
+	//"szakszon.com/divyield/xrates"
 	"szakszon.com/divyield/yahoo"
 )
 
@@ -34,7 +36,10 @@ func main() {
 	ctx, ctxCancel := context.WithCancel(ctx)
 
 	now := time.Now()
-	stdoutLogger := &StdoutLogger{mu: &sync.RWMutex{}}
+	stdoutSync := &StdoutSync{
+		mu: &sync.RWMutex{},
+		w:  os.Stdout,
+	}
 
 	termCh := make(chan os.Signal)
 	signal.Notify(termCh, os.Interrupt, syscall.SIGTERM)
@@ -97,19 +102,17 @@ func main() {
 		0.0,
 		"maximum Gordon growth rate as a percentage")
 
-//	chartFlag := flag.CommandLine.Bool(
-//		"chart",
-//		false,
-//		"generate chart")
+	//	chartFlag := flag.CommandLine.Bool(
+	//		"chart",
+	//		false,
+	//		"generate chart")
 
 	chartOutputDir := flag.CommandLine.String(
-        "chart-output-dir",
-		defaultChartOutputDir, 
-        "chart output dir")
+		"chart-output-dir",
+		defaultChartOutputDir,
+		"chart output dir")
 
-
-
-    fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
+	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
 	fetchCmd.Usage = func() {
 		fmt.Println(usageFetch)
 		os.Exit(1)
@@ -162,15 +165,32 @@ func main() {
 	splitFetcher := yahoo.NewSplitFetcher(
 		yahoo.RateLimiter(rate.NewLimiter(rate.Every(1*time.Second), 1)),
 		yahoo.Timeout(10*time.Second),
-		yahoo.Log(stdoutLogger),
+		yahoo.Log(stdoutSync),
 	)
 
-    startDate, err := parseDate(*startDateFlag)
+	startDate, err := parseDate(*startDateFlag)
 	if err != nil {
 		fmt.Println("invalid start date: ", *startDateFlag)
 		return
 	}
 
+    /*
+	cc := xrates.NewCurrencyConverter(
+		xrates.Logger(stdoutSync),
+	)
+	ccin := &divyield.CurrencyConvertInput{
+		From:   "CAD",
+		To:     "USD",
+		Amount: 26.00,
+		Date:   time.Date(2021, time.May, 18, 0, 0, 0, 0, time.UTC),
+	}
+	ccout, err := cc.Convert(ctx, ccin)
+    if err != nil {
+		fmt.Println(err)
+		return
+    }
+	stdoutSync.Logf("%f %f%%", ccout.Amount, ccout.Rate)
+    */
 
 	switch os.Args[subIdx] {
 	case "fetch":
@@ -196,7 +216,7 @@ func main() {
 			iexcloud.Timeout(10*time.Second),
 			iexcloud.IEXCloudAPITokens(iexCloudAPITokens),
 			iexcloud.Force(*fetchForce),
-			iexcloud.Log(stdoutLogger),
+			iexcloud.Log(stdoutSync),
 			iexcloud.DB(pdb),
 			iexcloud.SplitFetcher(splitFetcher),
 		)
@@ -217,7 +237,7 @@ func main() {
 		statsGenerator := stats.NewStatsGenerator(
 			stats.StocksDir(*statsStocksDir),
 			stats.Now(now),
-			stats.Log(stdoutLogger),
+			stats.Log(stdoutSync),
 			stats.DB(pdb),
 			stats.StartDate(startDate),
 			stats.DividendYieldForwardMin(*divYieldFwdMin),
@@ -245,11 +265,10 @@ func main() {
 			return
 		}
 
-
 		chartGener := chart.NewChartGenerator(
 			chart.OutputDir(*chartOutputDir),
 			chart.StartDate(startDate),
-			chart.Log(stdoutLogger),
+			chart.Log(stdoutSync),
 			chart.DB(pdb),
 		)
 		err = chartGener.Generate(ctx, tickers)
@@ -363,13 +382,25 @@ Flags:
       stocks dir (default "work/stocks")
 `
 
-type StdoutLogger struct {
+type StdoutSync struct {
 	mu *sync.RWMutex
+	w  io.Writer
 }
 
-func (l *StdoutLogger) Logf(format string, v ...interface{}) {
+func (l *StdoutSync) Logf(format string, v ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fmt.Printf(format, v...)
-	fmt.Println()
+	fmt.Fprintf(l.w, format, v...)
+	fmt.Fprintln(l.w)
+}
+
+func (l *StdoutSync) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	n, err := l.w.Write(p)
+	if err != nil {
+		return n, err
+	}
+	return l.w.Write([]byte{'\n'})
 }

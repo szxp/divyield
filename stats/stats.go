@@ -203,7 +203,7 @@ LOOP:
 	f.filter(
 		stats,
 		f.filterDivYieldFwdMinMax,
-        f.filterDivYieldTotalMin,
+		f.filterDivYieldTotalMin,
 		f.filterGGRMinMax,
 		f.filterNoCutDividend,
 		f.filterNoDecliningDGR,
@@ -505,7 +505,7 @@ func (r *StatsRow) DGR(n int) float64 {
 	ed := time.Date(y-1, time.December, 31, 0, 0, 0, 0, time.UTC)
 	sd := time.Date(y-n, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-    changes := make([]float64, 0, n)
+	changes := make([]float64, 0, n)
 
 	//sum := float64(0)
 	//c := 0
@@ -515,23 +515,23 @@ func (r *StatsRow) DGR(n int) float64 {
 			v.ExDate.Unix() < ed.Unix() {
 			//sum += v.Change
 			//c += 1
-            changes = append(changes, v.Change)
+			changes = append(changes, v.Change)
 		}
 	}
 
 	dgr := float64(0)
 	if 0 < len(changes) {
-        sort.Float64s(changes)
+		sort.Float64s(changes)
 
 		//dgr = sum / float64(c)
 
-        if len(changes) % 2 == 1 {
-            dgr = changes[(len(changes)/2)]
-        } else {
-            vl := changes[len(changes)/2-1]
-            vr := changes[len(changes)/2]
-            dgr = (vl + vr) / 2.0
-        }
+		if len(changes)%2 == 1 {
+			dgr = changes[(len(changes) / 2)]
+		} else {
+			vl := changes[len(changes)/2-1]
+			vr := changes[len(changes)/2]
+			dgr = (vl + vr) / 2.0
+		}
 	}
 
 	r.dgrCache[n] = dgr
