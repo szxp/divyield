@@ -35,6 +35,8 @@ func (c *Command) Execute(ctx context.Context) error {
 		return c.company(ctx)
 	case "symbols":
 		return c.symbols(ctx)
+	case "exchanges":
+		return c.exchanges(ctx)
 	default:
 		return fmt.Errorf("invalid command")
 	}
@@ -183,6 +185,52 @@ func (c *Command) writeSymbolISINs(symbols []*divyield.SymbolISIN) {
 	w.Flush()
 	c.writef(buf.String())
 }
+
+func (c *Command) exchanges(ctx context.Context) error {
+	in := &divyield.ExchangeFetchInput{}
+	out, err := c.opts.exchangeService.Fetch(ctx, in)
+	if err != nil {
+		return err
+	}
+
+	c.writeExchanges(out.Exchanges)
+	return nil
+}
+
+func (c *Command) writeExchanges(exchanges []*divyield.Exchange) {
+	buf := &bytes.Buffer{}
+	w := tabwriter.NewWriter(buf, 0, 0, 2, ' ', 0)
+
+	b := &bytes.Buffer{}
+	b.WriteString("Region")
+	b.WriteByte('\t')
+	b.WriteString("Exchange")
+	b.WriteByte('\t')
+	b.WriteString("Suffix")
+	b.WriteByte('\t')
+	b.WriteString("Currency")
+	b.WriteByte('\t')
+	b.WriteString("Description")
+	fmt.Fprintln(w, b.String())
+
+	for _, v := range exchanges {
+		b.Reset()
+		b.WriteString(v.Region)
+		b.WriteByte('\t')
+		b.WriteString(v.Exchange)
+		b.WriteByte('\t')
+		b.WriteString(v.Suffix)
+		b.WriteByte('\t')
+		b.WriteString(v.Currency)
+		b.WriteByte('\t')
+		b.WriteString(v.Description)
+		fmt.Fprintln(w, b.String())
+	}
+
+	w.Flush()
+	c.writef(buf.String())
+}
+
 func (c *Command) writef(format string, v ...interface{}) {
 	if c.opts.writer != nil {
 		fmt.Fprintf(c.opts.writer, format, v...)
@@ -198,6 +246,7 @@ type options struct {
 	dir                   string
 	companyProfileService divyield.CompanyProfileService
 	isinService           divyield.ISINService
+	exchangeService       divyield.ExchangeService
 }
 
 type Option func(o options) options
@@ -229,3 +278,12 @@ func ISINService(v divyield.ISINService) Option {
 		return o
 	}
 }
+
+func ExchangeService(v divyield.ExchangeService) Option {
+	return func(o options) options {
+		o.exchangeService = v
+		return o
+	}
+}
+
+

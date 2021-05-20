@@ -80,3 +80,26 @@ type CurrencyConvertOutput struct {
 	Amount float64
 	Rate   float64
 }
+
+type ExchangeService interface {
+	Fetch(
+		ctx context.Context,
+		in *ExchangeFetchInput,
+	) (*ExchangeFetchOutput, error)
+}
+
+type ExchangeFetchInput struct {
+}
+
+type ExchangeFetchOutput struct {
+	Exchanges []*Exchange
+}
+
+type Exchange struct {
+	Region         string
+	Exchange       string
+	Suffix       string
+    Currency string
+	Description    string
+}
+

@@ -57,6 +57,14 @@ func (c *IEXCloud) isinMappingURL(isin string) string {
 		"&token=" + c.opts.token
 }
 
+
+func (c *IEXCloud) internationalExchangesURL() string {
+	return c.opts.baseURL +
+		"/ref-data/exchanges" +
+		"?token=" + c.opts.token
+}
+
+
 func (c *IEXCloud) httpGet(
 	ctx context.Context,
 	u string,
@@ -90,7 +98,7 @@ func (s *companyProfileService) Fetch(
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+	//fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -176,7 +184,7 @@ func (s *isinService) Resolve(
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%v: %v %v\n", in.ISIN, resp.StatusCode, u)
+	//fmt.Printf("%v: %v %v\n", in.ISIN, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -261,6 +269,138 @@ type symbolISIN struct {
 	Symbol   string `json:"symbol"`
 	Exchange string `json:"exchange"`
 	Region   string `json:"region"`
+}
+
+
+func (c *IEXCloud) NewExchangeService() divyield.ExchangeService {
+	return &exchangeService{
+		IEXCloud: c,
+	}
+}
+
+type exchangeService struct {
+	*IEXCloud
+}
+
+func (s *exchangeService) Fetch(
+	ctx context.Context,
+	in *divyield.ExchangeFetchInput,
+) (*divyield.ExchangeFetchOutput, error) {
+
+	u := s.internationalExchangesURL()
+	resp, err := s.httpGet(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	//fmt.Printf("%v: %v %v\n", in.ISIN, resp.StatusCode, u)
+
+	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+	}
+
+	exchanges, err := s.parseInternationalExchanges(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse international exchanges: %s", err)
+	}
+
+	out := &divyield.ExchangeFetchOutput{
+		Exchanges: make([]*divyield.Exchange, 0, len(exchanges)),
+	}
+
+	for _, v := range exchanges {
+        currency := regionCurrencyMap[v.Region]
+
+		ex := &divyield.Exchange{
+			Region:   v.Region,
+			Exchange: v.Exchange,
+		    Suffix:   v.ExchangeSuffix,
+            Currency: currency,
+		    Description:   v.Description,
+		}
+		out.Exchanges = append(out.Exchanges, ex)
+	}
+
+	return out, nil
+}
+
+func (c *IEXCloud) parseInternationalExchanges(
+	r io.Reader,
+) ([]*exchange, error) {
+	exchanges := make([]*exchange, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	// while the array contains values
+	for dec.More() {
+		var v exchange
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode international exchange: %s", err)
+		}
+
+		exchanges = append(exchanges, &v)
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	sortInternationalExchanges(exchanges)
+	return exchanges, nil
+}
+
+func sortInternationalExchanges(a []*exchange) {
+	sort.SliceStable(a, func(i, j int) bool {
+		switch strings.Compare(a[i].Region, a[j].Region) {
+		case -1:
+			return true
+		case 1:
+			return false
+		}
+
+		switch strings.Compare( a[i].Exchange, a[j].Exchange) {
+		case -1:
+			return true
+		case 1:
+			return false
+		}
+
+		return a[i].ExchangeSuffix < a[j].ExchangeSuffix
+	})
+}
+
+var regionCurrencyMap = map[string]string{
+    "BE": "EUR",
+    "CA": "CAD",
+    "CH": "CHF",
+    "DE": "EUR",
+    "DK": "DKK",
+    "ES": "EUR",
+    "FR": "EUR",
+    "GB": "GBP",
+    "HU": "HUF",
+    "IT": "EUR",
+    "JP": "JPY",
+    "LU": "EUR",
+    "NL": "EUR",
+    "US": "USD",
+}
+
+
+type exchange struct {
+	Region   string `json:"region"`
+	Exchange string `json:"exchange"`
+	ExchangeSuffix   string `json:"exchangeSuffix"`
+	Description   string `json:"description"`
 }
 
 type options struct {
@@ -635,7 +775,7 @@ func (f *StockFetcher) downloadDividends(
 	}
 	defer resp.Body.Close()
 
-	f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	//f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -865,7 +1005,7 @@ func (f *StockFetcher) downloadPrices(
 	}
 	defer resp.Body.Close()
 
-	f.log("%v: %v %v", ticker, resp.StatusCode, u)
+	//f.log("%v: %v %v", ticker, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)

@@ -203,7 +203,7 @@ func main() {
 	)
 	comProSrv := iexc.NewCompanyProfileService()
 	isinSrv := iexc.NewISINService()
-	//searchSrv := iexCloud.NewSearchService()
+	exchangeSrv := iexc.NewExchangeService()
 
 	cmd := cli.NewCommand(
 		os.Args[1],
@@ -212,7 +212,7 @@ func main() {
 		cli.Dir(*dirFlag),
 		cli.CompanyProfileService(comProSrv),
 		cli.ISINService(isinSrv),
-		//cli.SearchService(searchSrv),
+		cli.ExchangeService(exchangeSrv),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {
