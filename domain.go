@@ -5,7 +5,43 @@ import (
 	"time"
 )
 
-type CurrencyConverter interface {
+type Command interface {
+	Execute(ctx context.Context) error
+}
+
+type CompanyProfileService interface {
+	Fetch(
+		ctx context.Context,
+		in *CompanyProfileFetchInput,
+	) (*CompanyProfileFetchOutput, error)
+}
+
+type CompanyProfileFetchInput struct {
+	Symbol string
+}
+
+type CompanyProfileFetchOutput struct {
+	CompanyProfile *CompanyProfile
+}
+
+type CompanyProfile struct {
+	Symbol         string
+	Name           string
+	Exchange       string
+	Industry       string
+	Sector         string
+	Description    string
+	Website        string
+	PrimarySicCode int
+	Address        string
+	City           string
+	Zip            string
+	State          string
+	Country        string
+	Phone          string
+}
+
+type CurrencyService interface {
 	Convert(
 		ctx context.Context,
 		in *CurrencyConvertInput,
@@ -20,10 +56,6 @@ type CurrencyConvertInput struct {
 }
 
 type CurrencyConvertOutput struct {
-    Amount float64
-	Rate float64
-}
-
-type Command interface {
-	Execute() error
+	Amount float64
+	Rate   float64
 }

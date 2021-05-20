@@ -84,12 +84,12 @@ func (cc *CurrencyConverter) Convert(
 
 	rate, err := cc.parseRate(in.From, in.To, string(body))
 	if err != nil {
-        return nil, err
+		return nil, err
 	}
 
 	out := &divyield.CurrencyConvertOutput{
-        Amount: in.Amount * rate,
-		Rate: rate,
+		Amount: in.Amount * rate,
+		Rate:   rate,
 	}
 	return out, nil
 }
@@ -115,11 +115,11 @@ func (cc *CurrencyConverter) parseRate(
 	re := regexp.MustCompile(
 		`<a[^>]+from=` + from + `&amp;to=` + to + `[^>]+>([0-9\.]+)</a>`)
 	matches := re.FindStringSubmatch(s)
-    //cc.logf("%v", matches)
+	//cc.logf("%v", matches)
 
-    if len(matches) < 2 {
-        return 0, fmt.Errorf("no rate")
-    }
+	if len(matches) < 2 {
+		return 0, fmt.Errorf("no rate")
+	}
 
 	return strconv.ParseFloat(matches[1], 64)
 }

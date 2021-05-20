@@ -20,7 +20,137 @@ import (
 	"szakszon.com/divyield/logger"
 )
 
+type IEXCloud struct {
+	opts       options
+	httpClient *httprate.RLClient
+}
+
+func NewIEXCloud(os ...Option) *IEXCloud {
+	opts := defaultOptions
+	for _, o := range os {
+		opts = o(opts)
+	}
+
+	httpClient := &httprate.RLClient{
+		Client: &http.Client{
+			Timeout: opts.timeout,
+		},
+		Ratelimiter: opts.rateLimiter,
+	}
+
+	return &IEXCloud{
+		opts:       opts,
+		httpClient: httpClient,
+	}
+}
+
+func (c *IEXCloud) companyURL(symbol string) string {
+	return c.opts.baseURL +
+		"/stock/" + symbol + "/company" +
+		"?token=" + c.opts.token
+}
+
+func (c *IEXCloud) httpGet(
+	ctx context.Context,
+	u string,
+) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.httpClient.Do(req)
+}
+
+func (c *IEXCloud) NewCompanyProfileService() divyield.CompanyProfileService {
+	return &companyProfileService{
+		IEXCloud: c,
+	}
+}
+
+type companyProfileService struct {
+	*IEXCloud
+}
+
+func (s *companyProfileService) Fetch(
+	ctx context.Context,
+	in *divyield.CompanyProfileFetchInput,
+) (*divyield.CompanyProfileFetchOutput, error) {
+
+	u := s.companyURL(in.Symbol)
+	resp, err := s.httpGet(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+
+	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+	}
+
+	cp, err := s.parseCompanyProfile(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse company profile: %s", err)
+	}
+
+	comPro := &divyield.CompanyProfile{
+		Symbol:         cp.Symbol,
+		Name:           cp.CompanyName,
+		Exchange:       cp.Exchange,
+		Industry:       cp.Industry,
+		Sector:         cp.Sector,
+		Description:    cp.Description,
+		Website:        cp.Website,
+		PrimarySicCode: cp.PrimarySicCode,
+		Address:        strings.TrimSpace(cp.Address + " " + cp.Address2),
+		State:          cp.State,
+		City:           cp.City,
+		Zip:            cp.Zip,
+		Country:        cp.Country,
+		Phone:          cp.Phone,
+	}
+
+    out := &divyield.CompanyProfileFetchOutput{
+        CompanyProfile: comPro,
+    }
+	return out, nil
+}
+
+func (c *IEXCloud) parseCompanyProfile(
+	r io.Reader,
+) (*companyProfile, error) {
+	dec := json.NewDecoder(r)
+	var v companyProfile
+	err := dec.Decode(&v)
+	if err != nil {
+		return nil, fmt.Errorf("decode company profile: %s", err)
+	}
+	return &v, nil
+}
+
+type companyProfile struct {
+	Symbol         string `json:"symbol"`
+	CompanyName    string `json:"companyName"`
+	Exchange       string `json:"exchange"`
+	Industry       string `json:"industry"`
+	Website        string `json:"website"`
+	Description    string `json:"description"`
+	Sector         string `json:"sector"`
+	PrimarySicCode int    `json:"primarySicCode"`
+	Address        string `json:"address"`
+	Address2       string `json:"address2"`
+	City           string `json:"city"`
+	Zip            string `json:"zip"`
+	State          string `json:"state"`
+	Country        string `json:"country"`
+	Phone          string `json:"phone"`
+}
+
 type options struct {
+	baseURL string
+	token   string
+
 	outputDir         string
 	startDate         time.Time
 	endDate           time.Time
@@ -35,6 +165,20 @@ type options struct {
 }
 
 type Option func(o options) options
+
+func BaseURL(v string) Option {
+	return func(o options) options {
+		o.baseURL = v
+		return o
+	}
+}
+
+func Token(v string) Option {
+	return func(o options) options {
+		o.token = v
+		return o
+	}
+}
 
 func OutputDir(dir string) Option {
 	return func(o options) options {

@@ -24,6 +24,7 @@ import (
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/stats"
 	//"szakszon.com/divyield/xrates"
+	"szakszon.com/divyield/cli"
 	"szakszon.com/divyield/yahoo"
 )
 
@@ -80,14 +81,14 @@ func main() {
 		0.0,
 		"maximum forward dividend yield")
 
-	divYieldTotalMin := flag.CommandLine.Float64(
-		"dividend-yield-total-min",
+	divYieldROIMin := flag.CommandLine.Float64(
+		"dividend-yield-roi-min",
 		0.0,
 		"forward dividend yield + DGR-5y average yield "+
 			"must be a greater than or equal to the given total yield")
 
-	ggrROI := flag.CommandLine.Float64(
-		"gordon-roi",
+	ggrROIMin := flag.CommandLine.Float64(
+		"gordon-roi-min",
 		10.0,
 		"expected return on investment (ROI) "+
 			"in the Gordon formula as a percentage")
@@ -174,23 +175,67 @@ func main() {
 		return
 	}
 
-    /*
-	cc := xrates.NewCurrencyConverter(
-		xrates.Logger(stdoutSync),
+	optsFlagSet := flag.NewFlagSet("options", flag.ExitOnError)
+	var dirFlag = optsFlagSet.String(
+		"directory",
+		"",
+		"An optional directory to which to create files. "+
+			"By default, all files and subdirectories are created "+
+			"in the current directory.",
 	)
-	ccin := &divyield.CurrencyConvertInput{
-		From:   "CAD",
-		To:     "USD",
-		Amount: 26.00,
-		Date:   time.Date(2021, time.May, 18, 0, 0, 0, 0, time.UTC),
-	}
-	ccout, err := cc.Convert(ctx, ccin)
-    if err != nil {
+	var iexCloudBaseURLFlag = optsFlagSet.String(
+		"iexcloud-base-url",
+		"https://cloud.iexapis.com/stable",
+		"IEX Cloud base URL",
+	)
+	var iexCloudTokenFlag = optsFlagSet.String(
+		"iexcloud-token",
+		"",
+		"IEX Cloud token",
+	)
+	optsFlagSet.Parse(os.Args[2:])
+
+	iexc := iexcloud.NewIEXCloud(
+		iexcloud.BaseURL(*iexCloudBaseURLFlag),
+		iexcloud.Token(*iexCloudTokenFlag),
+		iexcloud.RateLimiter(
+			rate.NewLimiter(rate.Every(500*time.Millisecond), 2)),
+	)
+	comProSrv := iexc.NewCompanyProfileService()
+	//searchSrv := iexCloud.NewSearchService()
+
+	cmd := cli.NewCommand(
+		os.Args[1],
+		optsFlagSet.Args(),
+		cli.Writer(stdoutSync),
+		cli.Dir(*dirFlag),
+		cli.CompanyProfileService(comProSrv),
+		//cli.SearchService(searchSrv),
+	)
+	err = cmd.Execute(ctx)
+	if err != nil {
 		fmt.Println(err)
 		return
-    }
-	stdoutSync.Logf("%f %f%%", ccout.Amount, ccout.Rate)
-    */
+	}
+	return
+
+	/*
+			cc := xrates.NewCurrencyConverter(
+				xrates.Logger(stdoutSync),
+			)
+			ccin := &divyield.CurrencyConvertInput{
+				From:   "CAD",
+				To:     "USD",
+				Amount: 26.00,
+				Date:   time.Date(2021, time.May, 18, 0, 0, 0, 0, time.UTC),
+			}
+			ccout, err := cc.Convert(ctx, ccin)
+		    if err != nil {
+				fmt.Println(err)
+				return
+		    }
+			stdoutSync.Logf("%f %f%%", ccout.Amount, ccout.Rate)
+	*/
 
 	switch os.Args[subIdx] {
 	case "fetch":
@@ -242,8 +287,8 @@ func main() {
 			stats.StartDate(startDate),
 			stats.DividendYieldForwardMin(*divYieldFwdMin),
 			stats.DividendYieldForwardMax(*divYieldFwdMax),
-			stats.DividendYieldTotalMin(*divYieldTotalMin),
-			stats.GordonROI(*ggrROI),
+			stats.DividendYieldTotalMin(*divYieldROIMin),
+			stats.GordonROI(*ggrROIMin),
 			stats.GordonGrowthRateMin(*ggrMin),
 			stats.GordonGrowthRateMax(*ggrMax),
 			stats.NoCutDividend(*noCutDividend),
