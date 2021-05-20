@@ -9,14 +9,17 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/time/rate"
 	"io"
+    "io/ioutil"
 	"os"
 	"os/signal"
+    "os/user"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+    "path/filepath"
 
 	//"szakszon.com/divyield"
 	"szakszon.com/divyield/chart"
@@ -188,16 +191,26 @@ func main() {
 		"https://cloud.iexapis.com/stable",
 		"IEX Cloud base URL",
 	)
-	var iexCloudTokenFlag = optsFlagSet.String(
-		"iexcloud-token",
-		"",
-		"IEX Cloud token",
+	var iexCloudCredentialsFileFlag = optsFlagSet.String(
+		"iexcloud-credential-file",
+		".divyield/iexcloud-credentials",
+		"IEX Cloud credentials file",
 	)
 	optsFlagSet.Parse(os.Args[2:])
 
+    usr, _ := user.Current()
+    iexCloudToken, err := ioutil.ReadFile(filepath.Join(
+        usr.HomeDir,
+        *iexCloudCredentialsFileFlag,
+    ))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	iexc := iexcloud.NewIEXCloud(
 		iexcloud.BaseURL(*iexCloudBaseURLFlag),
-		iexcloud.Token(*iexCloudTokenFlag),
+		iexcloud.Token(string(iexCloudToken)),
 		iexcloud.RateLimiter(
 			rate.NewLimiter(rate.Every(500*time.Millisecond), 2)),
 	)
