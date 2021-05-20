@@ -33,6 +33,8 @@ func (c *Command) Execute(ctx context.Context) error {
 	switch c.name {
 	case "company":
 		return c.company(ctx)
+	case "symbols":
+		return c.symbols(ctx)
 	default:
 		return fmt.Errorf("invalid command")
 	}
@@ -142,6 +144,45 @@ func (c *Command) writeCompanyProfile(cp *divyield.CompanyProfile) {
 	c.writef(buf.String())
 }
 
+func (c *Command) symbols(ctx context.Context) error {
+	in := &divyield.ISINResolveInput{
+		ISIN: c.args[0],
+	}
+
+	out, err := c.opts.isinService.Resolve(ctx, in)
+	if err != nil {
+		return err
+	}
+
+	c.writeSymbolISINs(out.Symbols)
+	return nil
+}
+
+func (c *Command) writeSymbolISINs(symbols []*divyield.SymbolISIN) {
+	buf := &bytes.Buffer{}
+	w := tabwriter.NewWriter(buf, 0, 0, 2, ' ', 0)
+
+	b := &bytes.Buffer{}
+	b.WriteString("Region")
+	b.WriteByte('\t')
+	b.WriteString("Exchange")
+	b.WriteByte('\t')
+	b.WriteString("Symbol")
+	fmt.Fprintln(w, b.String())
+
+	for _, v := range symbols {
+		b.Reset()
+		b.WriteString(v.Region)
+		b.WriteByte('\t')
+		b.WriteString(v.Exchange)
+		b.WriteByte('\t')
+		b.WriteString(v.Symbol)
+		fmt.Fprintln(w, b.String())
+	}
+
+	w.Flush()
+	c.writef(buf.String())
+}
 func (c *Command) writef(format string, v ...interface{}) {
 	if c.opts.writer != nil {
 		fmt.Fprintf(c.opts.writer, format, v...)
@@ -156,6 +197,7 @@ type options struct {
 	writer                io.Writer
 	dir                   string
 	companyProfileService divyield.CompanyProfileService
+	isinService           divyield.ISINService
 }
 
 type Option func(o options) options
@@ -177,6 +219,13 @@ func Dir(v string) Option {
 func CompanyProfileService(v divyield.CompanyProfileService) Option {
 	return func(o options) options {
 		o.companyProfileService = v
+		return o
+	}
+}
+
+func ISINService(v divyield.ISINService) Option {
+	return func(o options) options {
+		o.isinService = v
 		return o
 	}
 }

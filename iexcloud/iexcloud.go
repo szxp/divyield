@@ -50,6 +50,13 @@ func (c *IEXCloud) companyURL(symbol string) string {
 		"?token=" + c.opts.token
 }
 
+func (c *IEXCloud) isinMappingURL(isin string) string {
+	return c.opts.baseURL +
+		"/ref-data/isin" +
+		"?isin=" + isin +
+		"&token=" + c.opts.token
+}
+
 func (c *IEXCloud) httpGet(
 	ctx context.Context,
 	u string,
@@ -111,9 +118,9 @@ func (s *companyProfileService) Fetch(
 		Phone:          cp.Phone,
 	}
 
-    out := &divyield.CompanyProfileFetchOutput{
-        CompanyProfile: comPro,
-    }
+	out := &divyield.CompanyProfileFetchOutput{
+		CompanyProfile: comPro,
+	}
 	return out, nil
 }
 
@@ -145,6 +152,115 @@ type companyProfile struct {
 	State          string `json:"state"`
 	Country        string `json:"country"`
 	Phone          string `json:"phone"`
+}
+
+func (c *IEXCloud) NewISINService() divyield.ISINService {
+	return &isinService{
+		IEXCloud: c,
+	}
+}
+
+type isinService struct {
+	*IEXCloud
+}
+
+func (s *isinService) Resolve(
+	ctx context.Context,
+	in *divyield.ISINResolveInput,
+) (*divyield.ISINResolveOutput, error) {
+
+	u := s.isinMappingURL(in.ISIN)
+	resp, err := s.httpGet(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	fmt.Printf("%v: %v %v\n", in.ISIN, resp.StatusCode, u)
+
+	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+	}
+
+	symbols, err := s.parseSymbolISINs(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse symbolISINs: %s", err)
+	}
+
+	out := &divyield.ISINResolveOutput{
+		Symbols: make([]*divyield.SymbolISIN, 0, len(symbols)),
+	}
+
+	for _, v := range symbols {
+		symbol := &divyield.SymbolISIN{
+			Symbol:   v.Symbol,
+			Exchange: v.Exchange,
+			Region:   v.Region,
+		}
+		out.Symbols = append(out.Symbols, symbol)
+	}
+
+	return out, nil
+}
+
+func (c *IEXCloud) parseSymbolISINs(
+	r io.Reader,
+) ([]*symbolISIN, error) {
+	symbols := make([]*symbolISIN, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	// while the array contains values
+	for dec.More() {
+		var v symbolISIN
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode symbolISIN: %s", err)
+		}
+
+		symbols = append(symbols, &v)
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	sortSymbolsISINs(symbols)
+	return symbols, nil
+}
+
+func sortSymbolsISINs(symbols []*symbolISIN) {
+	sort.SliceStable(symbols, func(i, j int) bool {
+		switch strings.Compare(symbols[i].Region, symbols[j].Region) {
+		case -1:
+			return true
+		case 1:
+			return false
+		}
+
+		switch strings.Compare(symbols[i].Exchange, symbols[j].Exchange) {
+		case -1:
+			return true
+		case 1:
+			return false
+		}
+
+		return symbols[i].Symbol < symbols[j].Symbol
+	})
+}
+
+
+type symbolISIN struct {
+	Symbol   string `json:"symbol"`
+	Exchange string `json:"exchange"`
+	Region   string `json:"region"`
 }
 
 type options struct {

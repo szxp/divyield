@@ -41,6 +41,27 @@ type CompanyProfile struct {
 	Phone          string
 }
 
+type ISINService interface {
+	Resolve(
+		ctx context.Context,
+		in *ISINResolveInput,
+	) (*ISINResolveOutput, error)
+}
+
+type ISINResolveInput struct {
+	ISIN string
+}
+
+type ISINResolveOutput struct {
+	Symbols []*SymbolISIN
+}
+
+type SymbolISIN struct {
+	Symbol   string
+	Exchange string
+	Region   string
+}
+
 type CurrencyService interface {
 	Convert(
 		ctx context.Context,

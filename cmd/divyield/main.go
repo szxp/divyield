@@ -202,6 +202,7 @@ func main() {
 			rate.NewLimiter(rate.Every(500*time.Millisecond), 2)),
 	)
 	comProSrv := iexc.NewCompanyProfileService()
+	isinSrv := iexc.NewISINService()
 	//searchSrv := iexCloud.NewSearchService()
 
 	cmd := cli.NewCommand(
@@ -210,6 +211,7 @@ func main() {
 		cli.Writer(stdoutSync),
 		cli.Dir(*dirFlag),
 		cli.CompanyProfileService(comProSrv),
+		cli.ISINService(isinSrv),
 		//cli.SearchService(searchSrv),
 	)
 	err = cmd.Execute(ctx)
