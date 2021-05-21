@@ -73,6 +73,33 @@ func (c *IEXCloud) splitsURL(
 		"/time-series" +
 		"/SPLITS/" + symbol +
 		"?from=" + from.Format(divyield.DateFormat) +
+		"&sort=DESC" +
+		"&token=" + c.opts.token
+}
+
+func (c *IEXCloud) dividendsURL(
+	symbol string,
+	from time.Time,
+) string {
+	symbol = strings.ToLower(symbol)
+	return c.opts.baseURL +
+		"/time-series" +
+		"/DIVIDENDS/" + symbol +
+		"?from=" + from.Format(divyield.DateFormat) +
+		"&sort=DESC" +
+		"&token=" + c.opts.token
+}
+
+func (c *IEXCloud) pricesURL(
+	symbol string,
+	from time.Time,
+) string {
+	symbol = strings.ToLower(symbol)
+	return c.opts.baseURL +
+		"/time-series" +
+		"/HISTORICAL_PRICES/" + symbol +
+		"?from=" + from.Format(divyield.DateFormat) +
+		"&sort=DESC" +
 		"&token=" + c.opts.token
 }
 
@@ -176,7 +203,7 @@ func sortSplitsDesc(a []*split) {
 }
 
 type split struct {
-	ExDate     Time `json:"exDate"`
+	ExDate     date `json:"exDate"`
 	FromFactor int  `json:"fromFactor"`
 	ToFactor   int  `json:"toFactor"`
 }
@@ -898,8 +925,8 @@ func dividendsURL(ticker string, from time.Time, apiToken string) string {
 }
 
 type dividend struct {
-	ExDate      Time    `json:"exDate"`
-	PaymentDate Time    `json:"paymentDate"`
+	ExDate      date    `json:"exDate"`
+	PaymentDate date    `json:"paymentDate"`
 	Amount      float64 `json:"amount"`
 	Currency    string  `json:"currency"`
 	Flag        string  `json:"flag"`
@@ -1192,7 +1219,7 @@ func (f *StockFetcher) download(
 }
 
 type price struct {
-	Date    TimeUnix `json:"date"`
+	Date    timeUnix `json:"date"`
 	Symbol  string   `json:"symbol"`
 	UClose  float64  `json:"uClose"`
 	UHigh   float64  `json:"uHigh"`
@@ -1208,19 +1235,19 @@ func (p *price) String() string {
 	)
 }
 
-type Time time.Time
+type date time.Time
 
 const DateFormat = "2006-01-02"
 
-func (t Time) IsZero() bool {
+func (t date) IsZero() bool {
 	return time.Time(t).IsZero()
 }
 
-func (t Time) After(o time.Time) bool {
+func (t date) After(o time.Time) bool {
 	return time.Time(t).After(o)
 }
 
-func (t Time) UntilDays(p time.Time) int64 {
+func (t date) UntilDays(p time.Time) int64 {
 	st := time.Time(t)
 	if st.IsZero() {
 		return -1
@@ -1228,11 +1255,11 @@ func (t Time) UntilDays(p time.Time) int64 {
 	return int64(p.Sub(st) / (24 * time.Hour))
 }
 
-func (t Time) Equal(o Time) bool {
+func (t date) Equal(o date) bool {
 	return time.Time(t).Equal(time.Time(o))
 }
 
-func (t Time) String() string {
+func (t date) String() string {
 	st := time.Time(t)
 	if st.IsZero() {
 		return "0000-00-00"
@@ -1240,7 +1267,7 @@ func (t Time) String() string {
 	return st.Format(DateFormat)
 }
 
-func (t Time) MarshalJSON() ([]byte, error) {
+func (t date) MarshalJSON() ([]byte, error) {
 	st := time.Time(t)
 	if st.IsZero() {
 		return []byte("\"0000-00-00\""), nil
@@ -1249,10 +1276,10 @@ func (t Time) MarshalJSON() ([]byte, error) {
 	return []byte(s), nil
 }
 
-func (t *Time) UnmarshalJSON(b []byte) error {
+func (t *date) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), `"`)
 	if s == "0000-00-00" {
-		*t = Time(time.Time{})
+		*t = date(time.Time{})
 		return nil
 	}
 
@@ -1260,17 +1287,17 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	*t = Time(st)
+	*t = date(st)
 	return nil
 }
 
-type TimeUnix time.Time
+type timeUnix time.Time
 
-func (t TimeUnix) Equal(o TimeUnix) bool {
+func (t timeUnix) Equal(o timeUnix) bool {
 	return time.Time(t).Equal(time.Time(o))
 }
 
-func (t TimeUnix) String() string {
+func (t timeUnix) String() string {
 	st := time.Time(t)
 	if st.IsZero() {
 		return "0"
@@ -1278,7 +1305,7 @@ func (t TimeUnix) String() string {
 	return strconv.FormatInt(time.Time(t).Unix()*1000, 10)
 }
 
-func (t TimeUnix) MarshalJSON() ([]byte, error) {
+func (t timeUnix) MarshalJSON() ([]byte, error) {
 	st := time.Time(t)
 	if st.IsZero() {
 		return []byte("0"), nil
@@ -1286,12 +1313,12 @@ func (t TimeUnix) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Time(t).Unix() * 1000)
 }
 
-func (t *TimeUnix) UnmarshalJSON(b []byte) error {
+func (t *timeUnix) UnmarshalJSON(b []byte) error {
 	var i int64
 	if err := json.Unmarshal(b, &i); err != nil {
 		return err
 	}
-	*t = TimeUnix(time.Unix(i/1000, 0))
+	*t = timeUnix(time.Unix(i/1000, 0))
 	return nil
 }
 

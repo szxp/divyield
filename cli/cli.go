@@ -58,10 +58,19 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 		fmt.Println("splits:", len(splits))
 
+        /*
+        dividends, err := c.fetchDividends(ctx, symbol, from)
+		if err != nil {
+			return err
+		}
+		fmt.Println("dividends:", len(dividends))
 
-
-
-		//c.saveSplits(sout.Splits)
+		prices, err := c.fetchPrices(ctx, symbol, from)
+		if err != nil {
+			return err
+		}
+		fmt.Println("prices:", len(prices))
+        */
 	}
 	return nil
 }
@@ -78,7 +87,7 @@ func (c *Command) fetchSplits(
 	}
 
 	if len(latestSplits) > 0 {
-		from = latestSplits[0].ExDate
+		from = latestSplits[0].ExDate.AddDate(0, 0, 1)
 	}
 
 	in := &divyield.SplitFetchInput{
