@@ -147,29 +147,3 @@ type DividendYieldFilter struct {
 type StockFetcher interface {
 	Fetch(ctx context.Context, tickers []string)
 }
-
-type SplitFetcher interface {
-	Fetch(
-		ctx context.Context,
-		ticker string,
-		startDate time.Time,
-		endDate time.Time,
-	) ([]*Split, error)
-}
-
-type Split struct {
-	ExDate     time.Time
-	ToFactor   int
-	FromFactor int
-}
-
-func (s *Split) String() string {
-	return fmt.Sprintf("%v: %v",
-		time.Time(s.ExDate).Format(DateFormat),
-		float64(s.ToFactor)/float64(s.FromFactor),
-	)
-}
-
-type SplitFilter struct {
-	Limit uint64
-}

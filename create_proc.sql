@@ -9,6 +9,7 @@ begin
     execute 'create table if not exists ' || quote_ident(schema_name) || '.price (
         date        date not null,
         symbol      varchar(10) not null,
+        currency    char(3) not null,
         close       numeric not null,
         high        numeric not null,
         low         numeric not null,

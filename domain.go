@@ -2,11 +2,45 @@ package divyield
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
 type Command interface {
 	Execute(ctx context.Context) error
+}
+
+type SplitService interface {
+	Fetch(
+		ctx context.Context,
+		in *SplitFetchInput,
+	) (*SplitFetchOutput, error)
+}
+
+type SplitFetchInput struct {
+	Symbol string
+	From   time.Time
+}
+
+type SplitFetchOutput struct {
+	Splits []*Split
+}
+
+type Split struct {
+	ExDate     time.Time
+	ToFactor   int
+	FromFactor int
+}
+
+func (s *Split) String() string {
+	return fmt.Sprintf("%v: %v",
+		time.Time(s.ExDate).Format(DateFormat),
+		float64(s.ToFactor)/float64(s.FromFactor),
+	)
+}
+
+type SplitFilter struct {
+	Limit uint64
 }
 
 type CompanyProfileService interface {
@@ -96,10 +130,9 @@ type ExchangeFetchOutput struct {
 }
 
 type Exchange struct {
-	Region         string
-	Exchange       string
-	Suffix       string
-    Currency string
-	Description    string
+	Region      string
+	Exchange    string
+	Suffix      string
+	Currency    string
+	Description string
 }
-

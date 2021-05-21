@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+	"time"
 
 	"szakszon.com/divyield"
 )
@@ -31,6 +32,8 @@ func NewCommand(name string, args []string, os ...Option) *Command {
 
 func (c *Command) Execute(ctx context.Context) error {
 	switch c.name {
+	case "pull":
+		return c.pull(ctx)
 	case "company":
 		return c.company(ctx)
 	case "symbols":
@@ -40,6 +43,53 @@ func (c *Command) Execute(ctx context.Context) error {
 	default:
 		return fmt.Errorf("invalid command")
 	}
+}
+
+func (c *Command) pull(ctx context.Context) error {
+	from := time.Date(
+		time.Now().UTC().Year()-11, time.January, 1,
+		0, 0, 0, 0, time.UTC,
+	)
+
+	for _, symbol := range c.args {
+		splits, err := c.fetchSplits(ctx, symbol, from)
+		if err != nil {
+			return err
+		}
+		fmt.Println("splits:", len(splits))
+
+
+
+
+		//c.saveSplits(sout.Splits)
+	}
+	return nil
+}
+
+func (c *Command) fetchSplits(
+	ctx context.Context,
+	symbol string,
+	from time.Time,
+) ([]*divyield.Split, error) {
+	latestSplits, err := c.opts.db.Splits(
+		ctx, symbol, &divyield.SplitFilter{Limit: 1})
+	if err != nil {
+		return nil, fmt.Errorf("latest split: %s", err)
+	}
+
+	if len(latestSplits) > 0 {
+		from = latestSplits[0].ExDate
+	}
+
+	in := &divyield.SplitFetchInput{
+		Symbol: symbol,
+		From:   from,
+	}
+	out, err := c.opts.splitService.Fetch(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out.Splits, nil
 }
 
 func (c *Command) company(ctx context.Context) error {
@@ -242,11 +292,15 @@ var defaultOptions = options{
 }
 
 type options struct {
+	db                    divyield.DB
 	writer                io.Writer
 	dir                   string
+	dryRun                bool
+	startDate             time.Time
 	companyProfileService divyield.CompanyProfileService
 	isinService           divyield.ISINService
 	exchangeService       divyield.ExchangeService
+	splitService          divyield.SplitService
 }
 
 type Option func(o options) options
@@ -261,6 +315,20 @@ func Writer(v io.Writer) Option {
 func Dir(v string) Option {
 	return func(o options) options {
 		o.dir = v
+		return o
+	}
+}
+
+func DryRun(v bool) Option {
+	return func(o options) options {
+		o.dryRun = v
+		return o
+	}
+}
+
+func StartDate(v time.Time) Option {
+	return func(o options) options {
+		o.startDate = v
 		return o
 	}
 }
@@ -286,4 +354,16 @@ func ExchangeService(v divyield.ExchangeService) Option {
 	}
 }
 
+func SplitService(v divyield.SplitService) Option {
+	return func(o options) options {
+		o.splitService = v
+		return o
+	}
+}
 
+func DB(db divyield.DB) Option {
+	return func(o options) options {
+		o.db = db
+		return o
+	}
+}

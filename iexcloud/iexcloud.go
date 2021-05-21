@@ -45,6 +45,7 @@ func NewIEXCloud(os ...Option) *IEXCloud {
 }
 
 func (c *IEXCloud) companyURL(symbol string) string {
+	symbol = strings.ToLower(symbol)
 	return c.opts.baseURL +
 		"/stock/" + symbol + "/company" +
 		"?token=" + c.opts.token
@@ -57,13 +58,23 @@ func (c *IEXCloud) isinMappingURL(isin string) string {
 		"&token=" + c.opts.token
 }
 
-
 func (c *IEXCloud) internationalExchangesURL() string {
 	return c.opts.baseURL +
 		"/ref-data/exchanges" +
 		"?token=" + c.opts.token
 }
 
+func (c *IEXCloud) splitsURL(
+	symbol string,
+	from time.Time,
+) string {
+	symbol = strings.ToLower(symbol)
+	return c.opts.baseURL +
+		"/time-series" +
+		"/SPLITS/" + symbol +
+		"?from=" + from.Format(divyield.DateFormat) +
+		"&token=" + c.opts.token
+}
 
 func (c *IEXCloud) httpGet(
 	ctx context.Context,
@@ -74,6 +85,100 @@ func (c *IEXCloud) httpGet(
 		return nil, err
 	}
 	return c.httpClient.Do(req)
+}
+
+func (c *IEXCloud) NewSplitService() divyield.SplitService {
+	return &splitService{
+		IEXCloud: c,
+	}
+}
+
+type splitService struct {
+	*IEXCloud
+}
+
+func (s *splitService) Fetch(
+	ctx context.Context,
+	in *divyield.SplitFetchInput,
+) (*divyield.SplitFetchOutput, error) {
+	u := s.splitsURL(in.Symbol, in.From)
+	resp, err := s.httpGet(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+
+	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+	}
+
+	splits, err := s.parseSplits(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse splits: %s", err)
+	}
+	sortSplitsDesc(splits)
+
+	out := &divyield.SplitFetchOutput{
+		Splits: make([]*divyield.Split, 0, len(splits)),
+	}
+
+	for _, v := range splits {
+		split := &divyield.Split{
+			ExDate:     time.Time(v.ExDate),
+			FromFactor: v.FromFactor,
+			ToFactor:   v.ToFactor,
+		}
+		out.Splits = append(out.Splits, split)
+	}
+
+	return out, nil
+}
+
+func (c *IEXCloud) parseSplits(
+	r io.Reader,
+) ([]*split, error) {
+	splits := make([]*split, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	// while the array contains values
+	for dec.More() {
+		var v split
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode split: %s", err)
+		}
+		splits = append(splits, &v)
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	return splits, nil
+}
+
+func sortSplitsDesc(a []*split) {
+	sort.SliceStable(a, func(i, j int) bool {
+		ti := time.Time(a[i].ExDate)
+		tj := time.Time(a[j].ExDate)
+		return ti.After(tj)
+	})
+}
+
+type split struct {
+	ExDate     Time `json:"exDate"`
+	FromFactor int  `json:"fromFactor"`
+	ToFactor   int  `json:"toFactor"`
 }
 
 func (c *IEXCloud) NewCompanyProfileService() divyield.CompanyProfileService {
@@ -264,13 +369,11 @@ func sortSymbolsISINs(symbols []*symbolISIN) {
 	})
 }
 
-
 type symbolISIN struct {
 	Symbol   string `json:"symbol"`
 	Exchange string `json:"exchange"`
 	Region   string `json:"region"`
 }
-
 
 func (c *IEXCloud) NewExchangeService() divyield.ExchangeService {
 	return &exchangeService{
@@ -310,14 +413,14 @@ func (s *exchangeService) Fetch(
 	}
 
 	for _, v := range exchanges {
-        currency := regionCurrencyMap[v.Region]
+		currency := regionCurrencyMap[v.Region]
 
 		ex := &divyield.Exchange{
-			Region:   v.Region,
-			Exchange: v.Exchange,
-		    Suffix:   v.ExchangeSuffix,
-            Currency: currency,
-		    Description:   v.Description,
+			Region:      v.Region,
+			Exchange:    v.Exchange,
+			Suffix:      v.ExchangeSuffix,
+			Currency:    currency,
+			Description: v.Description,
 		}
 		out.Exchanges = append(out.Exchanges, ex)
 	}
@@ -367,7 +470,7 @@ func sortInternationalExchanges(a []*exchange) {
 			return false
 		}
 
-		switch strings.Compare( a[i].Exchange, a[j].Exchange) {
+		switch strings.Compare(a[i].Exchange, a[j].Exchange) {
 		case -1:
 			return true
 		case 1:
@@ -379,28 +482,27 @@ func sortInternationalExchanges(a []*exchange) {
 }
 
 var regionCurrencyMap = map[string]string{
-    "BE": "EUR",
-    "CA": "CAD",
-    "CH": "CHF",
-    "DE": "EUR",
-    "DK": "DKK",
-    "ES": "EUR",
-    "FR": "EUR",
-    "GB": "GBP",
-    "HU": "HUF",
-    "IT": "EUR",
-    "JP": "JPY",
-    "LU": "EUR",
-    "NL": "EUR",
-    "US": "USD",
+	"BE": "EUR",
+	"CA": "CAD",
+	"CH": "CHF",
+	"DE": "EUR",
+	"DK": "DKK",
+	"ES": "EUR",
+	"FR": "EUR",
+	"GB": "GBP",
+	"HU": "HUF",
+	"IT": "EUR",
+	"JP": "JPY",
+	"LU": "EUR",
+	"NL": "EUR",
+	"US": "USD",
 }
 
-
 type exchange struct {
-	Region   string `json:"region"`
-	Exchange string `json:"exchange"`
-	ExchangeSuffix   string `json:"exchangeSuffix"`
-	Description   string `json:"description"`
+	Region         string `json:"region"`
+	Exchange       string `json:"exchange"`
+	ExchangeSuffix string `json:"exchangeSuffix"`
+	Description    string `json:"description"`
 }
 
 type options struct {
@@ -417,7 +519,6 @@ type options struct {
 	rateLimiter       *rate.Limiter
 	workers           int
 	db                divyield.DB
-	splitFetcher      divyield.SplitFetcher
 }
 
 type Option func(o options) options
@@ -471,6 +572,13 @@ func RateLimiter(l *rate.Limiter) Option {
 	}
 }
 
+func DB(db divyield.DB) Option {
+	return func(o options) options {
+		o.db = db
+		return o
+	}
+}
+
 func Timeout(d time.Duration) Option {
 	return func(o options) options {
 		o.timeout = d
@@ -495,20 +603,6 @@ func Force(f bool) Option {
 func Log(l logger.Logger) Option {
 	return func(o options) options {
 		o.logger = l
-		return o
-	}
-}
-
-func DB(db divyield.DB) Option {
-	return func(o options) options {
-		o.db = db
-		return o
-	}
-}
-
-func SplitFetcher(f divyield.SplitFetcher) Option {
-	return func(o options) options {
-		o.splitFetcher = f
 		return o
 	}
 }
@@ -677,21 +771,22 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 		return nil // up-to-date
 	}
 
-	newSplits, err := f.opts.splitFetcher.Fetch(
-		ctx, ticker, downloadFrom, today)
-	if err != nil {
-		return err
-	}
-
-	//f.log("%v: new splits: %v", ticker, len(newSplits))
-
-	if len(newSplits) > 0 {
-		err = f.opts.db.PrependSplits(ctx, ticker, newSplits)
+	/*
+		newSplits, err := f.opts.splitFetcher.Fetch(
+			ctx, ticker, downloadFrom, today)
 		if err != nil {
-			return fmt.Errorf("save splits: %s", err)
+			return err
 		}
-	}
 
+		//f.log("%v: new splits: %v", ticker, len(newSplits))
+
+		if len(newSplits) > 0 {
+			err = f.opts.db.PrependSplits(ctx, ticker, newSplits)
+			if err != nil {
+				return fmt.Errorf("save splits: %s", err)
+			}
+		}
+	*/
 	return nil
 }
 

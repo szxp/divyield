@@ -9,17 +9,17 @@ import (
 	_ "github.com/lib/pq"
 	"golang.org/x/time/rate"
 	"io"
-    "io/ioutil"
+	"io/ioutil"
 	"os"
 	"os/signal"
-    "os/user"
+	"os/user"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-    "path/filepath"
 
 	//"szakszon.com/divyield"
 	"szakszon.com/divyield/chart"
@@ -28,7 +28,6 @@ import (
 	"szakszon.com/divyield/stats"
 	//"szakszon.com/divyield/xrates"
 	"szakszon.com/divyield/cli"
-	"szakszon.com/divyield/yahoo"
 )
 
 const defaultStocksDir = "work/stocks"
@@ -52,17 +51,6 @@ func main() {
 		fmt.Println("Ctrl+C pressed")
 		ctxCancel()
 	}()
-
-	dbConnStr := flag.CommandLine.String(
-		"db",
-		"postgres://postgres:postgres@localhost/divyield?sslmode=disable",
-		"database connection string")
-
-	startDateFlag := flag.CommandLine.String(
-		"startDate",
-		"-10y",
-		"start date of the chart period, "+
-			"format 2010-06-05 or relative -10y")
 
 	noCutDividend := flag.CommandLine.Bool(
 		"no-cut-dividend",
@@ -155,7 +143,43 @@ func main() {
 
 	}
 
-	db, err := sql.Open("postgres", *dbConnStr)
+	optsFlagSet := flag.NewFlagSet("options", flag.ExitOnError)
+	dirFlag := optsFlagSet.String(
+		"directory",
+		".",
+		"An optional directory to which to create files. "+
+			"By default, all files and subdirectories are created "+
+			"in the current directory.",
+	)
+	iexCloudBaseURLFlag := optsFlagSet.String(
+		"iexcloud-base-url",
+		"https://cloud.iexapis.com/stable",
+		"IEX Cloud base URL.",
+	)
+	iexCloudCredentialsFileFlag := optsFlagSet.String(
+		"iexcloud-credentials-file",
+		".divyield/iexcloud-credentials",
+		"IEX Cloud credentials file relative to the user's home directory.",
+	)
+	dryRunFlag := optsFlagSet.Bool(
+		"dry-run",
+		false,
+		"Show what would be done, without making any changes.",
+	)
+	dbConnStrFlag := optsFlagSet.String(
+		"database",
+		"postgres://postgres:postgres@localhost/divyield?sslmode=disable",
+		"Database connection string.",
+	)
+	startDateFlag := optsFlagSet.String(
+		"start-date",
+		"-10y",
+		"Start date of the period, "+
+			"format 2010-06-05 or relative -10y.",
+	)
+	optsFlagSet.Parse(os.Args[2:])
+
+	db, err := sql.Open("postgres", *dbConnStrFlag)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -166,71 +190,49 @@ func main() {
 		DB: db,
 	}
 
-	splitFetcher := yahoo.NewSplitFetcher(
-		yahoo.RateLimiter(rate.NewLimiter(rate.Every(1*time.Second), 1)),
-		yahoo.Timeout(10*time.Second),
-		yahoo.Log(stdoutSync),
-	)
-
 	startDate, err := parseDate(*startDateFlag)
 	if err != nil {
 		fmt.Println("invalid start date: ", *startDateFlag)
-		return
+		os.Exit(1)
 	}
-
-	optsFlagSet := flag.NewFlagSet("options", flag.ExitOnError)
-	var dirFlag = optsFlagSet.String(
-		"directory",
-		"",
-		"An optional directory to which to create files. "+
-			"By default, all files and subdirectories are created "+
-			"in the current directory.",
-	)
-	var iexCloudBaseURLFlag = optsFlagSet.String(
-		"iexcloud-base-url",
-		"https://cloud.iexapis.com/stable",
-		"IEX Cloud base URL",
-	)
-	var iexCloudCredentialsFileFlag = optsFlagSet.String(
-		"iexcloud-credential-file",
-		".divyield/iexcloud-credentials",
-		"IEX Cloud credentials file",
-	)
-	optsFlagSet.Parse(os.Args[2:])
-
-    usr, _ := user.Current()
-    iexCloudToken, err := ioutil.ReadFile(filepath.Join(
-        usr.HomeDir,
-        *iexCloudCredentialsFileFlag,
-    ))
+	usr, _ := user.Current()
+	iexCloudToken, err := ioutil.ReadFile(filepath.Join(
+		usr.HomeDir,
+		*iexCloudCredentialsFileFlag,
+	))
 	if err != nil {
 		fmt.Println(err)
-		return
+		os.Exit(1)
 	}
 
 	iexc := iexcloud.NewIEXCloud(
 		iexcloud.BaseURL(*iexCloudBaseURLFlag),
 		iexcloud.Token(string(iexCloudToken)),
 		iexcloud.RateLimiter(
-			rate.NewLimiter(rate.Every(500*time.Millisecond), 2)),
+			rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
 	)
 	comProSrv := iexc.NewCompanyProfileService()
 	isinSrv := iexc.NewISINService()
 	exchangeSrv := iexc.NewExchangeService()
+	splitSrv := iexc.NewSplitService()
 
 	cmd := cli.NewCommand(
 		os.Args[1],
 		optsFlagSet.Args(),
+		cli.DB(pdb),
 		cli.Writer(stdoutSync),
 		cli.Dir(*dirFlag),
+		cli.DryRun(*dryRunFlag),
+		cli.StartDate(startDate),
 		cli.CompanyProfileService(comProSrv),
 		cli.ISINService(isinSrv),
 		cli.ExchangeService(exchangeSrv),
+		cli.SplitService(splitSrv),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {
 		fmt.Println(err)
-		return
+		os.Exit(1)
 	}
 	return
 
@@ -278,7 +280,6 @@ func main() {
 			iexcloud.Force(*fetchForce),
 			iexcloud.Log(stdoutSync),
 			iexcloud.DB(pdb),
-			iexcloud.SplitFetcher(splitFetcher),
 		)
 		fetcher.Fetch(ctx, tickers)
 		for _, err := range fetcher.Errs() {
