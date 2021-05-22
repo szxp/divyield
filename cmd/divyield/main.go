@@ -211,6 +211,8 @@ func main() {
 		os.Exit(1)
 	}
 
+    currencySrv := xrates.NewCurrencyService()
+
 	iexc := iexcloud.NewIEXCloud(
 		iexcloud.BaseURL(*iexCloudBaseURLFlag),
 		iexcloud.Token(string(iexCloudToken)),

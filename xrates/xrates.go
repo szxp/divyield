@@ -19,12 +19,12 @@ import (
 	"szakszon.com/divyield/logger"
 )
 
-type CurrencyConverter struct {
+type currencyService struct {
 	client *httprate.RLClient
 	opts   options
 }
 
-func NewCurrencyConverter(os ...Option) divyield.CurrencyConverter {
+func NewCurrencyService(os ...Option) divyield.CurrencyService {
 	opts := defaultOptions
 	for _, o := range os {
 		opts = o(opts)
@@ -39,13 +39,13 @@ func NewCurrencyConverter(os ...Option) divyield.CurrencyConverter {
 		Ratelimiter: opts.rateLimiter,
 	}
 
-	return &CurrencyConverter{
+	return &currencyService{
 		client: rlClient,
 		opts:   opts,
 	}
 }
 
-func (cc *CurrencyConverter) Convert(
+func (cc *currencyService) Convert(
 	ctx context.Context,
 	in *divyield.CurrencyConvertInput,
 ) (*divyield.CurrencyConvertOutput, error) {
@@ -94,7 +94,7 @@ func (cc *CurrencyConverter) Convert(
 	return out, nil
 }
 
-func (cc *CurrencyConverter) ratesURL(
+func (cc *currencyService) ratesURL(
 	from string,
 	amount float64,
 	date time.Time,
@@ -105,7 +105,7 @@ func (cc *CurrencyConverter) ratesURL(
 		"&date=" + date.Format(divyield.DateFormat)
 }
 
-func (cc *CurrencyConverter) parseRate(
+func (cc *currencyService) parseRate(
 	from string,
 	to string,
 	s string,
@@ -124,7 +124,7 @@ func (cc *CurrencyConverter) parseRate(
 	return strconv.ParseFloat(matches[1], 64)
 }
 
-func (cc *CurrencyConverter) logf(
+func (cc *currencyService) logf(
 	format string,
 	v ...interface{},
 ) {
