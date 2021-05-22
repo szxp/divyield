@@ -22,11 +22,10 @@ type DB interface {
 		f *PriceFilter,
 	) ([]*Price, error)
 
-	PrependPrices(
+	SavePrices(
 		ctx context.Context,
-		ticker string,
-		prices []*Price,
-	) error
+		in *DBSavePricesInput,
+	) (*DBSavePricesOutput, error)
 
 	Dividends(
 		ctx context.Context,
@@ -57,6 +56,15 @@ type DB interface {
 	) (*DBSaveSplitsOutput, error)
 }
 
+type DBSavePricesInput struct {
+	Symbol string
+	Prices []*Price
+	Reset  bool
+}
+
+type DBSavePricesOutput struct {
+}
+
 type DBSaveDividendsInput struct {
 	Symbol    string
 	Dividends []*Dividend
@@ -77,6 +85,21 @@ type DBSaveSplitsOutput struct {
 
 const DateFormat = "2006-01-02"
 
+type PriceService interface {
+	Fetch(
+		ctx context.Context,
+		in *PriceFetchInput,
+	) (*PriceFetchOutput, error)
+}
+
+type PriceFetchInput struct {
+	Symbol string
+	From   time.Time
+}
+
+type PriceFetchOutput struct {
+	Prices []*Price
+}
 type Price struct {
 	Date     time.Time
 	Symbol   string
@@ -86,6 +109,7 @@ type Price struct {
 	Low      float64
 	Open     float64
 	Volume   float64
+	Currency string
 }
 
 func (p *Price) String() string {

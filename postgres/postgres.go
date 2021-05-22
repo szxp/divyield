@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/lib/pq"
@@ -110,8 +109,16 @@ func (db *DB) Prices(
 		schema := schemaStock(ticker)
 
 		q := sq.Select(
-			"date", "symbol", "close", "close_adj", "high",
-			"low", "open", "volume").
+			"date",
+			"symbol",
+			"close",
+			"close_adj",
+			"high",
+			"low",
+			"open",
+			"volume",
+			"currency",
+		).
 			From(schema + ".price").
 			OrderBy("date desc").
 			PlaceholderFormat(sq.Dollar)
@@ -144,9 +151,19 @@ func (db *DB) Prices(
 			var low float64
 			var open float64
 			var volume float64
+			var currency string
 
-			err = rows.Scan(&date, &symbol, &close, &closeAdj, &high,
-				&low, &open, &volume)
+			err = rows.Scan(
+				&date,
+				&symbol,
+				&close,
+				&closeAdj,
+				&high,
+				&low,
+				&open,
+				&volume,
+				&currency,
+			)
 			if err != nil {
 				return err
 			}
@@ -159,6 +176,7 @@ func (db *DB) Prices(
 				Low:      low,
 				Open:     open,
 				Volume:   volume,
+				Currency:  currency,
 			}
 			prices = append(prices, np)
 		}
@@ -170,48 +188,69 @@ func (db *DB) Prices(
 	return prices, nil
 }
 
-func (db *DB) PrependPrices(
+func (db *DB) SavePrices(
 	ctx context.Context,
-	ticker string,
-	prices []*divyield.Price,
-) error {
-	if len(prices) == 0 {
-		return nil
-	}
-
+	in *divyield.DBSavePricesInput,
+) (*divyield.DBSavePricesOutput, error) {
 	err := execTx(ctx, db.DB, func(runner runner) error {
-		schema := schemaStock(ticker)
+		schema := schemaStock(in.Symbol)
 
-		row := runner.QueryRowContext(ctx,
-			"select date from "+schema+".price "+
-				"order by date desc limit 1")
+		/*
+			row := runner.QueryRowContext(ctx,
+				"select date from "+schema+".price "+
+					"order by date desc limit 1")
 
-		var date time.Time
-		err := row.Scan(&date)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
+				var date time.Time
+				err := row.Scan(&date)
+				if err != nil && !errors.Is(err, sql.ErrNoRows) {
+					return err
+				}
 
-		if !date.IsZero() {
-			newBottom := prices[len(prices)-1]
-			if !newBottom.Date.Equal(date) {
-				return fmt.Errorf(
-					"non-overlapping price dates %v vs %v",
-					newBottom.Date, date)
+				if !date.IsZero() {
+					newBottom := prices[len(prices)-1]
+					if !newBottom.Date.Equal(date) {
+						return fmt.Errorf(
+							"non-overlapping price dates %v vs %v",
+							newBottom.Date, date)
+					}
+
+					// forget the last one
+					prices = prices[:len(prices)-1]
+				}
+		*/
+
+		if in.Reset {
+			sql, args, err := sq.
+				Delete("").
+				From(schema + ".price").
+				ToSql()
+
+			_, err = runner.ExecContext(ctx, sql, args...)
+			if err != nil {
+				return err
 			}
-
-			// forget the last one
-			prices = prices[:len(prices)-1]
 		}
 
-		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
-			schema, "price", "date", "symbol",
-			"close", "high", "low", "open", "volume"))
+		stmt, err := runner.PrepareContext(
+			ctx,
+			pq.CopyInSchema(
+				schema,
+				"price",
+				"date",
+				"symbol",
+				"close",
+				"high",
+				"low",
+				"open",
+				"volume",
+				"currency",
+			),
+		)
 		if err != nil {
 			return err
 		}
 
-		for _, v := range prices {
+		for _, v := range in.Prices {
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("interrupted")
@@ -219,8 +258,17 @@ func (db *DB) PrependPrices(
 				// noop
 			}
 
-			_, err = stmt.ExecContext(ctx, v.Date, v.Symbol, v.Close,
-				v.High, v.Low, v.Open, v.Volume)
+			_, err = stmt.ExecContext(
+				ctx,
+				v.Date,
+				v.Symbol,
+				v.Close,
+				v.High,
+				v.Low,
+				v.Open,
+				v.Volume,
+				v.Currency,
+			)
 			if err != nil {
 				return err
 			}
@@ -237,13 +285,12 @@ func (db *DB) PrependPrices(
 		}
 
 		err = updateCloseAdj(ctx, runner, schema)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		return err
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return &divyield.DBSavePricesOutput{}, nil
 }
 
 func (db *DB) Dividends(

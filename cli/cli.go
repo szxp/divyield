@@ -64,7 +64,7 @@ func (c *Command) pull(ctx context.Context) error {
 	}
 
 	for _, symbol := range symbols {
-		pout, err := c.opts.profileService.Fetch(
+		proout, err := c.opts.profileService.Fetch(
 			ctx,
 			&divyield.ProfileFetchInput{
 				Symbol: symbol,
@@ -74,7 +74,7 @@ func (c *Command) pull(ctx context.Context) error {
 			return err
 		}
 
-		if pout.Profile == nil {
+		if proout.Profile == nil {
 			return fmt.Errorf("profile not found: " + symbol)
 		}
 
@@ -111,27 +111,17 @@ func (c *Command) pull(ctx context.Context) error {
 			}
 		}
 
-		sin := &divyield.SplitFetchInput{
-			Symbol: symbol,
-			From:   fromSplits,
-		}
-		sout, err := c.opts.splitService.Fetch(ctx, sin)
-		if err != nil {
-			return err
-		}
-		fmt.Println("splits:", len(sout.Splits))
-
-		_, err = c.opts.db.SaveSplits(
+		sout, err := c.opts.splitService.Fetch(
 			ctx,
-			&divyield.DBSaveSplitsInput{
+			&divyield.SplitFetchInput{
 				Symbol: symbol,
-				Splits: sout.Splits,
-				Reset:  c.opts.reset,
+				From:   fromSplits,
 			},
 		)
 		if err != nil {
 			return err
 		}
+		fmt.Println("splits:", len(sout.Splits))
 
 		fromDividends := from
 		if !c.opts.reset {
@@ -145,15 +135,56 @@ func (c *Command) pull(ctx context.Context) error {
 			}
 		}
 
-		din := &divyield.DividendFetchInput{
-			Symbol: symbol,
-			From:   fromDividends,
-		}
-		dout, err := c.opts.dividendService.Fetch(ctx, din)
+		dout, err := c.opts.dividendService.Fetch(
+			ctx,
+			&divyield.DividendFetchInput{
+				Symbol: symbol,
+				From:   fromDividends,
+			},
+		)
 		if err != nil {
 			return err
 		}
 		fmt.Println("dividends:", len(dout.Dividends))
+
+		fromPrices := from
+		if !c.opts.reset {
+			fromPrices, err = c.adjustFromPrices(
+				ctx,
+				symbol,
+				from,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		pout, err := c.opts.priceService.Fetch(
+			ctx,
+			&divyield.PriceFetchInput{
+				Symbol: symbol,
+				From:   fromPrices,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		for i, _ := range pout.Prices {
+			pout.Prices[i].Currency = currency
+		}
+		fmt.Println("prices:", len(pout.Prices))
+
+		_, err = c.opts.db.SaveSplits(
+			ctx,
+			&divyield.DBSaveSplitsInput{
+				Symbol: symbol,
+				Splits: sout.Splits,
+				Reset:  c.opts.reset,
+			},
+		)
+		if err != nil {
+			return err
+		}
 
 		_, err = c.opts.db.SaveDividends(
 			ctx,
@@ -161,6 +192,18 @@ func (c *Command) pull(ctx context.Context) error {
 				Symbol:    symbol,
 				Dividends: dout.Dividends,
 				Reset:     c.opts.reset,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		_, err = c.opts.db.SavePrices(
+			ctx,
+			&divyield.DBSavePricesInput{
+				Symbol: symbol,
+				Prices: pout.Prices,
+				Reset:  c.opts.reset,
 			},
 		)
 		if err != nil {
@@ -201,6 +244,22 @@ func (c *Command) adjustFromDividends(
 		return from, nil
 	}
 	return latest[0].ExDate.AddDate(0, 0, 1), nil
+}
+
+func (c *Command) adjustFromPrices(
+	ctx context.Context,
+	symbol string,
+	from time.Time,
+) (time.Time, error) {
+	latest, err := c.opts.db.Prices(
+		ctx, symbol, &divyield.PriceFilter{Limit: 1})
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(latest) == 0 {
+		return from, nil
+	}
+	return latest[0].Date.AddDate(0, 0, 1), nil
 }
 
 func (c *Command) profile(ctx context.Context) error {
@@ -420,6 +479,7 @@ type options struct {
 	exchangeService divyield.ExchangeService
 	splitService    divyield.SplitService
 	dividendService divyield.DividendService
+	priceService    divyield.PriceService
 }
 
 type Option func(o options) options
@@ -493,6 +553,14 @@ func DividendService(v divyield.DividendService) Option {
 		return o
 	}
 }
+
+func PriceService(v divyield.PriceService) Option {
+	return func(o options) options {
+		o.priceService = v
+		return o
+	}
+}
+
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db

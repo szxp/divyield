@@ -216,12 +216,14 @@ func main() {
 		iexcloud.Token(string(iexCloudToken)),
 		iexcloud.RateLimiter(
 			rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
+		iexcloud.Timeout(10*time.Second),
 	)
 	comProSrv := iexc.NewProfileService()
 	isinSrv := iexc.NewISINService()
 	exchangeSrv := iexc.NewExchangeService()
 	splitSrv := iexc.NewSplitService()
 	dividendSrv := iexc.NewDividendService()
+	priceSrv := iexc.NewPriceService()
 
 	cmd := cli.NewCommand(
 		os.Args[1],
@@ -237,6 +239,7 @@ func main() {
 		cli.ExchangeService(exchangeSrv),
 		cli.SplitService(splitSrv),
 		cli.DividendService(dividendSrv),
+		cli.PriceService(priceSrv),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {
