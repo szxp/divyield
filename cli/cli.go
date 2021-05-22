@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -34,8 +35,8 @@ func (c *Command) Execute(ctx context.Context) error {
 	switch c.name {
 	case "pull":
 		return c.pull(ctx)
-	case "company":
-		return c.company(ctx)
+	case "profile":
+		return c.profile(ctx)
 	case "symbols":
 		return c.symbols(ctx)
 	case "exchanges":
@@ -46,80 +47,181 @@ func (c *Command) Execute(ctx context.Context) error {
 }
 
 func (c *Command) pull(ctx context.Context) error {
-	from := time.Date(
-		time.Now().UTC().Year()-11, time.January, 1,
-		0, 0, 0, 0, time.UTC,
+	symbols := c.args
+	from := c.opts.startDate
+
+	err := c.opts.db.InitSchema(ctx, symbols)
+	if err != nil {
+		return fmt.Errorf("init schema: %v", err)
+	}
+
+	eout, err := c.opts.exchangeService.Fetch(
+		ctx,
+		&divyield.ExchangeFetchInput{},
 	)
-
-	for _, symbol := range c.args {
-		splits, err := c.fetchSplits(ctx, symbol, from)
-		if err != nil {
-			return err
-		}
-		fmt.Println("splits:", len(splits))
-
-        /*
-        dividends, err := c.fetchDividends(ctx, symbol, from)
-		if err != nil {
-			return err
-		}
-		fmt.Println("dividends:", len(dividends))
-
-		prices, err := c.fetchPrices(ctx, symbol, from)
-		if err != nil {
-			return err
-		}
-		fmt.Println("prices:", len(prices))
-        */
-	}
-	return nil
-}
-
-func (c *Command) fetchSplits(
-	ctx context.Context,
-	symbol string,
-	from time.Time,
-) ([]*divyield.Split, error) {
-	latestSplits, err := c.opts.db.Splits(
-		ctx, symbol, &divyield.SplitFilter{Limit: 1})
-	if err != nil {
-		return nil, fmt.Errorf("latest split: %s", err)
-	}
-
-	if len(latestSplits) > 0 {
-		from = latestSplits[0].ExDate.AddDate(0, 0, 1)
-	}
-
-	in := &divyield.SplitFetchInput{
-		Symbol: symbol,
-		From:   from,
-	}
-	out, err := c.opts.splitService.Fetch(ctx, in)
-	if err != nil {
-		return nil, err
-	}
-	return out.Splits, nil
-}
-
-func (c *Command) company(ctx context.Context) error {
-	in := &divyield.CompanyProfileFetchInput{
-		Symbol: c.args[0],
-	}
-
-	out, err := c.opts.companyProfileService.Fetch(ctx, in)
 	if err != nil {
 		return err
 	}
 
-	if out.CompanyProfile == nil {
-		c.writef("Not found: %v", in.Symbol)
-		return nil
+	for _, symbol := range symbols {
+		pout, err := c.opts.profileService.Fetch(
+			ctx,
+			&divyield.ProfileFetchInput{
+				Symbol: symbol,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		if pout.Profile == nil {
+			return fmt.Errorf("profile not found: " + symbol)
+		}
+
+		var currency string
+		dashIdx := strings.LastIndexByte(symbol, '-')
+		if dashIdx != -1 {
+			symbolSuffix := symbol[dashIdx:]
+			for _, ex := range eout.Exchanges {
+				if ex.Suffix == symbolSuffix {
+					currency = ex.Currency
+				}
+			}
+			if currency == "" {
+				return fmt.Errorf(
+					"currency not found: %v",
+					symbolSuffix,
+				)
+			}
+		} else {
+			currency = "USD"
+		}
+
+		fmt.Println("Currency", currency)
+
+		fromSplits := from
+		if !c.opts.reset {
+			fromSplits, err = c.adjustFromSplits(
+				ctx,
+				symbol,
+				from,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		sin := &divyield.SplitFetchInput{
+			Symbol: symbol,
+			From:   fromSplits,
+		}
+		sout, err := c.opts.splitService.Fetch(ctx, sin)
+		if err != nil {
+			return err
+		}
+		fmt.Println("splits:", len(sout.Splits))
+
+		_, err = c.opts.db.SaveSplits(
+			ctx,
+			&divyield.DBSaveSplitsInput{
+				Symbol: symbol,
+				Splits: sout.Splits,
+				Reset:  c.opts.reset,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		fromDividends := from
+		if !c.opts.reset {
+			fromDividends, err = c.adjustFromDividends(
+				ctx,
+				symbol,
+				from,
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		din := &divyield.DividendFetchInput{
+			Symbol: symbol,
+			From:   fromDividends,
+		}
+		dout, err := c.opts.dividendService.Fetch(ctx, din)
+		if err != nil {
+			return err
+		}
+		fmt.Println("dividends:", len(dout.Dividends))
+
+		_, err = c.opts.db.SaveDividends(
+			ctx,
+			&divyield.DBSaveDividendsInput{
+				Symbol:    symbol,
+				Dividends: dout.Dividends,
+				Reset:     c.opts.reset,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
 	}
-	c.writeCompanyProfile(out.CompanyProfile)
 	return nil
 }
 
-func (c *Command) writeCompanyProfile(cp *divyield.CompanyProfile) {
+func (c *Command) adjustFromSplits(
+	ctx context.Context,
+	symbol string,
+	from time.Time,
+) (time.Time, error) {
+	latest, err := c.opts.db.Splits(
+		ctx, symbol, &divyield.SplitFilter{Limit: 1})
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(latest) == 0 {
+		return from, nil
+	}
+	return latest[0].ExDate.AddDate(0, 0, 1), nil
+}
+
+func (c *Command) adjustFromDividends(
+	ctx context.Context,
+	symbol string,
+	from time.Time,
+) (time.Time, error) {
+	latest, err := c.opts.db.Dividends(
+		ctx, symbol, &divyield.DividendFilter{Limit: 1})
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(latest) == 0 {
+		return from, nil
+	}
+	return latest[0].ExDate.AddDate(0, 0, 1), nil
+}
+
+func (c *Command) profile(ctx context.Context) error {
+	in := &divyield.ProfileFetchInput{
+		Symbol: c.args[0],
+	}
+
+	out, err := c.opts.profileService.Fetch(ctx, in)
+	if err != nil {
+		return err
+	}
+
+	if out.Profile == nil {
+		c.writef("Not found: %v", in.Symbol)
+		return nil
+	}
+	c.writeProfile(out.Profile)
+	return nil
+}
+
+func (c *Command) writeProfile(cp *divyield.Profile) {
 	buf := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buf, 0, 0, 2, ' ', 0)
 
@@ -139,6 +241,12 @@ func (c *Command) writeCompanyProfile(cp *divyield.CompanyProfile) {
 	b.WriteString("Exchange:")
 	b.WriteByte('\t')
 	b.WriteString(cp.Exchange)
+	fmt.Fprintln(w, b.String())
+
+	b.Reset()
+	b.WriteString("Issue type:")
+	b.WriteByte('\t')
+	b.WriteString(cp.IssueType)
 	fmt.Fprintln(w, b.String())
 
 	b.Reset()
@@ -301,15 +409,17 @@ var defaultOptions = options{
 }
 
 type options struct {
-	db                    divyield.DB
-	writer                io.Writer
-	dir                   string
-	dryRun                bool
-	startDate             time.Time
-	companyProfileService divyield.CompanyProfileService
-	isinService           divyield.ISINService
-	exchangeService       divyield.ExchangeService
-	splitService          divyield.SplitService
+	db              divyield.DB
+	writer          io.Writer
+	dir             string
+	dryRun          bool
+	startDate       time.Time
+	reset           bool
+	profileService  divyield.ProfileService
+	isinService     divyield.ISINService
+	exchangeService divyield.ExchangeService
+	splitService    divyield.SplitService
+	dividendService divyield.DividendService
 }
 
 type Option func(o options) options
@@ -342,9 +452,16 @@ func StartDate(v time.Time) Option {
 	}
 }
 
-func CompanyProfileService(v divyield.CompanyProfileService) Option {
+func Reset(v bool) Option {
 	return func(o options) options {
-		o.companyProfileService = v
+		o.reset = v
+		return o
+	}
+}
+
+func ProfileService(v divyield.ProfileService) Option {
+	return func(o options) options {
+		o.profileService = v
 		return o
 	}
 }
@@ -370,6 +487,12 @@ func SplitService(v divyield.SplitService) Option {
 	}
 }
 
+func DividendService(v divyield.DividendService) Option {
+	return func(o options) options {
+		o.dividendService = v
+		return o
+	}
+}
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db

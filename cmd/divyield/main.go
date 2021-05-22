@@ -173,10 +173,16 @@ func main() {
 	)
 	startDateFlag := optsFlagSet.String(
 		"start-date",
-		"-10y",
+		"-11y",
 		"Start date of the period, "+
-			"format 2010-06-05 or relative -10y.",
+			"format 2010-06-05 or relative -11y.",
 	)
+	reset := optsFlagSet.Bool(
+		"reset",
+		false,
+		"Reset data in the datebase with the new data",
+	)
+
 	optsFlagSet.Parse(os.Args[2:])
 
 	db, err := sql.Open("postgres", *dbConnStrFlag)
@@ -211,10 +217,11 @@ func main() {
 		iexcloud.RateLimiter(
 			rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
 	)
-	comProSrv := iexc.NewCompanyProfileService()
+	comProSrv := iexc.NewProfileService()
 	isinSrv := iexc.NewISINService()
 	exchangeSrv := iexc.NewExchangeService()
 	splitSrv := iexc.NewSplitService()
+	dividendSrv := iexc.NewDividendService()
 
 	cmd := cli.NewCommand(
 		os.Args[1],
@@ -224,10 +231,12 @@ func main() {
 		cli.Dir(*dirFlag),
 		cli.DryRun(*dryRunFlag),
 		cli.StartDate(startDate),
-		cli.CompanyProfileService(comProSrv),
+		cli.Reset(*reset),
+		cli.ProfileService(comProSrv),
 		cli.ISINService(isinSrv),
 		cli.ExchangeService(exchangeSrv),
 		cli.SplitService(splitSrv),
+		cli.DividendService(dividendSrv),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {

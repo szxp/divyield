@@ -26,7 +26,7 @@ func (db *DB) InitSchema(
 	schemasMissing := make([]string, 0, len(tickers))
 
 	for _, t := range tickers {
-		schemas = append(schemas, schemaName(t))
+		schemas = append(schemas, schemaStock(t))
 	}
 	//fmt.Printf("schemas: %+v\n", schemas)
 
@@ -92,7 +92,7 @@ OUTER_LOOP:
 	return err
 }
 
-func schemaName(ticker string) string {
+func schemaStock(ticker string) string {
 	s := strings.ToLower(ticker)
 	s = strings.ReplaceAll(s, "-", "_")
 	s = strings.ReplaceAll(s, ".", "_")
@@ -107,12 +107,12 @@ func (db *DB) Prices(
 	prices := make([]*divyield.Price, 0)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(ticker)
 
 		q := sq.Select(
 			"date", "symbol", "close", "close_adj", "high",
 			"low", "open", "volume").
-			From(schemaName + ".price").
+			From(schema + ".price").
 			OrderBy("date desc").
 			PlaceholderFormat(sq.Dollar)
 
@@ -180,10 +180,10 @@ func (db *DB) PrependPrices(
 	}
 
 	err := execTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(ticker)
 
 		row := runner.QueryRowContext(ctx,
-			"select date from "+schemaName+".price "+
+			"select date from "+schema+".price "+
 				"order by date desc limit 1")
 
 		var date time.Time
@@ -205,7 +205,7 @@ func (db *DB) PrependPrices(
 		}
 
 		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
-			schemaName, "price", "date", "symbol",
+			schema, "price", "date", "symbol",
 			"close", "high", "low", "open", "volume"))
 		if err != nil {
 			return err
@@ -236,7 +236,7 @@ func (db *DB) PrependPrices(
 			return err
 		}
 
-		err = updateCloseAdj(ctx, runner, schemaName)
+		err = updateCloseAdj(ctx, runner, schema)
 		if err != nil {
 			return err
 		}
@@ -254,12 +254,12 @@ func (db *DB) Dividends(
 	dividends := make([]*divyield.Dividend, 0)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(ticker)
 
 		q := sq.Select(
 			"ex_date", "amount", "amount_adj", "currency",
 			"frequency", "symbol", "payment_type").
-			From(schemaName + ".dividend_view").
+			From(schema + ".dividend_view").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
 
@@ -324,47 +324,67 @@ func (db *DB) Dividends(
 	return dividends, nil
 }
 
-func (db *DB) PrependDividends(
+func (db *DB) SaveDividends(
 	ctx context.Context,
-	ticker string,
-	dividends []*divyield.Dividend,
-) error {
-	if len(dividends) == 0 {
-		return nil
-	}
-
+	in *divyield.DBSaveDividendsInput,
+) (*divyield.DBSaveDividendsOutput, error) {
 	err := execTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(in.Symbol)
 
-		var date time.Time
-		err := runner.QueryRowContext(ctx,
-			"select ex_date from "+schemaName+".dividend_view "+
-				"order by ex_date desc limit 1").
-			Scan(&date)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-
-		if !date.IsZero() {
-			newBottom := dividends[len(dividends)-1]
-			if !newBottom.ExDate.Equal(date) {
-				return fmt.Errorf(
-					"non-overlapping dividend ex dates %v vs %v",
-					newBottom.ExDate, date)
+		/*
+			var date time.Time
+			err := runner.QueryRowContext(ctx,
+				"select ex_date from "+schema+".dividend_view "+
+					"order by ex_date desc limit 1").
+				Scan(&date)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
 			}
 
-			// forget the last one
-			dividends = dividends[:len(dividends)-1]
+			if !date.IsZero() {
+				newBottom := dividends[len(dividends)-1]
+				if !newBottom.ExDate.Equal(date) {
+					return fmt.Errorf(
+						"non-overlapping dividend ex dates %v vs %v",
+						newBottom.ExDate, date)
+				}
+
+				// forget the last one
+				dividends = dividends[:len(dividends)-1]
+			}
+		*/
+
+		if in.Reset {
+			sql, args, err := sq.
+				Delete("").
+				From(schema + ".dividend").
+				ToSql()
+
+			_, err = runner.ExecContext(ctx, sql, args...)
+			if err != nil {
+				return err
+			}
 		}
 
-		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
-			schemaName, "dividend", "id", "ex_date", "symbol",
-			"amount", "currency", "frequency", "payment_type"))
+		stmt, err := runner.PrepareContext(
+			ctx,
+			pq.CopyInSchema(
+				schema,
+				"dividend",
+				"id",
+				"ex_date",
+				"symbol",
+				"amount",
+				"currency",
+				"frequency",
+				"payment_type",
+			),
+		)
 		if err != nil {
 			return err
 		}
 
-		for _, v := range dividends {
+		for _, v := range in.Dividends {
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("interrupted")
@@ -372,9 +392,16 @@ func (db *DB) PrependDividends(
 				// noop
 			}
 
-			_, err = stmt.ExecContext(ctx,
-				v.ID, v.ExDate, v.Symbol, v.Amount,
-				v.Currency, v.Frequency, v.PaymentType)
+			_, err = stmt.ExecContext(
+				ctx,
+				v.ID,
+				v.ExDate,
+				v.Symbol,
+				v.Amount,
+				v.Currency,
+				v.Frequency,
+				v.PaymentType,
+			)
 			if err != nil {
 				return err
 			}
@@ -390,18 +417,18 @@ func (db *DB) PrependDividends(
 			return err
 		}
 
-		err = updateDividendAdj(ctx, runner, schemaName)
+		err = updateDividendAdj(ctx, runner, schema)
 		if err != nil {
 			return err
 		}
 
-		err = updateCloseAdj(ctx, runner, schemaName)
-		if err != nil {
-			return err
-		}
-		return nil
+		err = updateCloseAdj(ctx, runner, schema)
+		return err
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return &divyield.DBSaveDividendsOutput{}, nil
 }
 
 func (db *DB) DividendYields(
@@ -412,14 +439,14 @@ func (db *DB) DividendYields(
 	yields := make([]*divyield.DividendYield, 0)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(ticker)
 
 		q := sq.Select(
 			"date",
 			"close_adj",
 			`coalesce(
                 (select amount_adj from `+
-				schemaName+`.dividend_view 
+				schema+`.dividend_view 
                 where 
                     ex_date <= date and 
                     payment_type in ('Cash', 'Cash&Stock') and 
@@ -428,7 +455,7 @@ func (db *DB) DividendYields(
                 as div_amount_adj`,
 			`coalesce(
                 (select frequency from `+
-				schemaName+`.dividend_view 
+				schema+`.dividend_view 
                 where 
                     ex_date <= date and 
                     payment_type in ('Cash', 'Cash&Stock') and 
@@ -437,7 +464,7 @@ func (db *DB) DividendYields(
                 as div_freq`,
 			`coalesce(
                 (select sum(amount_adj) from `+
-				schemaName+`.dividend_view 
+				schema+`.dividend_view 
                 where 
                     ex_date >= (
                         date_trunc('month', CURRENT_DATE) 
@@ -450,7 +477,7 @@ func (db *DB) DividendYields(
                     frequency > 0), 0) 
                 as div_trail_ttm`,
 		).
-			From(schemaName + ".price").
+			From(schema + ".price").
 			OrderBy("date desc").
 			PlaceholderFormat(sq.Dollar)
 
@@ -508,46 +535,63 @@ func (db *DB) DividendYields(
 	return yields, nil
 }
 
-func (db *DB) PrependSplits(
+func (db *DB) SaveSplits(
 	ctx context.Context,
-	ticker string,
-	splits []*divyield.Split,
-) error {
-	if len(splits) == 0 {
-		return nil
-	}
-
+	in *divyield.DBSaveSplitsInput,
+) (*divyield.DBSaveSplitsOutput, error) {
 	err := execTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(in.Symbol)
 
-		var date time.Time
-		err := runner.QueryRowContext(ctx,
-			"select ex_date from "+schemaName+".split "+
-				"order by ex_date desc limit 1").
-			Scan(&date)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-
-		if !date.IsZero() {
-			newBottom := splits[len(splits)-1]
-			if !newBottom.ExDate.Equal(date) {
-				return fmt.Errorf(
-					"non-overlapping split ex dates %v vs %v",
-					newBottom.ExDate, date)
+		/*
+			var date time.Time
+			err := runner.QueryRowContext(ctx,
+				"select ex_date from "+schema+".split "+
+					"order by ex_date desc limit 1").
+				Scan(&date)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
 			}
 
-			// forget the last one
-			splits = splits[:len(splits)-1]
+			if !date.IsZero() {
+				newBottom := splits[len(splits)-1]
+				if !newBottom.ExDate.Equal(date) {
+					return fmt.Errorf(
+						"non-overlapping split ex dates %v vs %v",
+						newBottom.ExDate, date)
+				}
+
+				// forget the last one
+				splits = splits[:len(splits)-1]
+			}
+		*/
+
+		if in.Reset {
+			sql, args, err := sq.
+				Delete("").
+				From(schema + ".split").
+				ToSql()
+
+			_, err = runner.ExecContext(ctx, sql, args...)
+			if err != nil {
+				return err
+			}
 		}
 
-		stmt, err := runner.PrepareContext(ctx, pq.CopyInSchema(
-			schemaName, "split", "ex_date", "to_factor", "from_factor"))
+		stmt, err := runner.PrepareContext(
+			ctx,
+			pq.CopyInSchema(
+				schema,
+				"split",
+				"ex_date",
+				"to_factor",
+				"from_factor",
+			),
+		)
 		if err != nil {
 			return err
 		}
 
-		for _, v := range splits {
+		for _, v := range in.Splits {
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("interrupted")
@@ -556,7 +600,11 @@ func (db *DB) PrependSplits(
 			}
 
 			_, err = stmt.ExecContext(
-				ctx, v.ExDate, v.ToFactor, v.FromFactor)
+				ctx,
+				v.ExDate,
+				v.ToFactor,
+				v.FromFactor,
+			)
 			if err != nil {
 				return err
 			}
@@ -572,13 +620,13 @@ func (db *DB) PrependSplits(
 			return err
 		}
 
-		err = updateDividendAdj(ctx, runner, schemaName)
+		err = updateDividendAdj(ctx, runner, schema)
 		if err != nil {
 			fmt.Println("ERROR", err)
 			return err
 		}
 
-		err = updateCloseAdj(ctx, runner, schemaName)
+		err = updateCloseAdj(ctx, runner, schema)
 		if err != nil {
 			fmt.Println("ERROR", err)
 			return err
@@ -586,26 +634,29 @@ func (db *DB) PrependSplits(
 
 		return nil
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	return &divyield.DBSaveSplitsOutput{}, nil
 }
 
 func updateDividendAdj(
 	ctx context.Context,
 	runner runner,
-	schemaName string,
+	schema string,
 ) error {
 	_, err := runner.ExecContext(
-		ctx, "call public.update_dividend_adj($1);", schemaName)
+		ctx, "call public.update_dividend_adj($1);", schema)
 	return err
 }
 
 func updateCloseAdj(
 	ctx context.Context,
 	runner runner,
-	schemaName string,
+	schema string,
 ) error {
 	_, err := runner.ExecContext(
-		ctx, "call public.update_price_adj($1);", schemaName)
+		ctx, "call public.update_price_adj($1);", schema)
 	return err
 }
 
@@ -617,11 +668,11 @@ func (db *DB) Splits(
 	splits := make([]*divyield.Split, 0)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
-		schemaName := schemaName(ticker)
+		schema := schemaStock(ticker)
 
 		q := sq.Select(
 			"ex_date", "to_factor", "from_factor").
-			From(schemaName + ".split").
+			From(schema + ".split").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
 

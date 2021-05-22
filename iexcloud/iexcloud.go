@@ -114,6 +114,154 @@ func (c *IEXCloud) httpGet(
 	return c.httpClient.Do(req)
 }
 
+func (c *IEXCloud) NewDividendService() divyield.DividendService {
+	return &dividendService{
+		IEXCloud: c,
+	}
+}
+
+type dividendService struct {
+	*IEXCloud
+}
+
+func (s *dividendService) Fetch(
+	ctx context.Context,
+	in *divyield.DividendFetchInput,
+) (*divyield.DividendFetchOutput, error) {
+	u := s.dividendsURL(in.Symbol, in.From)
+	resp, err := s.httpGet(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+
+	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+	}
+
+	dividends, err := s.parseDividends(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("parse dividends: %s", err)
+	}
+	sortDividendsDesc(dividends)
+
+	out := &divyield.DividendFetchOutput{
+		Dividends: make([]*divyield.Dividend, 0, len(dividends)),
+	}
+
+	for _, v := range dividends {
+		dividend := &divyield.Dividend{
+			ID:          v.Refid,
+			ExDate:      time.Time(v.ExDate),
+			Symbol:      v.Symbol,
+			Amount:      v.Amount,
+			Currency:    v.Currency,
+			Frequency:   v.FrequencyNumber(),
+			PaymentType: v.Flag,
+		}
+		out.Dividends = append(out.Dividends, dividend)
+	}
+
+	return out, nil
+}
+
+func (s *dividendService) parseDividends(r io.Reader) ([]*dividend, error) {
+	dividends := make([]*dividend, 0)
+
+	dec := json.NewDecoder(r)
+	// read open bracket
+	_, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("open bracket: %s", err)
+	}
+
+	processed := make(map[int64]struct{})
+
+	// while the array contains values
+	for dec.More() {
+		var v dividend
+		err := dec.Decode(&v)
+		if err != nil {
+			return nil, fmt.Errorf("decode: %s", err)
+		}
+
+		// skip future dividend dates
+		if v.ExDate.After(time.Now().UTC()) {
+			continue
+		}
+
+		if _, ok := processed[v.Refid]; !ok {
+			dividends = append(dividends, &v)
+			processed[v.Refid] = struct{}{}
+		}
+	}
+
+	// read closing bracket
+	_, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("closing bracket: %s", err)
+	}
+
+	return dividends, nil
+}
+
+func sortDividendsDesc(a []*dividend) {
+	sort.SliceStable(a, func(i, j int) bool {
+		ti := time.Time(a[i].ExDate)
+		tj := time.Time(a[j].ExDate)
+		return ti.After(tj)
+	})
+}
+
+type dividend struct {
+	ExDate      date    `json:"exDate"`
+	PaymentDate date    `json:"paymentDate"`
+	Amount      float64 `json:"amount"`
+	Currency    string  `json:"currency"`
+	Flag        string  `json:"flag"`
+	Frequency   string  `json:"frequency"`
+	Refid       int64   `json:"refid"`
+	Symbol      string  `json:"symbol"`
+}
+
+func (d *dividend) String() string {
+	return fmt.Sprintf("%v: %v (refid %v)",
+		time.Time(d.ExDate).Format(DateFormat),
+		d.Amount,
+		d.Refid,
+	)
+}
+
+func (d *dividend) FrequencyNumber() int {
+	if d.Frequency == "monthly" {
+		return 12
+	}
+	if d.Frequency == "quarterly" {
+		return 4
+	}
+	if d.Frequency == "semi-annual" {
+		return 2
+	}
+	if d.Frequency == "annual" {
+		return 1
+	}
+	if d.Frequency == "blank" ||
+		d.Frequency == "unspecified" ||
+		d.Frequency == "irregular" {
+		return 0
+	}
+
+	if d.Symbol == "R" && d.Frequency == "weekly" {
+		d.Frequency = "quarterly"
+		return 4 // quarterly, fix data error
+	}
+
+	panic(fmt.Sprintf("unexpected frequency: %v: %v: %v",
+		d.Symbol, d.ExDate, d.Frequency))
+}
+
 func (c *IEXCloud) NewSplitService() divyield.SplitService {
 	return &splitService{
 		IEXCloud: c,
@@ -208,20 +356,20 @@ type split struct {
 	ToFactor   int  `json:"toFactor"`
 }
 
-func (c *IEXCloud) NewCompanyProfileService() divyield.CompanyProfileService {
-	return &companyProfileService{
+func (c *IEXCloud) NewProfileService() divyield.ProfileService {
+	return &profileService{
 		IEXCloud: c,
 	}
 }
 
-type companyProfileService struct {
+type profileService struct {
 	*IEXCloud
 }
 
-func (s *companyProfileService) Fetch(
+func (s *profileService) Fetch(
 	ctx context.Context,
-	in *divyield.CompanyProfileFetchInput,
-) (*divyield.CompanyProfileFetchOutput, error) {
+	in *divyield.ProfileFetchInput,
+) (*divyield.ProfileFetchOutput, error) {
 
 	u := s.companyURL(in.Symbol)
 	resp, err := s.httpGet(ctx, u)
@@ -233,24 +381,30 @@ func (s *companyProfileService) Fetch(
 	//fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
+		if resp.StatusCode == 404 {
+			return &divyield.ProfileFetchOutput{}, nil
+		}
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
 	}
 
-	cp, err := s.parseCompanyProfile(resp.Body)
+	cp, err := s.parseProfile(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("parse company profile: %s", err)
 	}
 
-	comPro := &divyield.CompanyProfile{
+	address := strings.TrimSpace(cp.Address + " " + cp.Address2)
+
+	comPro := &divyield.Profile{
 		Symbol:         cp.Symbol,
 		Name:           cp.CompanyName,
 		Exchange:       cp.Exchange,
+		IssueType:      cp.IssueType,
 		Industry:       cp.Industry,
 		Sector:         cp.Sector,
 		Description:    cp.Description,
 		Website:        cp.Website,
 		PrimarySicCode: cp.PrimarySicCode,
-		Address:        strings.TrimSpace(cp.Address + " " + cp.Address2),
+		Address:        address,
 		State:          cp.State,
 		City:           cp.City,
 		Zip:            cp.Zip,
@@ -258,17 +412,17 @@ func (s *companyProfileService) Fetch(
 		Phone:          cp.Phone,
 	}
 
-	out := &divyield.CompanyProfileFetchOutput{
-		CompanyProfile: comPro,
+	out := &divyield.ProfileFetchOutput{
+		Profile: comPro,
 	}
 	return out, nil
 }
 
-func (c *IEXCloud) parseCompanyProfile(
+func (c *IEXCloud) parseProfile(
 	r io.Reader,
-) (*companyProfile, error) {
+) (*profile, error) {
 	dec := json.NewDecoder(r)
-	var v companyProfile
+	var v profile
 	err := dec.Decode(&v)
 	if err != nil {
 		return nil, fmt.Errorf("decode company profile: %s", err)
@@ -276,10 +430,11 @@ func (c *IEXCloud) parseCompanyProfile(
 	return &v, nil
 }
 
-type companyProfile struct {
+type profile struct {
 	Symbol         string `json:"symbol"`
 	CompanyName    string `json:"companyName"`
 	Exchange       string `json:"exchange"`
+	IssueType      string `json:"issueType"`
 	Industry       string `json:"industry"`
 	Website        string `json:"website"`
 	Description    string `json:"description"`
@@ -760,14 +915,14 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	if err != nil {
 		return fmt.Errorf("create stock dir: %s", err)
 	}
-	err = f.fetchSplits(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download splits: %s", err)
-	}
-	err = f.fetchDividends(ctx, ticker)
-	if err != nil {
-		return fmt.Errorf("download dividends: %s", err)
-	}
+	//	err = f.fetchSplits(ctx, ticker)
+	//	if err != nil {
+	//		return fmt.Errorf("download splits: %s", err)
+	//	}
+	//	err = f.fetchDividends(ctx, ticker)
+	//	if err != nil {
+	//		return fmt.Errorf("download dividends: %s", err)
+	//	}
 	err = f.fetchPrices(ctx, ticker)
 	if err != nil {
 		return fmt.Errorf("download prices: %s", err)
@@ -775,6 +930,7 @@ func (f *StockFetcher) getStockData(ctx context.Context, ticker string) error {
 	return err
 }
 
+/*
 func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 	latestSplits, err := f.opts.db.Splits(
 		ctx, ticker, &divyield.SplitFilter{Limit: 1})
@@ -798,7 +954,6 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 		return nil // up-to-date
 	}
 
-	/*
 		newSplits, err := f.opts.splitFetcher.Fetch(
 			ctx, ticker, downloadFrom, today)
 		if err != nil {
@@ -813,10 +968,11 @@ func (f *StockFetcher) fetchSplits(ctx context.Context, ticker string) error {
 				return fmt.Errorf("save splits: %s", err)
 			}
 		}
-	*/
 	return nil
 }
+*/
 
+/*
 func (f *StockFetcher) fetchDividends(ctx context.Context, ticker string) error {
 	latestDividends, err := f.opts.db.Dividends(
 		ctx, ticker, &divyield.DividendFilter{Limit: 1})
@@ -858,6 +1014,9 @@ func (f *StockFetcher) fetchDividends(ctx context.Context, ticker string) error 
 	return nil
 }
 
+*/
+
+/*
 func toDBDividends(dividends []*dividend) []*divyield.Dividend {
 	ret := make([]*divyield.Dividend, 0, len(dividends))
 
@@ -875,11 +1034,13 @@ func toDBDividends(dividends []*dividend) []*divyield.Dividend {
 	}
 	return ret
 }
+*/
 
 func timeDate(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
+/*
 func (f *StockFetcher) downloadDividends(
 	ctx context.Context,
 	ticker string,
@@ -912,112 +1073,7 @@ func (f *StockFetcher) downloadDividends(
 	return dividends, nil
 }
 
-func dividendsURL(ticker string, from time.Time, apiToken string) string {
-	return "https://cloud.iexapis.com/stable/time-series" +
-		"/DIVIDENDS/" + ticker +
-		"?from=" + from.Format(divyield.DateFormat) +
-		"&token=" + apiToken
-
-	// return "https://query1.finance.yahoo.com/v7/finance/download/" + ticker +
-	// 	"?period1=" + strconv.FormatInt(sd.Unix(), 10) +
-	// 	"&period2=" + strconv.FormatInt(ed.Unix(), 10) +
-	// 	"&interval=1d&events=div&includeAdjustedClose=true"
-}
-
-type dividend struct {
-	ExDate      date    `json:"exDate"`
-	PaymentDate date    `json:"paymentDate"`
-	Amount      float64 `json:"amount"`
-	Currency    string  `json:"currency"`
-	Flag        string  `json:"flag"`
-	Frequency   string  `json:"frequency"`
-	Refid       int64   `json:"refid"`
-	Symbol      string  `json:"symbol"`
-}
-
-func (d *dividend) String() string {
-	return fmt.Sprintf("%v: %v (refid %v)",
-		time.Time(d.ExDate).Format(DateFormat),
-		d.Amount,
-		d.Refid,
-	)
-}
-
-func (d *dividend) FrequencyNumber() int {
-	if d.Frequency == "monthly" {
-		return 12
-	}
-	if d.Frequency == "quarterly" {
-		return 4
-	}
-	if d.Frequency == "semi-annual" {
-		return 2
-	}
-	if d.Frequency == "annual" {
-		return 1
-	}
-	if d.Frequency == "blank" ||
-		d.Frequency == "unspecified" ||
-		d.Frequency == "irregular" {
-		return 0
-	}
-
-	if d.Symbol == "R" && d.Frequency == "weekly" {
-		d.Frequency = "quarterly"
-		return 4 // quarterly, fix data error
-	}
-
-	panic(fmt.Sprintf("unexpected frequency: %v: %v: %v",
-		d.Symbol, d.ExDate, d.Frequency))
-}
-
-func parseDividends(r io.Reader) ([]*dividend, error) {
-	dividends := make([]*dividend, 0)
-
-	dec := json.NewDecoder(r)
-	// read open bracket
-	_, err := dec.Token()
-	if err != nil {
-		return nil, fmt.Errorf("open bracket: %s", err)
-	}
-
-	processed := make(map[int64]struct{})
-
-	// while the array contains values
-	for dec.More() {
-		var v dividend
-		err := dec.Decode(&v)
-		if err != nil {
-			return nil, fmt.Errorf("decode: %s", err)
-		}
-
-		// skip future dividend dates
-		if v.ExDate.After(time.Now().UTC()) {
-			continue
-		}
-
-		if _, ok := processed[v.Refid]; !ok {
-			dividends = append(dividends, &v)
-			processed[v.Refid] = struct{}{}
-		}
-	}
-
-	// read closing bracket
-	_, err = dec.Token()
-	if err != nil {
-		return nil, fmt.Errorf("closing bracket: %s", err)
-	}
-
-	return dividends, nil
-}
-
-func sortDividendsDesc(dividends []*dividend) {
-	sort.SliceStable(dividends, func(i, j int) bool {
-		ti := time.Time(dividends[i].ExDate)
-		tj := time.Time(dividends[j].ExDate)
-		return ti.After(tj)
-	})
-}
+*/
 
 func (f *StockFetcher) fetchPrices(ctx context.Context, ticker string) error {
 	latestPrices, err := f.opts.db.Prices(

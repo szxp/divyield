@@ -1,12 +1,36 @@
 
-create or replace procedure public.init_schema_tables(schema_name text)
+create or replace procedure 
+    public.init_schema_tables(schema_name text)
 language plpgsql
 as $$
 declare 
 begin
-    execute 'create schema if not exists ' || quote_ident(schema_name);
+    execute 'create schema if not exists ' || 
+        quote_ident(schema_name);
 
-    execute 'create table if not exists ' || quote_ident(schema_name) || '.price (
+    execute 'create table if not exists ' || 
+        quote_ident(schema_name) || '.profile (
+		symbol           varchar(10) not null,
+		name             text,
+		exchange         text,
+		issue_type       text,
+		industry         text,
+		sector           text,
+		description      text,
+		website          text,
+		primary_sic_code text,
+		address          text,
+		state            text,
+		city             text,
+		zip              text,
+		country          text,
+		phone            text,
+        PRIMARY KEY(symbol)	
+    )';
+
+
+    execute 'create table if not exists ' || 
+        quote_ident(schema_name) || '.price (
         date        date not null,
         symbol      varchar(10) not null,
         currency    char(3) not null,
@@ -20,7 +44,8 @@ begin
         PRIMARY KEY(date)	
     )';
 
-    execute 'create table if not exists ' || quote_ident(schema_name) || '.dividend (
+    execute 'create table if not exists ' || 
+        quote_ident(schema_name) || '.dividend (
         id           bigint not null,
         ex_date      date not null,
         symbol       varchar(10) not null,
@@ -33,12 +58,14 @@ begin
         PRIMARY KEY(id)	
     )';
 
-    execute 'create table if not exists ' || quote_ident(schema_name) || '.split (
+    execute 'create table if not exists ' || 
+        quote_ident(schema_name) || '.split (
         ex_date      date not null,
         to_factor     numeric not null,
         from_factor   numeric not null,
         PRIMARY KEY(ex_date)	
     )';
+
 
 end $$;
 

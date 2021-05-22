@@ -10,6 +10,180 @@ type Command interface {
 	Execute(ctx context.Context) error
 }
 
+type DB interface {
+	InitSchema(
+		ctx context.Context,
+		tickers []string,
+	) error
+
+	Prices(
+		ctx context.Context,
+		ticker string,
+		f *PriceFilter,
+	) ([]*Price, error)
+
+	PrependPrices(
+		ctx context.Context,
+		ticker string,
+		prices []*Price,
+	) error
+
+	Dividends(
+		ctx context.Context,
+		ticker string,
+		f *DividendFilter,
+	) ([]*Dividend, error)
+
+	SaveDividends(
+		ctx context.Context,
+		in *DBSaveDividendsInput,
+	) (*DBSaveDividendsOutput, error)
+
+	DividendYields(
+		ctx context.Context,
+		ticker string,
+		f *DividendYieldFilter,
+	) ([]*DividendYield, error)
+
+	Splits(
+		ctx context.Context,
+		ticker string,
+		f *SplitFilter,
+	) ([]*Split, error)
+
+	SaveSplits(
+		ctx context.Context,
+		in *DBSaveSplitsInput,
+	) (*DBSaveSplitsOutput, error)
+}
+
+type DBSaveDividendsInput struct {
+	Symbol    string
+	Dividends []*Dividend
+	Reset     bool
+}
+
+type DBSaveDividendsOutput struct {
+}
+
+type DBSaveSplitsInput struct {
+	Symbol string
+	Splits []*Split
+	Reset  bool
+}
+
+type DBSaveSplitsOutput struct {
+}
+
+const DateFormat = "2006-01-02"
+
+type Price struct {
+	Date     time.Time
+	Symbol   string
+	Close    float64
+	CloseAdj float64
+	High     float64
+	Low      float64
+	Open     float64
+	Volume   float64
+}
+
+func (p *Price) String() string {
+	return fmt.Sprintf("%v: %v",
+		time.Time(p.Date).Format(DateFormat),
+		p.Close,
+	)
+}
+
+type PriceFilter struct {
+	From  time.Time
+	Limit uint64
+}
+
+type DividendService interface {
+	Fetch(
+		ctx context.Context,
+		in *DividendFetchInput,
+	) (*DividendFetchOutput, error)
+}
+
+type DividendFetchInput struct {
+	Symbol string
+	From   time.Time
+}
+
+type DividendFetchOutput struct {
+	Dividends []*Dividend
+}
+
+type Dividend struct {
+	ID          int64
+	ExDate      time.Time
+	Amount      float64
+	AmountAdj   float64
+	Currency    string
+	Frequency   int
+	Symbol      string
+	PaymentType string
+}
+
+func (d *Dividend) Year() int {
+	return d.ExDate.Year()
+}
+
+func (d *Dividend) String() string {
+	return fmt.Sprintf("%v: %v",
+		time.Time(d.ExDate).Format(DateFormat),
+		d.AmountAdj,
+	)
+}
+
+func (d *Dividend) AmountNorm() float64 {
+	return d.AmountAdj * float64(d.Frequency)
+}
+
+type DividendFilter struct {
+	From     time.Time
+	Limit    uint64
+	CashOnly bool
+	Regular  bool
+}
+
+type DividendYield struct {
+	Date                   time.Time
+	CloseAdj               float64
+	DividendAdj            float64
+	Frequency              int
+	DividendAdjTrailingTTM float64
+}
+
+func (y *DividendYield) DividendForwardTTM() float64 {
+	return y.DividendAdj * float64(y.Frequency)
+}
+
+func (y *DividendYield) ForwardTTM() float64 {
+	if y.CloseAdj == 0 {
+		return 0
+	}
+	return ((y.DividendAdj * float64(y.Frequency)) / y.CloseAdj) * 100
+}
+
+func (y *DividendYield) TrailingTTM() float64 {
+	if y.CloseAdj == 0 {
+		return 0
+	}
+	return (y.DividendAdjTrailingTTM / y.CloseAdj) * 100
+}
+
+type DividendYieldFilter struct {
+	From  time.Time
+	Limit uint64
+}
+
+type StockFetcher interface {
+	Fetch(ctx context.Context, tickers []string)
+}
+
 type SplitService interface {
 	Fetch(
 		ctx context.Context,
@@ -43,25 +217,26 @@ type SplitFilter struct {
 	Limit uint64
 }
 
-type CompanyProfileService interface {
+type ProfileService interface {
 	Fetch(
 		ctx context.Context,
-		in *CompanyProfileFetchInput,
-	) (*CompanyProfileFetchOutput, error)
+		in *ProfileFetchInput,
+	) (*ProfileFetchOutput, error)
 }
 
-type CompanyProfileFetchInput struct {
+type ProfileFetchInput struct {
 	Symbol string
 }
 
-type CompanyProfileFetchOutput struct {
-	CompanyProfile *CompanyProfile
+type ProfileFetchOutput struct {
+	Profile *Profile
 }
 
-type CompanyProfile struct {
+type Profile struct {
 	Symbol         string
 	Name           string
 	Exchange       string
+	IssueType      string
 	Industry       string
 	Sector         string
 	Description    string
