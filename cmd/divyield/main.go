@@ -23,11 +23,11 @@ import (
 
 	//"szakszon.com/divyield"
 	"szakszon.com/divyield/chart"
+	"szakszon.com/divyield/cli"
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/stats"
-	//"szakszon.com/divyield/xrates"
-	"szakszon.com/divyield/cli"
+	"szakszon.com/divyield/xrates"
 )
 
 const defaultStocksDir = "work/stocks"
@@ -211,7 +211,11 @@ func main() {
 		os.Exit(1)
 	}
 
-    currencySrv := xrates.NewCurrencyService()
+	currencySrv := xrates.NewCurrencyService(
+		xrates.RateLimiter(
+			rate.NewLimiter(rate.Every(1*time.Second), 1)),
+        xrates.Logger(stdoutSync),
+    )
 
 	iexc := iexcloud.NewIEXCloud(
 		iexcloud.BaseURL(*iexCloudBaseURLFlag),
@@ -242,6 +246,7 @@ func main() {
 		cli.SplitService(splitSrv),
 		cli.DividendService(dividendSrv),
 		cli.PriceService(priceSrv),
+		cli.CurrencyService(currencySrv),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {

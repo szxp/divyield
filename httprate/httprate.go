@@ -11,8 +11,8 @@ type RLClient struct {
 }
 
 func (c *RLClient) Do(req *http.Request) (*http.Response, error) {
-	err := c.Ratelimiter.Wait(req.Context())
-	if err != nil {
+    err := c.Ratelimiter.Wait(req.Context())
+    if err != nil {
 		return nil, err
 	}
 	resp, err := c.Client.Do(req)

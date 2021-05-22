@@ -39,3 +39,17 @@ update s_cswc.dividend
     
 call update_dividend_adj('s_cswc');
 call update_price_adj('s_cswc');
+
+
+
+update s_otex.dividend 
+    set 
+    amount = 0.2008, 
+    currency = 'USD' 
+    where 
+    ex_date = '2020-12-03';
+
+call update_dividend_adj('s_otex');
+call update_price_adj('s_otex');
+
+

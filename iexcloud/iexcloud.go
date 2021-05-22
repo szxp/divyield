@@ -297,6 +297,10 @@ func (s *dividendService) parseDividends(r io.Reader) ([]*dividend, error) {
 			continue
 		}
 
+        if v.Amount == 0 {
+            continue
+        }
+
 		if _, ok := processed[v.Refid]; !ok {
 			dividends = append(dividends, &v)
 			processed[v.Refid] = struct{}{}
@@ -693,9 +697,9 @@ func (s *exchangeService) Fetch(
 	exchanges, err := s.parseInternationalExchanges(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf(
-            "parse international exchanges: %s", 
-            err,
-        )
+			"parse international exchanges: %s",
+			err,
+		)
 	}
 
 	out := &divyield.ExchangeFetchOutput{
@@ -736,9 +740,9 @@ func (c *IEXCloud) parseInternationalExchanges(
 		err := dec.Decode(&v)
 		if err != nil {
 			return nil, fmt.Errorf(
-                "decode international exchange: %s", 
-                err,
-            )
+				"decode international exchange: %s",
+				err,
+			)
 		}
 
 		exchanges = append(exchanges, &v)
@@ -797,11 +801,12 @@ var regionCurrencyMap = map[string]string{
 	"NL": "EUR",
 	"US": "USD",
 }
+
 type options struct {
-	baseURL string
-	token   string
-	rateLimiter       *rate.Limiter
-	timeout           time.Duration
+	baseURL     string
+	token       string
+	rateLimiter *rate.Limiter
+	timeout     time.Duration
 
 	outputDir         string
 	startDate         time.Time

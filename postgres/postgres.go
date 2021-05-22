@@ -176,7 +176,7 @@ func (db *DB) Prices(
 				Low:      low,
 				Open:     open,
 				Volume:   volume,
-				Currency:  currency,
+				Currency: currency,
 			}
 			prices = append(prices, np)
 		}

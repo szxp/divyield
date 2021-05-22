@@ -156,9 +156,11 @@ func (d *Dividend) Year() int {
 }
 
 func (d *Dividend) String() string {
-	return fmt.Sprintf("%v: %v",
+	return fmt.Sprintf(
+        "%v: %v %v",
 		time.Time(d.ExDate).Format(DateFormat),
 		d.AmountAdj,
+        d.Currency,
 	)
 }
 

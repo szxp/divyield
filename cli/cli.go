@@ -18,7 +18,11 @@ type Command struct {
 	args []string
 }
 
-func NewCommand(name string, args []string, os ...Option) *Command {
+func NewCommand(
+	name string,
+	args []string,
+	os ...Option,
+) *Command {
 	opts := defaultOptions
 	for _, o := range os {
 		opts = o(opts)
@@ -35,6 +39,8 @@ func (c *Command) Execute(ctx context.Context) error {
 	switch c.name {
 	case "pull":
 		return c.pull(ctx)
+//	case "stats":
+//		return c.stats(ctx)
 	case "profile":
 		return c.profile(ctx)
 	case "symbols":
@@ -78,26 +84,26 @@ func (c *Command) pull(ctx context.Context) error {
 			return fmt.Errorf("profile not found: " + symbol)
 		}
 
-		var currency string
+		var priceCurrency string
 		dashIdx := strings.LastIndexByte(symbol, '-')
 		if dashIdx != -1 {
 			symbolSuffix := symbol[dashIdx:]
 			for _, ex := range eout.Exchanges {
 				if ex.Suffix == symbolSuffix {
-					currency = ex.Currency
+					priceCurrency = ex.Currency
 				}
 			}
-			if currency == "" {
+			if priceCurrency == "" {
 				return fmt.Errorf(
 					"currency not found: %v",
 					symbolSuffix,
 				)
 			}
 		} else {
-			currency = "USD"
+			priceCurrency = "USD"
 		}
 
-		fmt.Println("Currency", currency)
+		fmt.Println("Price currency", priceCurrency)
 
 		fromSplits := from
 		if !c.opts.reset {
@@ -145,6 +151,26 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+        for _, v := range dout.Dividends {
+            if v.Currency != priceCurrency {
+                fmt.Println("div currency:", v.Currency)
+                ccout, err := c.opts.currencyService.Convert(
+                    ctx,
+                    &divyield.CurrencyConvertInput{
+                        From:   v.Currency,
+                        To:     priceCurrency,
+                        Amount: v.Amount,
+                        Date:   v.ExDate,
+                    },
+                )
+                if err != nil {
+                    return err
+                }
+
+                v.Currency = priceCurrency
+                v.Amount = ccout.Amount
+            }
+        }
 		fmt.Println("dividends:", len(dout.Dividends))
 
 		fromPrices := from
@@ -169,8 +195,8 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		for i, _ := range pout.Prices {
-			pout.Prices[i].Currency = currency
+		for _, v := range pout.Prices {
+			v.Currency = priceCurrency
 		}
 		fmt.Println("prices:", len(pout.Prices))
 
@@ -209,7 +235,6 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
 	}
 	return nil
 }
@@ -480,6 +505,7 @@ type options struct {
 	splitService    divyield.SplitService
 	dividendService divyield.DividendService
 	priceService    divyield.PriceService
+	currencyService divyield.CurrencyService
 }
 
 type Option func(o options) options
@@ -561,6 +587,12 @@ func PriceService(v divyield.PriceService) Option {
 	}
 }
 
+func CurrencyService(v divyield.CurrencyService) Option {
+	return func(o options) options {
+		o.currencyService = v
+		return o
+	}
+}
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db
