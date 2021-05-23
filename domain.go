@@ -54,6 +54,16 @@ type DB interface {
 		ctx context.Context,
 		in *DBSaveSplitsInput,
 	) (*DBSaveSplitsOutput, error)
+
+	SaveProfile(
+		ctx context.Context,
+		in *DBSaveProfileInput,
+	) (*DBSaveProfileOutput, error)
+
+	Profiles(
+		ctx context.Context,
+		in *DBProfilesInput,
+	) (*DBProfilesOutput, error)
 }
 
 type DBSavePricesInput struct {
@@ -81,6 +91,21 @@ type DBSaveSplitsInput struct {
 }
 
 type DBSaveSplitsOutput struct {
+}
+
+type DBSaveProfileInput struct {
+	Symbol  string
+	Profile *Profile
+}
+
+type DBSaveProfileOutput struct {
+}
+
+type DBProfilesInput struct {
+}
+
+type DBProfilesOutput struct {
+	Profiles []*Profile
 }
 
 const DateFormat = "2006-01-02"
@@ -157,10 +182,10 @@ func (d *Dividend) Year() int {
 
 func (d *Dividend) String() string {
 	return fmt.Sprintf(
-        "%v: %v %v",
+		"%v: %v %v",
 		time.Time(d.ExDate).Format(DateFormat),
 		d.AmountAdj,
-        d.Currency,
+		d.Currency,
 	)
 }
 

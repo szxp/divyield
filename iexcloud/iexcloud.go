@@ -133,7 +133,7 @@ func (s *priceService) Fetch(
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+	//fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -240,7 +240,7 @@ func (s *dividendService) Fetch(
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+	//fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
@@ -297,9 +297,9 @@ func (s *dividendService) parseDividends(r io.Reader) ([]*dividend, error) {
 			continue
 		}
 
-        if v.Amount == 0 {
-            continue
-        }
+		if v.Amount == 0 {
+			continue
+		}
 
 		if _, ok := processed[v.Refid]; !ok {
 			dividends = append(dividends, &v)
@@ -392,7 +392,7 @@ func (s *splitService) Fetch(
 	}
 	defer resp.Body.Close()
 
-	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
+	//fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
 		return nil, fmt.Errorf("http error: %d", resp.StatusCode)

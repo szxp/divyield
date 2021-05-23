@@ -1,5 +1,33 @@
 
 create or replace procedure 
+    public.init_public_tables()
+language plpgsql
+as $$
+declare 
+begin
+    execute 'create table if not exists ' || 
+        'public.profile (
+		symbol           varchar(10) not null,
+		name             text,
+		exchange         text,
+		issue_type       text,
+		industry         text,
+		sector           text,
+		description      text,
+		website          text,
+		primary_sic_code text,
+		address          text,
+		state            text,
+		city             text,
+		zip              text,
+		country          text,
+		phone            text,
+        PRIMARY KEY(symbol)	
+    )';
+end $$;
+
+
+create or replace procedure 
     public.init_schema_tables(schema_name text)
 language plpgsql
 as $$
@@ -9,7 +37,7 @@ begin
         quote_ident(schema_name);
 
     execute 'create table if not exists ' || 
-        quote_ident(schema_name) || '.profile (
+        'public.profile (
 		symbol           varchar(10) not null,
 		name             text,
 		exchange         text,

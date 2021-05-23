@@ -214,8 +214,8 @@ func main() {
 	currencySrv := xrates.NewCurrencyService(
 		xrates.RateLimiter(
 			rate.NewLimiter(rate.Every(1*time.Second), 1)),
-        xrates.Logger(stdoutSync),
-    )
+		xrates.Logger(stdoutSync),
+	)
 
 	iexc := iexcloud.NewIEXCloud(
 		iexcloud.BaseURL(*iexCloudBaseURLFlag),

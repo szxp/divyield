@@ -8,7 +8,7 @@ import (
 	"golang.org/x/time/rate"
 	"io"
 	"net/http"
-//	"net/http/httputil"
+	//	"net/http/httputil"
 	"regexp"
 	"strconv"
 	"strings"
@@ -59,11 +59,11 @@ func (cc *currencyService) Convert(
 
 	req.Header.Set("User-Agent", cc.opts.userAgent)
 
-//	dump, err := httputil.DumpRequestOut(req, true)
-//	if err != nil {
-//		return nil, err
-//	}
-//	cc.logf("%s", dump)
+	//	dump, err := httputil.DumpRequestOut(req, true)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	cc.logf("%s", dump)
 
 	resp, err := cc.client.Do(req)
 	if err != nil {

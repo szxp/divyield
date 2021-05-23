@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/lib/pq"
@@ -195,30 +196,6 @@ func (db *DB) SavePrices(
 	err := execTx(ctx, db.DB, func(runner runner) error {
 		schema := schemaStock(in.Symbol)
 
-		/*
-			row := runner.QueryRowContext(ctx,
-				"select date from "+schema+".price "+
-					"order by date desc limit 1")
-
-				var date time.Time
-				err := row.Scan(&date)
-				if err != nil && !errors.Is(err, sql.ErrNoRows) {
-					return err
-				}
-
-				if !date.IsZero() {
-					newBottom := prices[len(prices)-1]
-					if !newBottom.Date.Equal(date) {
-						return fmt.Errorf(
-							"non-overlapping price dates %v vs %v",
-							newBottom.Date, date)
-					}
-
-					// forget the last one
-					prices = prices[:len(prices)-1]
-				}
-		*/
-
 		if in.Reset {
 			sql, args, err := sq.
 				Delete("").
@@ -377,29 +354,6 @@ func (db *DB) SaveDividends(
 ) (*divyield.DBSaveDividendsOutput, error) {
 	err := execTx(ctx, db.DB, func(runner runner) error {
 		schema := schemaStock(in.Symbol)
-
-		/*
-			var date time.Time
-			err := runner.QueryRowContext(ctx,
-				"select ex_date from "+schema+".dividend_view "+
-					"order by ex_date desc limit 1").
-				Scan(&date)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-
-			if !date.IsZero() {
-				newBottom := dividends[len(dividends)-1]
-				if !newBottom.ExDate.Equal(date) {
-					return fmt.Errorf(
-						"non-overlapping dividend ex dates %v vs %v",
-						newBottom.ExDate, date)
-				}
-
-				// forget the last one
-				dividends = dividends[:len(dividends)-1]
-			}
-		*/
 
 		if in.Reset {
 			sql, args, err := sq.
@@ -589,29 +543,6 @@ func (db *DB) SaveSplits(
 	err := execTx(ctx, db.DB, func(runner runner) error {
 		schema := schemaStock(in.Symbol)
 
-		/*
-			var date time.Time
-			err := runner.QueryRowContext(ctx,
-				"select ex_date from "+schema+".split "+
-					"order by ex_date desc limit 1").
-				Scan(&date)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-
-			if !date.IsZero() {
-				newBottom := splits[len(splits)-1]
-				if !newBottom.ExDate.Equal(date) {
-					return fmt.Errorf(
-						"non-overlapping split ex dates %v vs %v",
-						newBottom.ExDate, date)
-				}
-
-				// forget the last one
-				splits = splits[:len(splits)-1]
-			}
-		*/
-
 		if in.Reset {
 			sql, args, err := sq.
 				Delete("").
@@ -687,26 +618,6 @@ func (db *DB) SaveSplits(
 	return &divyield.DBSaveSplitsOutput{}, nil
 }
 
-func updateDividendAdj(
-	ctx context.Context,
-	runner runner,
-	schema string,
-) error {
-	_, err := runner.ExecContext(
-		ctx, "call public.update_dividend_adj($1);", schema)
-	return err
-}
-
-func updateCloseAdj(
-	ctx context.Context,
-	runner runner,
-	schema string,
-) error {
-	_, err := runner.ExecContext(
-		ctx, "call public.update_price_adj($1);", schema)
-	return err
-}
-
 func (db *DB) Splits(
 	ctx context.Context,
 	ticker string,
@@ -718,7 +629,10 @@ func (db *DB) Splits(
 		schema := schemaStock(ticker)
 
 		q := sq.Select(
-			"ex_date", "to_factor", "from_factor").
+			"ex_date",
+			"to_factor",
+			"from_factor",
+		).
 			From(schema + ".split").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
@@ -760,6 +674,214 @@ func (db *DB) Splits(
 		return nil, err
 	}
 	return splits, nil
+}
+
+func (db *DB) SaveProfile(
+	ctx context.Context,
+	in *divyield.DBSaveProfileInput,
+) (*divyield.DBSaveProfileOutput, error) {
+	err := execTx(ctx, db.DB, func(runner runner) error {
+
+		s, args, err := sq.
+			Select("true").
+			From("public.profile").
+			Where("symbol = ?", in.Symbol).
+			PlaceholderFormat(sq.Dollar).
+			ToSql()
+
+		var exists bool
+		err = runner.QueryRowContext(
+			ctx,
+			s,
+			args...,
+		).Scan(&exists)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		valuesMap := sq.Eq{
+			"symbol":           in.Profile.Symbol,
+			"name":             in.Profile.Name,
+			"exchange":         in.Profile.Exchange,
+			"issue_type":       in.Profile.IssueType,
+			"industry":         in.Profile.Industry,
+			"sector":           in.Profile.Sector,
+			"description":      in.Profile.Description,
+			"website":          in.Profile.Website,
+			"primary_sic_code": in.Profile.PrimarySicCode,
+			"address":          in.Profile.Address,
+			"city":             in.Profile.City,
+			"zip":              in.Profile.Zip,
+			"state":            in.Profile.State,
+			"country":          in.Profile.Country,
+			"phone":            in.Profile.Phone,
+		}
+
+		if exists {
+			s, args, err = sq.
+				Update("").
+				Table("public.profile").
+				SetMap(valuesMap).
+				Where("symbol = ?", in.Symbol).
+				PlaceholderFormat(sq.Dollar).
+				ToSql()
+		} else {
+			s, args, err = sq.
+				Insert("").
+				Into("public.profile").
+				Columns(
+					"symbol",
+					"name",
+					"exchange",
+					"issue_type",
+					"industry",
+					"sector",
+					"description",
+					"website",
+					"primary_sic_code",
+					"address",
+					"city",
+					"zip",
+					"state",
+					"country",
+					"phone",
+				).
+				SetMap(valuesMap).
+				PlaceholderFormat(sq.Dollar).
+				ToSql()
+		}
+
+		_, err = runner.ExecContext(ctx, s, args...)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &divyield.DBSaveProfileOutput{}, nil
+}
+
+func (db *DB) Profiles(
+	ctx context.Context,
+	in *divyield.DBProfilesInput,
+) (*divyield.DBProfilesOutput, error) {
+	profiles := make([]*divyield.Profile, 0)
+
+	err := execNonTx(ctx, db.DB, func(runner runner) error {
+		s, args, err := sq.Select(
+			"symbol",
+			"name",
+			"exchange",
+			"issue_type",
+			"industry",
+			"sector",
+			"description",
+			"website",
+			"primary_sic_code",
+			"address",
+			"city",
+			"zip",
+			"state",
+			"country",
+			"phone",
+		).
+			From("public.profile").
+			OrderBy("symbol asc").
+			PlaceholderFormat(sq.Dollar).
+			ToSql()
+		if err != nil {
+			return err
+		}
+
+		rows, err := runner.QueryContext(ctx, s, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var symbol string
+			var name string
+			var exchange string
+			var issueType string
+			var industry string
+			var sector string
+			var description string
+			var website string
+			var primarySicCode int
+			var address string
+			var city string
+			var zip string
+			var state string
+			var country string
+			var phone string
+
+			err = rows.Scan(
+				&symbol,
+				&name,
+				&exchange,
+				&issueType,
+				&industry,
+				&sector,
+				&description,
+				&website,
+				&primarySicCode,
+				&address,
+				&city,
+				&zip,
+				&state,
+				&country,
+				&phone,
+			)
+			if err != nil {
+				return err
+			}
+			v := &divyield.Profile{
+				Symbol:         symbol,
+				Name:           name,
+				Exchange:       exchange,
+				IssueType:      issueType,
+				Industry:       industry,
+				Sector:         sector,
+				Description:    description,
+				Website:        website,
+				PrimarySicCode: primarySicCode,
+				Address:        address,
+				City:           city,
+				Zip:            zip,
+				State:          state,
+				Country:        country,
+				Phone:          phone,
+			}
+			profiles = append(profiles, v)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &divyield.DBProfilesOutput{
+		Profiles: profiles,
+	}, nil
+}
+
+func updateDividendAdj(
+	ctx context.Context,
+	runner runner,
+	schema string,
+) error {
+	_, err := runner.ExecContext(
+		ctx, "call public.update_dividend_adj($1);", schema)
+	return err
+}
+
+func updateCloseAdj(
+	ctx context.Context,
+	runner runner,
+	schema string,
+) error {
+	_, err := runner.ExecContext(
+		ctx, "call public.update_price_adj($1);", schema)
+	return err
 }
 
 type runner interface {

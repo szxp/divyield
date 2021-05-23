@@ -39,8 +39,8 @@ func (c *Command) Execute(ctx context.Context) error {
 	switch c.name {
 	case "pull":
 		return c.pull(ctx)
-//	case "stats":
-//		return c.stats(ctx)
+	case "stats":
+		return c.stats(ctx)
 	case "profile":
 		return c.profile(ctx)
 	case "symbols":
@@ -48,13 +48,29 @@ func (c *Command) Execute(ctx context.Context) error {
 	case "exchanges":
 		return c.exchanges(ctx)
 	default:
-		return fmt.Errorf("invalid command")
+		return fmt.Errorf("invalid command: %v", c.name)
 	}
 }
 
+func (c *Command) stats(ctx context.Context) error {
+	return nil
+}
+
 func (c *Command) pull(ctx context.Context) error {
-	symbols := c.args
 	from := c.opts.startDate
+	symbols := c.args
+    if len(symbols) == 0 {
+        profsOut, err := c.opts.db.Profiles(
+			ctx,
+			&divyield.DBProfilesInput{},
+		)
+		if err != nil {
+			return err
+		}
+        for _, v := range profsOut.Profiles {
+            symbols = append(symbols, v.Symbol)
+        }
+    }
 
 	err := c.opts.db.InitSchema(ctx, symbols)
 	if err != nil {
@@ -103,8 +119,6 @@ func (c *Command) pull(ctx context.Context) error {
 			priceCurrency = "USD"
 		}
 
-		fmt.Println("Price currency", priceCurrency)
-
 		fromSplits := from
 		if !c.opts.reset {
 			fromSplits, err = c.adjustFromSplits(
@@ -127,7 +141,7 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println("splits:", len(sout.Splits))
+        c.writef("%v: %v splits", symbol, len(sout.Splits))
 
 		fromDividends := from
 		if !c.opts.reset {
@@ -151,27 +165,27 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-        for _, v := range dout.Dividends {
-            if v.Currency != priceCurrency {
-                fmt.Println("div currency:", v.Currency)
-                ccout, err := c.opts.currencyService.Convert(
-                    ctx,
-                    &divyield.CurrencyConvertInput{
-                        From:   v.Currency,
-                        To:     priceCurrency,
-                        Amount: v.Amount,
-                        Date:   v.ExDate,
-                    },
-                )
-                if err != nil {
-                    return err
-                }
+		for _, v := range dout.Dividends {
+			if v.Currency != priceCurrency {
+				ccout, err := c.opts.currencyService.Convert(
+					ctx,
+					&divyield.CurrencyConvertInput{
+						From:   v.Currency,
+						To:     priceCurrency,
+						Amount: v.Amount,
+						Date:   v.ExDate,
+					},
+				)
+				if err != nil {
+					return err
+				}
 
-                v.Currency = priceCurrency
-                v.Amount = ccout.Amount
-            }
-        }
-		fmt.Println("dividends:", len(dout.Dividends))
+				v.Currency = priceCurrency
+				v.Amount = ccout.Amount
+			}
+		}
+        c.writef("%v: %v dividends", symbol, len(dout.Dividends),
+        )
 
 		fromPrices := from
 		if !c.opts.reset {
@@ -198,7 +212,19 @@ func (c *Command) pull(ctx context.Context) error {
 		for _, v := range pout.Prices {
 			v.Currency = priceCurrency
 		}
-		fmt.Println("prices:", len(pout.Prices))
+        c.writef("%v: %v prices", symbol, len(pout.Prices))
+
+		_, err = c.opts.db.SaveProfile(
+			ctx,
+			&divyield.DBSaveProfileInput{
+				Symbol:  symbol,
+				Profile: proout.Profile,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
 
 		_, err = c.opts.db.SaveSplits(
 			ctx,

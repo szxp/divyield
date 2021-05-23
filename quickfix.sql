@@ -9,6 +9,9 @@ BEGIN
         order by schema_name asc
     LOOP
 
+--        EXECUTE 'drop table ' || 
+--            quote_ident(r.schema_name) || '.profile cascade';
+
 --        EXECUTE 'call public.init_schema_tables(''' || 
 --            quote_ident(r.schema_name) || ''')';
         
