@@ -26,7 +26,7 @@ import (
 	"szakszon.com/divyield/cli"
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/postgres"
-	"szakszon.com/divyield/stats"
+	//"szakszon.com/divyield/stats"
 	"szakszon.com/divyield/xrates"
 )
 
@@ -38,7 +38,6 @@ func main() {
 	ctx := context.Background()
 	ctx, ctxCancel := context.WithCancel(ctx)
 
-	now := time.Now()
 	stdoutSync := &StdoutSync{
 		mu: &sync.RWMutex{},
 		w:  os.Stdout,
@@ -52,77 +51,10 @@ func main() {
 		ctxCancel()
 	}()
 
-	noCutDividend := flag.CommandLine.Bool(
-		"no-cut-dividend",
-		false,
-		"Dividends were not decreased")
-
-	noDecliningDGR := flag.CommandLine.Bool(
-		"no-declining-dgr",
-		false,
-		"no declining DGR")
-
-	divYieldFwdMin := flag.CommandLine.Float64(
-		"dividend-yield-forward-min",
-		0.0,
-		"minimum forward dividend yield")
-
-	divYieldFwdMax := flag.CommandLine.Float64(
-		"dividend-yield-forward-max",
-		0.0,
-		"maximum forward dividend yield")
-
-	divYieldROIMin := flag.CommandLine.Float64(
-		"dividend-yield-roi-min",
-		0.0,
-		"forward dividend yield + DGR-5y average yield "+
-			"must be a greater than or equal to the given total yield")
-
-	ggrROIMin := flag.CommandLine.Float64(
-		"gordon-roi-min",
-		10.0,
-		"expected return on investment (ROI) "+
-			"in the Gordon formula as a percentage")
-
-	ggrMin := flag.CommandLine.Float64(
-		"gordon-growth-rate-min",
-		0.0,
-		"minimum Gordon growth rate as a percentage")
-
-	ggrMax := flag.CommandLine.Float64(
-		"gordon-growth-rate-max",
-		0.0,
-		"maximum Gordon growth rate as a percentage")
-
-	//	chartFlag := flag.CommandLine.Bool(
-	//		"chart",
-	//		false,
-	//		"generate chart")
-
 	chartOutputDir := flag.CommandLine.String(
 		"chart-output-dir",
 		defaultChartOutputDir,
 		"chart output dir")
-
-	fetchCmd := flag.NewFlagSet("fetch", flag.ExitOnError)
-	fetchCmd.Usage = func() {
-		fmt.Println(usageFetch)
-		os.Exit(1)
-	}
-	fetchOutputDir := fetchCmd.String("outputDir",
-		defaultStocksDir, "output dir")
-	fetchForce := fetchCmd.Bool("force", false,
-		"force downloading stock data even if it is already downloaded")
-	fetchIEXCloudAPITokensFile := fetchCmd.String("iexCloudAPITokens", "",
-		"IEXCloud API Token csv file")
-
-	statsCmd := flag.NewFlagSet("stats", flag.ExitOnError)
-	statsCmd.Usage = func() {
-		fmt.Println(usageStats)
-		os.Exit(1)
-	}
-	statsStocksDir := statsCmd.String("stocksDir",
-		defaultStocksDir, "stocks dir")
 
 	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
 	chartCmd.Usage = func() {
@@ -182,6 +114,52 @@ func main() {
 		false,
 		"Reset data in the datebase with the new data",
 	)
+	noCutDividend := optsFlagSet.Bool(
+		"no-cut-dividend",
+		false,
+		"Dividends were not decreased")
+
+	noDecliningDGR := optsFlagSet.Bool(
+		"no-declining-dgr",
+		false,
+		"no declining DGR")
+
+	divYieldFwdMin := optsFlagSet.Float64(
+		"dividend-yield-forward-min",
+		0.0,
+		"minimum forward dividend yield")
+
+	divYieldFwdMax := optsFlagSet.Float64(
+		"dividend-yield-forward-max",
+		0.0,
+		"maximum forward dividend yield")
+
+	divYieldROIMin := optsFlagSet.Float64(
+		"dividend-yield-roi-min",
+		0.0,
+		"forward dividend yield + DGR-5y average yield "+
+			"must be a greater than or equal to the given total yield")
+
+	ggrROIMin := optsFlagSet.Float64(
+		"gordon-roi-min",
+		10.0,
+		"expected return on investment (ROI) "+
+			"in the Gordon formula as a percentage")
+
+	ggrMin := optsFlagSet.Float64(
+		"gordon-growth-rate-min",
+		0.0,
+		"minimum Gordon growth rate as a percentage")
+
+	ggrMax := optsFlagSet.Float64(
+		"gordon-growth-rate-max",
+		0.0,
+		"maximum Gordon growth rate as a percentage")
+
+	chartFlag := optsFlagSet.Bool(
+		"chart",
+		false,
+		"generate chart")
 
 	optsFlagSet.Parse(os.Args[2:])
 
@@ -247,6 +225,16 @@ func main() {
 		cli.DividendService(dividendSrv),
 		cli.PriceService(priceSrv),
 		cli.CurrencyService(currencySrv),
+
+		cli.DividendYieldForwardMin(*divYieldFwdMin),
+		cli.DividendYieldForwardMax(*divYieldFwdMax),
+		cli.DividendYieldTotalMin(*divYieldROIMin),
+		cli.GordonROI(*ggrROIMin),
+		cli.GordonGrowthRateMin(*ggrMin),
+		cli.GordonGrowthRateMax(*ggrMax),
+		cli.NoCutDividend(*noCutDividend),
+		cli.NoDecliningDGR(*noDecliningDGR),
+		cli.Chart(*chartFlag),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {
@@ -255,87 +243,7 @@ func main() {
 	}
 	return
 
-	/*
-			cc := xrates.NewCurrencyConverter(
-				xrates.Logger(stdoutSync),
-			)
-			ccin := &divyield.CurrencyConvertInput{
-				From:   "CAD",
-				To:     "USD",
-				Amount: 26.00,
-				Date:   time.Date(2021, time.May, 18, 0, 0, 0, 0, time.UTC),
-			}
-			ccout, err := cc.Convert(ctx, ccin)
-		    if err != nil {
-				fmt.Println(err)
-				return
-		    }
-			stdoutSync.Logf("%f %f%%", ccout.Amount, ccout.Rate)
-	*/
-
 	switch os.Args[subIdx] {
-	case "fetch":
-		fetchCmd.Parse(os.Args[subIdx+1:])
-
-		tickers := fetchCmd.Args()
-		if len(tickers) == 0 {
-			fmt.Println("tickers not specified")
-			return
-		}
-
-		iexCloudAPITokens, err := parseIEXCloudAPITokens(
-			*fetchIEXCloudAPITokensFile)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		fetcher := iexcloud.NewStockFetcher(
-			iexcloud.OutputDir(*fetchOutputDir),
-			iexcloud.Workers(2),
-			iexcloud.RateLimiter(rate.NewLimiter(rate.Every(500*time.Millisecond), 2)),
-			iexcloud.Timeout(10*time.Second),
-			iexcloud.IEXCloudAPITokens(iexCloudAPITokens),
-			iexcloud.Force(*fetchForce),
-			iexcloud.Log(stdoutSync),
-			iexcloud.DB(pdb),
-		)
-		fetcher.Fetch(ctx, tickers)
-		for _, err := range fetcher.Errs() {
-			fmt.Println("Error:", err)
-		}
-
-	case "stats":
-		statsCmd.Parse(os.Args[subIdx+1:])
-
-		tickers := statsCmd.Args()
-		if len(tickers) == 0 {
-			fmt.Println("tickers not specified")
-			return
-		}
-
-		statsGenerator := stats.NewStatsGenerator(
-			stats.StocksDir(*statsStocksDir),
-			stats.Now(now),
-			stats.Log(stdoutSync),
-			stats.DB(pdb),
-			stats.StartDate(startDate),
-			stats.DividendYieldForwardMin(*divYieldFwdMin),
-			stats.DividendYieldForwardMax(*divYieldFwdMax),
-			stats.DividendYieldTotalMin(*divYieldROIMin),
-			stats.GordonROI(*ggrROIMin),
-			stats.GordonGrowthRateMin(*ggrMin),
-			stats.GordonGrowthRateMax(*ggrMax),
-			stats.NoCutDividend(*noCutDividend),
-			stats.NoDecliningDGR(*noDecliningDGR),
-		)
-		stats, err := statsGenerator.Generate(ctx, tickers)
-		if err != nil {
-			fmt.Println("Error:", err)
-			return
-		}
-		fmt.Println(stats)
-
 	case "chart":
 		chartCmd.Parse(os.Args[subIdx+1:])
 

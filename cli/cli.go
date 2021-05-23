@@ -5,7 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
+	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -53,26 +56,125 @@ func (c *Command) Execute(ctx context.Context) error {
 }
 
 func (c *Command) stats(ctx context.Context) error {
-	return nil
-}
+	var err error
 
-func (c *Command) pull(ctx context.Context) error {
-	from := c.opts.startDate
 	symbols := c.args
-    if len(symbols) == 0 {
-        profsOut, err := c.opts.db.Profiles(
-			ctx,
-			&divyield.DBProfilesInput{},
-		)
+	if len(symbols) == 0 {
+		symbols, err = c.symbolsDB(ctx)
 		if err != nil {
 			return err
 		}
-        for _, v := range profsOut.Profiles {
-            symbols = append(symbols, v.Symbol)
-        }
+	}
+
+	sg := &statsGenerator{
+		db:               c.opts.db,
+		startDate:        c.opts.startDate,
+		divYieldFwdMin:   c.opts.divYieldFwdMin,
+		divYieldFwdMax:   c.opts.divYieldFwdMax,
+		divYieldTotalMin: c.opts.divYieldTotalMin,
+		ggrROI:           c.opts.ggrROI,
+		ggrMin:           c.opts.ggrMin,
+		ggrMax:           c.opts.ggrMax,
+		noCutDividend:    c.opts.noCutDividend,
+		noDecliningDGR:   c.opts.noDecliningDGR,
+	}
+
+	stats, err := sg.Generate(ctx, symbols)
+	if err != nil {
+		return err
+	}
+
+    if c.opts.chart {
+        
     }
 
-	err := c.opts.db.InitSchema(ctx, symbols)
+	c.writeStats(stats)
+	return nil
+}
+
+func (c *Command) writeStats(s *divyield.Stats) {
+	out := &bytes.Buffer{}
+	w := tabwriter.NewWriter(
+		out, 0, 0, 2, ' ', tabwriter.AlignRight)
+
+	b := &bytes.Buffer{}
+	b.WriteString("Ticker")
+	b.WriteByte('\t')
+	b.WriteString("Forward dividend")
+	b.WriteByte('\t')
+	b.WriteString("Forward yield")
+	b.WriteByte('\t')
+	b.WriteString("GGR")
+	b.WriteByte('\t')
+	b.WriteString("MR% date")
+	b.WriteByte('\t')
+	b.WriteString("MR%")
+	b.WriteByte('\t')
+	b.WriteString("DGR-1y")
+	b.WriteByte('\t')
+	b.WriteString("DGR-2y")
+	b.WriteByte('\t')
+	b.WriteString("DGR-3y")
+	b.WriteByte('\t')
+	b.WriteString("DGR-4y")
+	b.WriteByte('\t')
+	b.WriteString("DGR-5y")
+	b.WriteByte('\t')
+
+	fmt.Fprintln(w, b.String())
+
+	for _, row := range s.Rows {
+		b.Reset()
+		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DivYieldFwd))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.GordonGrowthRate))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf(
+			"%s",
+			row.DividendChangeMRDate.Format("2006-01-02")))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf(
+			"%.2f%%",
+			row.DividendChangeMR))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[1]))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[2]))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[3]))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[4]))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[5]))
+		b.WriteByte('\t')
+
+		fmt.Fprintln(w, b.String())
+	}
+
+	//fmt.Fprintln(w, "")
+
+	w.Flush()
+
+	c.writef("%s", out.String())
+}
+
+func (c *Command) pull(ctx context.Context) error {
+	var err error
+	from := c.opts.startDate
+
+	symbols := c.args
+	if len(symbols) == 0 {
+		symbols, err = c.symbolsDB(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = c.opts.db.InitSchema(ctx, symbols)
 	if err != nil {
 		return fmt.Errorf("init schema: %v", err)
 	}
@@ -141,7 +243,7 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-        c.writef("%v: %v splits", symbol, len(sout.Splits))
+		c.writef("%v: %v splits", symbol, len(sout.Splits))
 
 		fromDividends := from
 		if !c.opts.reset {
@@ -184,8 +286,7 @@ func (c *Command) pull(ctx context.Context) error {
 				v.Amount = ccout.Amount
 			}
 		}
-        c.writef("%v: %v dividends", symbol, len(dout.Dividends),
-        )
+		c.writef("%v: %v dividends", symbol, len(dout.Dividends))
 
 		fromPrices := from
 		if !c.opts.reset {
@@ -212,7 +313,7 @@ func (c *Command) pull(ctx context.Context) error {
 		for _, v := range pout.Prices {
 			v.Currency = priceCurrency
 		}
-        c.writef("%v: %v prices", symbol, len(pout.Prices))
+		c.writef("%v: %v prices", symbol, len(pout.Prices))
 
 		_, err = c.opts.db.SaveProfile(
 			ctx,
@@ -224,7 +325,6 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
 
 		_, err = c.opts.db.SaveSplits(
 			ctx,
@@ -263,6 +363,23 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (c *Command) symbolsDB(
+	ctx context.Context,
+) ([]string, error) {
+	symbols := make([]string, 0)
+	out, err := c.opts.db.Profiles(
+		ctx,
+		&divyield.DBProfilesInput{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range out.Profiles {
+		symbols = append(symbols, v.Symbol)
+	}
+	return symbols, nil
 }
 
 func (c *Command) adjustFromSplits(
@@ -420,7 +537,7 @@ func (c *Command) writeProfile(cp *divyield.Profile) {
 	fmt.Fprintln(w, b.String())
 
 	w.Flush()
-	c.writef(buf.String())
+	c.writef("%s", buf.String())
 }
 
 func (c *Command) symbols(ctx context.Context) error {
@@ -460,7 +577,7 @@ func (c *Command) writeSymbolISINs(symbols []*divyield.SymbolISIN) {
 	}
 
 	w.Flush()
-	c.writef(buf.String())
+	c.writef("%s", buf.String())
 }
 
 func (c *Command) exchanges(ctx context.Context) error {
@@ -505,13 +622,400 @@ func (c *Command) writeExchanges(exchanges []*divyield.Exchange) {
 	}
 
 	w.Flush()
-	c.writef(buf.String())
+	c.writef("%s", buf.String())
 }
 
 func (c *Command) writef(format string, v ...interface{}) {
 	if c.opts.writer != nil {
 		fmt.Fprintf(c.opts.writer, format, v...)
 	}
+}
+
+type statsGenerator struct {
+	db              divyield.DB
+	writer          io.Writer
+	startDate       time.Time
+	splitService    divyield.SplitService
+	dividendService divyield.DividendService
+	priceService    divyield.PriceService
+
+	divYieldFwdMin   float64
+	divYieldFwdMax   float64
+	divYieldTotalMin float64
+	ggrROI           float64
+	ggrMin           float64
+	ggrMax           float64
+	noCutDividend    bool
+	noDecliningDGR   bool
+}
+
+func (g *statsGenerator) Generate(
+	ctx context.Context,
+	symbols []string,
+) (*divyield.Stats, error) {
+	var workerWg sync.WaitGroup
+	var resultWg sync.WaitGroup
+	resultCh := make(chan result)
+
+	stats := &divyield.Stats{}
+
+	errs := make([]error, 0)
+
+	resultWg.Add(1)
+	go func() {
+		defer resultWg.Done()
+		for res := range resultCh {
+			if res.Err != nil {
+				se := &StatsError{Ticker: res.Ticker, Err: res.Err}
+				errs = append(errs, se)
+			} else {
+				stats.Rows = append(stats.Rows, res.Row)
+			}
+		}
+
+		sort.SliceStable(stats.Rows, func(i, j int) bool {
+			return stats.Rows[i].Ticker < stats.Rows[j].Ticker
+		})
+	}()
+
+LOOP:
+	for _, ticker := range symbols {
+		ticker := ticker
+
+		select {
+		case <-ctx.Done():
+			break LOOP
+		default:
+			// noop
+		}
+
+		workerWg.Add(1)
+		go func(ticker string) {
+			defer workerWg.Done()
+			row, err := g.generateStatsRow(ctx, ticker)
+			resultCh <- result{Ticker: ticker, Row: row, Err: err}
+		}(ticker)
+	}
+
+	workerWg.Wait()
+	close(resultCh)
+	resultWg.Wait()
+
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+
+	g.filter(
+		stats,
+		g.filterDivYieldFwdMinMax,
+		g.filterDivYieldTotalMin,
+		g.filterGGRMinMax,
+		g.filterNoCutDividend,
+		g.filterNoDecliningDGR,
+	)
+
+	return stats, nil
+}
+
+type result struct {
+	Ticker string
+	Row    *divyield.StatsRow
+	Err    error
+}
+
+func (g *statsGenerator) generateStatsRow(
+	ctx context.Context,
+	ticker string,
+) (*divyield.StatsRow, error) {
+
+	dyf := &divyield.DividendYieldFilter{
+		Limit: 1,
+	}
+	dividendYields, err := g.db.DividendYields(ctx, ticker, dyf)
+	if err != nil {
+		return nil, fmt.Errorf("get dividend yields: %s", err)
+	}
+
+	divYieldFwd := float64(0)
+	divFwd := float64(0)
+	ggr := float64(0)
+	if len(dividendYields) > 0 {
+		divYieldFwd = dividendYields[0].ForwardTTM()
+		divFwd = dividendYields[0].DividendForwardTTM()
+	}
+	if g.ggrROI > 0 {
+		ggr = g.ggrROI - divYieldFwd
+	}
+
+	df := &divyield.DividendFilter{
+		From: time.Date(
+			time.Now().UTC().Year()-11, time.January, 1,
+			0, 0, 0, 0, time.UTC),
+		CashOnly: true,
+		Regular:  true,
+	}
+	dividendsDB, err := g.db.Dividends(ctx, ticker, df)
+	if err != nil {
+		return nil, fmt.Errorf("get dividends: %s", err)
+	}
+
+	dividends := make([]*divyield.DividendChange, 0, len(dividendsDB))
+	for _, d := range dividendsDB {
+		dividends = append(dividends, &divyield.DividendChange{
+			Dividend: d,
+		})
+	}
+	g.calcDividendChanges(dividends)
+
+	divChangeMR, divChangeMRDate := g.dividendChangeMR(dividends)
+
+	row := &divyield.StatsRow{
+		Ticker:               ticker,
+		DivYieldFwd:          divYieldFwd,
+		DivFwd:               divFwd,
+		GordonGrowthRate:     ggr,
+		Dividends:            dividends,
+		DividendChangeMR:     divChangeMR,
+		DividendChangeMRDate: divChangeMRDate,
+		DGRs: map[int]float64{
+			1: g.dgr(dividends, 1),
+			2: g.dgr(dividends, 2),
+			3: g.dgr(dividends, 3),
+			4: g.dgr(dividends, 4),
+			5: g.dgr(dividends, 5),
+		},
+	}
+
+	return row, nil
+}
+
+func (g *statsGenerator) calcDividendChanges(
+	dividends []*divyield.DividendChange,
+) {
+	for i := 0; i <= len(dividends)-2; i++ {
+		a0 := dividends[i]
+		a0.Change = math.NaN()
+		a1 := dividends[i+1]
+		a1.Change = math.NaN()
+
+		if a0.Currency == a1.Currency {
+			a0.Change = ((a0.AmountAdj / a1.AmountAdj) - 1) * 100
+		}
+	}
+}
+
+func (g *statsGenerator) filter(
+	stats *divyield.Stats,
+	filters ...filterFunc,
+) {
+	filtered := make([]*divyield.StatsRow, 0, len(stats.Rows))
+
+LOOP_ROWS:
+	for _, row := range stats.Rows {
+		for _, fn := range filters {
+			if ok := fn(row); !ok {
+				continue LOOP_ROWS
+			}
+		}
+		filtered = append(filtered, row)
+	}
+	stats.Rows = filtered
+}
+
+type filterFunc func(row *divyield.StatsRow) bool
+
+func (g *statsGenerator) filterNoCutDividend(
+	row *divyield.StatsRow,
+) bool {
+	if !g.noCutDividend {
+		return true
+	}
+
+	for i := 0; i <= len(row.Dividends)-2; i++ {
+		d0 := row.Dividends[i]
+		if d0.Change < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (g *statsGenerator) filterDivYieldFwdMinMax(
+	row *divyield.StatsRow,
+) bool {
+	min := g.divYieldFwdMin
+	max := g.divYieldFwdMax
+
+	if min <= 0 && max <= 0 {
+		return true
+	}
+
+	v := row.DivYieldFwd
+
+	if min > 0 && (isNaN(v) || v < min) {
+		return false
+	}
+
+	if max > 0 && (isNaN(v) || max < v) {
+		return false
+	}
+
+	return true
+}
+
+func (g *statsGenerator) filterDivYieldTotalMin(
+	row *divyield.StatsRow,
+) bool {
+	min := g.divYieldTotalMin
+	if min <= 0 {
+		return true
+	}
+
+	return min <= row.DivYieldFwd+row.DGRs[5]
+}
+
+func (g *statsGenerator) filterGGRMinMax(
+	row *divyield.StatsRow,
+) bool {
+	min := g.ggrMin
+	max := g.ggrMax
+
+	if min <= 0 && max <= 0 {
+		return true
+	}
+
+	v := row.GordonGrowthRate
+
+	if min > 0 && (isNaN(v) || v < min) {
+		return false
+	}
+
+	if max > 0 && (isNaN(v) || max < v) {
+		return false
+	}
+
+	return true
+}
+
+func (g *statsGenerator) filterNoDecliningDGR(
+	row *divyield.StatsRow,
+) bool {
+	if !g.noDecliningDGR {
+		return true
+	}
+
+	dgrs := []float64{
+		row.DGRs[5],
+		row.DGRs[4],
+		row.DGRs[3],
+		row.DGRs[2],
+		row.DGRs[1],
+		row.DividendChangeMR,
+	}
+
+	dgrsPos := make([]float64, 0, len(dgrs))
+	for _, v := range dgrs {
+		if v > 0 {
+			dgrsPos = append(dgrsPos, v)
+		}
+	}
+
+	for i := 0; i <= len(dgrsPos)-2; i++ {
+		v0 := dgrsPos[i]
+		v1 := dgrsPos[i+1]
+
+		if v0 < v1 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (g *statsGenerator) writef(
+	format string,
+	v ...interface{},
+) {
+	if g.writer != nil {
+		fmt.Fprintf(g.writer, format, v...)
+	}
+}
+
+func (g *statsGenerator) dgr(
+	dividends []*divyield.DividendChange,
+	n int,
+) float64 {
+	if n < 1 {
+		panic("n must be greater than 1")
+	}
+
+	if len(dividends) == 0 {
+		return 0
+	}
+
+	y := time.Now().UTC().Year()
+	ed := time.Date(y-1, time.December, 31, 0, 0, 0, 0, time.UTC)
+	sd := time.Date(y-n, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	changes := make([]float64, 0, n)
+
+	//sum := float64(0)
+	//c := 0
+	for _, v := range dividends {
+		if v.Change > 0 &&
+			sd.Unix() < v.ExDate.Unix() &&
+			v.ExDate.Unix() < ed.Unix() {
+			//sum += v.Change
+			//c += 1
+			changes = append(changes, v.Change)
+		}
+	}
+
+	dgr := float64(0)
+	if 0 < len(changes) {
+		sort.Float64s(changes)
+
+		//dgr = sum / float64(c)
+
+		if len(changes)%2 == 1 {
+			dgr = changes[(len(changes) / 2)]
+		} else {
+			vl := changes[len(changes)/2-1]
+			vr := changes[len(changes)/2]
+			dgr = (vl + vr) / 2.0
+		}
+	}
+
+	return dgr
+}
+
+func (g *statsGenerator) dividendChangeMR(
+	dividends []*divyield.DividendChange,
+) (float64, time.Time) {
+	for _, v := range dividends {
+		if 0 < v.Change {
+			return v.Change, v.ExDate
+		}
+	}
+	return float64(0), time.Time{}
+}
+
+type StatsError struct {
+	Ticker string
+	Err    error
+}
+
+func (e *StatsError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Ticker, e.Err)
+}
+
+type dividend struct {
+	*divyield.Dividend
+	Change float64 // compared to the year before
+}
+
+func isNaN(v float64) bool {
+	return math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1)
 }
 
 var defaultOptions = options{
@@ -532,6 +1036,16 @@ type options struct {
 	dividendService divyield.DividendService
 	priceService    divyield.PriceService
 	currencyService divyield.CurrencyService
+
+	divYieldFwdMin   float64
+	divYieldFwdMax   float64
+	divYieldTotalMin float64
+	ggrROI           float64
+	ggrMin           float64
+	ggrMax           float64
+	noCutDividend    bool
+	noDecliningDGR   bool
+	chart   bool
 }
 
 type Option func(o options) options
@@ -622,6 +1136,69 @@ func CurrencyService(v divyield.CurrencyService) Option {
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db
+		return o
+	}
+}
+
+func DividendYieldForwardMin(v float64) Option {
+	return func(o options) options {
+		o.divYieldFwdMin = v
+		return o
+	}
+}
+
+func DividendYieldTotalMin(v float64) Option {
+	return func(o options) options {
+		o.divYieldTotalMin = v
+		return o
+	}
+}
+
+func DividendYieldForwardMax(v float64) Option {
+	return func(o options) options {
+		o.divYieldFwdMax = v
+		return o
+	}
+}
+
+func GordonROI(v float64) Option {
+	return func(o options) options {
+		o.ggrROI = v
+		return o
+	}
+}
+
+func GordonGrowthRateMin(v float64) Option {
+	return func(o options) options {
+		o.ggrMin = v
+		return o
+	}
+}
+
+func GordonGrowthRateMax(v float64) Option {
+	return func(o options) options {
+		o.ggrMax = v
+		return o
+	}
+}
+
+func NoCutDividend(v bool) Option {
+	return func(o options) options {
+		o.noCutDividend = v
+		return o
+	}
+}
+
+func NoDecliningDGR(v bool) Option {
+	return func(o options) options {
+		o.noDecliningDGR = v
+		return o
+	}
+}
+
+func Chart(v bool) Option {
+	return func(o options) options {
+		o.chart = v
 		return o
 	}
 }

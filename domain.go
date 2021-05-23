@@ -362,3 +362,23 @@ type Exchange struct {
 	Currency    string
 	Description string
 }
+
+type Stats struct {
+	Rows []*StatsRow
+}
+
+type StatsRow struct {
+	Ticker               string
+	DivYieldFwd          float64
+	DivFwd               float64
+	GordonGrowthRate     float64
+	Dividends            []*DividendChange
+	DividendChangeMR     float64
+	DividendChangeMRDate time.Time
+	DGRs                 map[int]float64
+}
+
+type DividendChange struct {
+	*Dividend
+	Change float64
+}
