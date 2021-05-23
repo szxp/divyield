@@ -71,7 +71,7 @@ func (c *IEXCloud) splitsURL(
 		"/time-series" +
 		"/SPLITS/" + symbol +
 		"?from=" + from.Format(divyield.DateFormat) +
-		"&sort=DESC" +
+		"&sort=ASC" +
 		"&token=" + c.opts.token
 }
 
@@ -84,7 +84,7 @@ func (c *IEXCloud) dividendsURL(
 		"/time-series" +
 		"/DIVIDENDS/" + symbol +
 		"?from=" + from.Format(divyield.DateFormat) +
-		"&sort=DESC" +
+		"&sort=ASC" +
 		"&token=" + c.opts.token
 }
 
@@ -97,7 +97,7 @@ func (c *IEXCloud) pricesURL(
 		"/time-series" +
 		"/HISTORICAL_PRICES/" + symbol +
 		"?from=" + from.Format(divyield.DateFormat) +
-		"&sort=DESC" +
+		"&sort=ASC" +
 		"&token=" + c.opts.token
 }
 
