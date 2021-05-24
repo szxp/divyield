@@ -11,6 +11,13 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+    "path/filepath"
+    "path"
+    "text/template"
+    "os"
+    "os/exec"
+    "bufio"
+    "regexp"
 
 	"szakszon.com/divyield"
 )
@@ -84,9 +91,18 @@ func (c *Command) stats(ctx context.Context) error {
 		return err
 	}
 
-    if c.opts.chart {
-        
-    }
+	if c.opts.chart {
+        cg := &chartGenerator{
+            db: c.opts.db,
+            writer: c.opts.writer,
+            dir: c.opts.dir,
+            startDate: c.opts.startDate,
+        }
+		err = cg.Generate(ctx, stats)
+		if err != nil {
+			return err
+		}
+	}
 
 	c.writeStats(stats)
 	return nil
@@ -98,7 +114,7 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		out, 0, 0, 2, ' ', tabwriter.AlignRight)
 
 	b := &bytes.Buffer{}
-	b.WriteString("Ticker")
+	b.WriteString("Symbol")
 	b.WriteByte('\t')
 	b.WriteString("Forward dividend")
 	b.WriteByte('\t')
@@ -125,7 +141,7 @@ func (c *Command) writeStats(s *divyield.Stats) {
 
 	for _, row := range s.Rows {
 		b.Reset()
-		b.WriteString(fmt.Sprintf("%-6v", row.Ticker))
+		b.WriteString(fmt.Sprintf("%-6v", row.Symbol))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
 		b.WriteByte('\t')
@@ -666,7 +682,7 @@ func (g *statsGenerator) Generate(
 		defer resultWg.Done()
 		for res := range resultCh {
 			if res.Err != nil {
-				se := &StatsError{Ticker: res.Ticker, Err: res.Err}
+				se := &StatsError{Symbol: res.Symbol, Err: res.Err}
 				errs = append(errs, se)
 			} else {
 				stats.Rows = append(stats.Rows, res.Row)
@@ -674,13 +690,13 @@ func (g *statsGenerator) Generate(
 		}
 
 		sort.SliceStable(stats.Rows, func(i, j int) bool {
-			return stats.Rows[i].Ticker < stats.Rows[j].Ticker
+			return stats.Rows[i].Symbol < stats.Rows[j].Symbol
 		})
 	}()
 
 LOOP:
-	for _, ticker := range symbols {
-		ticker := ticker
+	for _, symbol := range symbols {
+		symbol := symbol
 
 		select {
 		case <-ctx.Done():
@@ -690,11 +706,11 @@ LOOP:
 		}
 
 		workerWg.Add(1)
-		go func(ticker string) {
+		go func(symbol string) {
 			defer workerWg.Done()
-			row, err := g.generateStatsRow(ctx, ticker)
-			resultCh <- result{Ticker: ticker, Row: row, Err: err}
-		}(ticker)
+			row, err := g.generateStatsRow(ctx, symbol)
+			resultCh <- result{Symbol: symbol, Row: row, Err: err}
+		}(symbol)
 	}
 
 	workerWg.Wait()
@@ -718,20 +734,20 @@ LOOP:
 }
 
 type result struct {
-	Ticker string
+	Symbol string
 	Row    *divyield.StatsRow
 	Err    error
 }
 
 func (g *statsGenerator) generateStatsRow(
 	ctx context.Context,
-	ticker string,
+	symbol string,
 ) (*divyield.StatsRow, error) {
 
 	dyf := &divyield.DividendYieldFilter{
 		Limit: 1,
 	}
-	dividendYields, err := g.db.DividendYields(ctx, ticker, dyf)
+	dividendYields, err := g.db.DividendYields(ctx, symbol, dyf)
 	if err != nil {
 		return nil, fmt.Errorf("get dividend yields: %s", err)
 	}
@@ -754,7 +770,7 @@ func (g *statsGenerator) generateStatsRow(
 		CashOnly: true,
 		Regular:  true,
 	}
-	dividendsDB, err := g.db.Dividends(ctx, ticker, df)
+	dividendsDB, err := g.db.Dividends(ctx, symbol, df)
 	if err != nil {
 		return nil, fmt.Errorf("get dividends: %s", err)
 	}
@@ -770,7 +786,7 @@ func (g *statsGenerator) generateStatsRow(
 	divChangeMR, divChangeMRDate := g.dividendChangeMR(dividends)
 
 	row := &divyield.StatsRow{
-		Ticker:               ticker,
+		Symbol:               symbol,
 		DivYieldFwd:          divYieldFwd,
 		DivFwd:               divFwd,
 		GordonGrowthRate:     ggr,
@@ -794,9 +810,9 @@ func (g *statsGenerator) calcDividendChanges(
 ) {
 	for i := 0; i <= len(dividends)-2; i++ {
 		a0 := dividends[i]
-		a0.Change = math.NaN()
+		a0.Change = 0 //math.NaN()
 		a1 := dividends[i+1]
-		a1.Change = math.NaN()
+		a1.Change = 0 //math.NaN()
 
 		if a0.Currency == a1.Currency {
 			a0.Change = ((a0.AmountAdj / a1.AmountAdj) - 1) * 100
@@ -1001,18 +1017,447 @@ func (g *statsGenerator) dividendChangeMR(
 }
 
 type StatsError struct {
-	Ticker string
+	Symbol string
 	Err    error
 }
 
 func (e *StatsError) Error() string {
-	return fmt.Sprintf("%s: %s", e.Ticker, e.Err)
+	return fmt.Sprintf("%s: %s", e.Symbol, e.Err)
 }
 
-type dividend struct {
-	*divyield.Dividend
-	Change float64 // compared to the year before
+type chartGenerator struct {
+	writer    io.Writer
+	db        divyield.DB
+	startDate time.Time
+	dir string
 }
+
+func (g *chartGenerator) Generate(
+	ctx context.Context,
+	stats *divyield.Stats,
+) error {
+	for _, row := range stats.Rows {
+		symbol := row.Symbol
+        dividends := row.Dividends
+
+		yields, err := g.db.DividendYields(
+			ctx,
+			symbol,
+			&divyield.DividendYieldFilter{
+				From: g.startDate,
+			},
+		)
+
+	    chartDir := filepath.Join(g.dir, "work/chart")
+		err = g.writeFileYields(symbol, yields, chartDir)
+		if err != nil {
+			return err
+		}
+		err = g.writeFileDividends(symbol, dividends, chartDir)
+		if err != nil {
+			return err
+		}
+
+		minPrice, maxPrice := g.rangePrices(yields)
+		minYieldFwd, maxYieldFwd := g.rangeYieldsFwd(yields)
+		yieldStart := yields[0].ForwardTTM()
+
+		//		minYieldTrail, maxYieldTrail := g.rangeYieldsTrail(yields)
+		_, maxDiv := g.rangeDividends(dividends)
+		minDGR, maxDGR := g.rangeDividendChanges(dividends)
+
+		chartParams := chartParams{
+			Yieldsfile: path.Join(
+				chartDir,
+				symbol+".yields.csv",
+			),
+			Dividendsfile: path.Join(
+				chartDir,
+				symbol+".dividends.csv",
+			),
+
+			Imgfile: path.Join(
+				chartDir,
+				symbol+".png",
+			),
+
+            XRangeMin: yields[len(yields)-1].
+                Date.Format("2006-01-02"),
+            XRangeMax: yields[0].
+                Date.Format("2006-01-02"),
+
+			TitlePrices:        symbol + " prices",
+			TitleDivYieldFwd:   symbol + " forward dividend yields",
+			TitleDivYieldTrail: symbol + " trailing dividend yields",
+			TitleDividends:     symbol + " dividends",
+			TitleDGR:           symbol + " dividend growth rates",
+
+			PriceYrMin: math.Max(
+				minPrice-((maxPrice-minPrice)*0.1),
+				0,
+			),
+			PriceYrMax: math.Max(
+				maxPrice+((maxPrice-minPrice)*0.1),
+				0.01,
+			),
+
+			YieldFwdYrMin: math.Max(
+				minYieldFwd-((maxYieldFwd-minYieldFwd)*0.1),
+				0,
+			),
+			YieldFwdYrMax: math.Max(
+				maxYieldFwd+((maxYieldFwd-minYieldFwd)*0.1),
+				0.01,
+			),
+			YieldStart: yieldStart,
+
+			//			YieldTrailYrMin: math.Max(
+			//				minYieldTrail-((maxYieldTrail-minYieldTrail)*0.1),
+			//				0,
+			//			),
+			//			YieldTrailYrMax: math.Max(
+			//				maxYieldTrail+((maxYieldTrail-minYieldTrail)*0.1),
+			//				0.01,
+			//			),
+
+			DivYrMin: 0,
+            //math.Max(
+			//	minDiv-((maxDiv-minDiv)*0.1),
+			//	0,
+			//),
+			DivYrMax: maxDiv * 1.1,
+            //math.Max(
+			//	maxDiv+((maxDiv-minDiv)*0.1),
+			//	0.01,
+			//),
+
+			DGRYrMin: minDGR - ((maxDGR - minDGR) * 0.1),
+			DGRYrMax: math.Max(
+				maxDGR+((maxDGR-minDGR)*0.1),
+				0.01,
+			),
+            DGR5y: row.DGRs[5],
+		}
+		chartTmpl, err := template.New("plot").Parse(chartTmpl)
+		if err != nil {
+			return err
+		}
+
+		plotCommands := bytes.NewBufferString("")
+		err = chartTmpl.Execute(plotCommands, chartParams)
+		if err != nil {
+			return err
+		}
+
+		//fmt.Println(plotCommands)
+		
+        plotCommandsStr := nlRE.ReplaceAllString(
+			plotCommands.String(),
+			" ",
+		)
+
+		//fmt.Println("gnuplot -e ", "\""+plotCommandsStr+"\"")
+		err = exec.CommandContext(
+			ctx,
+			"gnuplot", "-e",
+			plotCommandsStr,
+		).Run()
+		if err != nil {
+            return fmt.Errorf("%v: %v", symbol, err)
+		}
+
+		//g.writef("%s: %s", symbol, "OK")
+	}
+	return nil
+}
+
+func (g *chartGenerator) writeFileYields(
+	symbol string,
+	yields []*divyield.DividendYield,
+    dir string,
+) error {
+	err := os.MkdirAll(dir, 0666)
+	if err != nil {
+		return fmt.Errorf("create: %s", err)
+	}
+
+	p := filepath.Join(dir, symbol+".yields.csv")
+	d, err := os.Create(p)
+	if err != nil {
+		return fmt.Errorf("create: %s: %s", p, err)
+	}
+	defer d.Close()
+
+	w := bufio.NewWriter(d)
+
+	_, err = w.Write([]byte("" +
+		"Date," +
+		"CloseAdj," +
+		"DivYieldForwardTTM,",
+	))
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(yields); i++ {
+		y := yields[i]
+		_, err = w.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+
+		_, err = fmt.Fprintf(
+			w,
+			"%s,%.2f,%.2f",
+			y.Date.Format("2006-01-02"),
+			y.CloseAdj,
+			y.ForwardTTM(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return w.Flush()
+}
+
+func (g *chartGenerator) writeFileDividends(
+	symbol string,
+	dividends []*divyield.DividendChange,
+    dir string,
+) error {
+	p := filepath.Join(dir, symbol+".dividends.csv")
+	d, err := os.Create(p)
+	if err != nil {
+		return fmt.Errorf("create: %s: %s", p, err)
+	}
+	defer d.Close()
+
+	w := bufio.NewWriter(d)
+
+	_, err = w.Write([]byte("" +
+		"Date," +
+		"DivAdj," +
+		"DGR,",
+	))
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(dividends); i++ {
+		y := dividends[i]
+		_, err = w.Write([]byte("\n"))
+		if err != nil {
+			return err
+		}
+
+		_, err = fmt.Fprintf(
+			w,
+			"%s,%.2f,%.2f",
+			y.ExDate.Format("2006-01-02"),
+			y.AmountAdj,
+			y.Change,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return w.Flush()
+}
+
+func (g *chartGenerator) writef(
+    format string, 
+    v ...interface{},
+) {
+	if g.writer != nil {
+		fmt.Fprintf(g.writer, format, v...)
+	}
+}
+
+func (g *chartGenerator) rangePrices(
+	yields []*divyield.DividendYield,
+) (float64, float64) {
+	if len(yields) == 0 {
+		return 0, 0
+	}
+	min := yields[0].CloseAdj
+	max := yields[0].CloseAdj
+	for _, v := range yields {
+		if v.CloseAdj < min {
+			min = v.CloseAdj
+		}
+		if v.CloseAdj > max {
+			max = v.CloseAdj
+		}
+	}
+	return min, max
+}
+
+func (g *chartGenerator) rangeYieldsFwd(
+	yields []*divyield.DividendYield,
+) (float64, float64) {
+	if len(yields) == 0 {
+		return 0, 0
+	}
+	min := yields[0].ForwardTTM()
+	max := yields[0].ForwardTTM()
+	for _, v := range yields {
+		fwd := v.ForwardTTM()
+		if fwd < min {
+			min = fwd
+		}
+		if fwd > max {
+			max = fwd
+		}
+	}
+	return min, max
+}
+
+func (g *chartGenerator) rangeYieldsTrail(
+	yields []*divyield.DividendYield,
+) (float64, float64) {
+	if len(yields) == 0 {
+		return 0, 0
+	}
+	min := yields[0].TrailingTTM()
+	max := yields[0].TrailingTTM()
+	for _, v := range yields {
+		y := v.TrailingTTM()
+		if y < min {
+			min = y
+		}
+		if y > max {
+			max = y
+		}
+	}
+	return min, max
+}
+
+func (g *chartGenerator) rangeDividends(
+	a []*divyield.DividendChange,
+) (float64, float64) {
+	if len(a) == 0 {
+		return 0, 0
+	}
+	min := a[0].AmountAdj
+	max := a[0].AmountAdj
+	for _, v := range a {
+		if v.AmountAdj < min {
+			min = v.AmountAdj
+		}
+		if v.AmountAdj > max {
+			max = v.AmountAdj
+		}
+	}
+	return min, max
+}
+
+func (g *chartGenerator) rangeDividendChanges(
+	a []*divyield.DividendChange,
+) (float64, float64) {
+	if len(a) == 0 {
+		return 0, 0
+	}
+	min := a[0].Change
+	max := a[0].Change
+	for _, v := range a {
+		if v.Change < min {
+			min = v.Change
+		}
+		if v.Change > max {
+			max = v.Change
+		}
+	}
+	return min, max
+}
+
+var nlRE = regexp.MustCompile(`\r?\n`)
+
+type chartParams struct {
+	Yieldsfile    string
+	Dividendsfile string
+	Imgfile       string
+
+    XRangeMin string
+    XRangeMax string
+
+	TitlePrices        string
+	TitleDivYieldFwd   string
+	TitleDivYieldTrail string
+	TitleDividends     string
+	TitleDGR           string
+
+	PriceYrMin float64
+	PriceYrMax float64
+
+	YieldFwdYrMin float64
+	YieldFwdYrMax float64
+	YieldStart    float64
+
+	YieldTrailYrMin float64
+	YieldTrailYrMax float64
+
+	DivYrMin float64
+	DivYrMax float64
+
+	DGRYrMin float64
+	DGRYrMax float64
+	DGR5y    float64
+}
+
+const chartTmpl = `
+yieldsfile='{{.Yieldsfile}}';
+dividendsfile='{{.Dividendsfile}}';
+imgfile='{{.Imgfile}}';
+
+set terminal png size 1920,1080;
+set output imgfile;
+
+set lmargin  9;
+set rmargin  2;
+
+set grid;
+set autoscale;
+set key outside;
+set key bottom right;
+set key autotitle columnhead;
+
+set datafile separator ',';
+
+set xdata time;
+set timefmt '%Y-%m-%d';
+set xrange ['{{.XRangeMin}}':'{{.XRangeMax}}'];
+set format x '%Y %b %d';
+
+set multiplot;
+set size 1, 0.25;
+
+set origin 0.0,0.75;
+set title '{{.TitlePrices}}';
+set yrange [{{.PriceYrMin}}:{{.PriceYrMax}}];
+plot yieldsfile using 1:2 with filledcurves above y = 0;
+
+set origin 0.0,0.50;
+set title '{{.TitleDivYieldFwd}}';
+set yrange [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
+plot yieldsfile using 1:3 with filledcurves above y = 0, {{.YieldStart}} title '' lw 4 lc 'red';
+
+set style fill solid;
+set boxwidth 1 absolute;
+
+set origin 0.0,0.25;
+set title '{{.TitleDividends}}';
+set yrange [{{.DivYrMin}}:{{.DivYrMax}}];
+plot dividendsfile using 1:($2 == 0 ? NaN : $2) with boxes lw 4;
+
+set origin 0.0,0.0;
+set title '{{.TitleDGR}}';
+set yrange [{{.DGRYrMin}}:{{.DGRYrMax}}];
+plot dividendsfile using 1:($3 == 0 ? NaN : $3) with boxes lw 4, {{.DGR5y}} title 'DGR5y' lw 4 lc 'red', 0 title '' lw 4 lc 'purple';
+
+unset multiplot;
+`
 
 func isNaN(v float64) bool {
 	return math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1)
@@ -1045,7 +1490,7 @@ type options struct {
 	ggrMax           float64
 	noCutDividend    bool
 	noDecliningDGR   bool
-	chart   bool
+	chart            bool
 }
 
 type Option func(o options) options

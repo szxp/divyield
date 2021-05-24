@@ -368,7 +368,7 @@ type Stats struct {
 }
 
 type StatsRow struct {
-	Ticker               string
+    Symbol               string
 	DivYieldFwd          float64
 	DivFwd               float64
 	GordonGrowthRate     float64

@@ -21,12 +21,9 @@ import (
 	"syscall"
 	"time"
 
-	//"szakszon.com/divyield"
-	"szakszon.com/divyield/chart"
 	"szakszon.com/divyield/cli"
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/postgres"
-	//"szakszon.com/divyield/stats"
 	"szakszon.com/divyield/xrates"
 )
 
@@ -50,30 +47,6 @@ func main() {
 		fmt.Println("Ctrl+C pressed")
 		ctxCancel()
 	}()
-
-	chartOutputDir := flag.CommandLine.String(
-		"chart-output-dir",
-		defaultChartOutputDir,
-		"chart output dir")
-
-	chartCmd := flag.NewFlagSet("chart", flag.ExitOnError)
-	chartCmd.Usage = func() {
-		fmt.Println(usageChart)
-		os.Exit(1)
-	}
-
-	if len(os.Args) < 2 {
-		fmt.Println(usage)
-		os.Exit(1)
-	}
-
-	subIdx := subcommandIndex(os.Args)
-	err = flag.CommandLine.Parse(os.Args[1:subIdx])
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-
-	}
 
 	optsFlagSet := flag.NewFlagSet("options", flag.ExitOnError)
 	dirFlag := optsFlagSet.String(
@@ -239,33 +212,6 @@ func main() {
 	err = cmd.Execute(ctx)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
-	}
-	return
-
-	switch os.Args[subIdx] {
-	case "chart":
-		chartCmd.Parse(os.Args[subIdx+1:])
-
-		tickers := chartCmd.Args()
-		if len(tickers) == 0 {
-			fmt.Println("tickers not specified")
-			return
-		}
-
-		chartGener := chart.NewChartGenerator(
-			chart.OutputDir(*chartOutputDir),
-			chart.StartDate(startDate),
-			chart.Log(stdoutSync),
-			chart.DB(pdb),
-		)
-		err = chartGener.Generate(ctx, tickers)
-		if err != nil {
-			fmt.Println("Error:", err)
-			return
-		}
-	default:
-		fmt.Println(usage)
 		os.Exit(1)
 	}
 }
