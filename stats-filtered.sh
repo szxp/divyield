@@ -23,5 +23,6 @@ go build cmd/divyield/main.go && \
     -no-cut-dividend=true \
     -no-declining-dgr=true \
     -start-date=2010-01-01 \
+    $@
     
 

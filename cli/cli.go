@@ -65,7 +65,7 @@ func (c *Command) Execute(ctx context.Context) error {
 func (c *Command) stats(ctx context.Context) error {
 	var err error
 
-	symbols := c.args
+	symbols := toUpper(c.args)
 	if len(symbols) == 0 {
 		symbols, err = c.symbolsDB(ctx)
 		if err != nil {
@@ -182,7 +182,7 @@ func (c *Command) pull(ctx context.Context) error {
 	var err error
 	from := c.opts.startDate
 
-	symbols := c.args
+	symbols := toUpper(c.args)
 	if len(symbols) == 0 {
 		symbols, err = c.symbolsDB(ctx)
 		if err != nil {
@@ -215,7 +215,10 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 
 		if proout.Profile == nil {
-			return fmt.Errorf("profile not found: " + symbol)
+			return fmt.Errorf(
+                "profile not found: %v", 
+                symbol,
+            )
 		}
 
 		var priceCurrency string
@@ -302,7 +305,11 @@ func (c *Command) pull(ctx context.Context) error {
 				v.Amount = ccout.Amount
 			}
 		}
-		c.writef("%v: %v dividends", symbol, len(dout.Dividends))
+		c.writef(
+            "%v: %v dividends", 
+            symbol, 
+            len(dout.Dividends),
+        )
 
 		fromPrices := from
 		if !c.opts.reset {
@@ -393,9 +400,16 @@ func (c *Command) symbolsDB(
 		return nil, err
 	}
 	for _, v := range out.Profiles {
-		symbols = append(symbols, v.Symbol)
+		symbols = append(symbols, strings.ToUpper(v.Symbol))
 	}
 	return symbols, nil
+}
+
+func toUpper(a []string) []string {
+    for i, v := range a {
+        a[i] = strings.ToUpper(v)
+    }
+    return a
 }
 
 func (c *Command) adjustFromSplits(
@@ -970,39 +984,53 @@ func (g *statsGenerator) dgr(
 	}
 
 	y := time.Now().UTC().Year()
-	ed := time.Date(y-1, time.December, 31, 0, 0, 0, 0, time.UTC)
-	sd := time.Date(y-n, time.January, 1, 0, 0, 0, 0, time.UTC)
+	ed := time.Date(
+        y-1, time.December, 31, 
+        0, 0, 0, 0, time.UTC,
+    )
+	sd := time.Date(
+        y-n, time.January, 1, 
+        0, 0, 0, 0, time.UTC,
+    )
 
-	changes := make([]float64, 0, n)
-
-	//sum := float64(0)
-	//c := 0
+	//changes := make([]float64, 0, n)
+	sum := float64(0)
+	c := 0
 	for _, v := range dividends {
-		if v.Change > 0 &&
-			sd.Unix() < v.ExDate.Unix() &&
-			v.ExDate.Unix() < ed.Unix() {
-			//sum += v.Change
-			//c += 1
-			changes = append(changes, v.Change)
+        inPeriod := sd.Unix() < v.ExDate.Unix() &&
+			v.ExDate.Unix() < ed.Unix()
+
+		if v.Change != 0 && inPeriod {
+            // avg
+			sum += v.Change
+			c += 1
+
+            // median
+			//changes = append(changes, v.Change)
 		}
 	}
 
-	dgr := float64(0)
-	if 0 < len(changes) {
-		sort.Float64s(changes)
+    if c == 0 {
+        return 0
+    }
+    return sum / float64(c)
 
-		//dgr = sum / float64(c)
-
-		if len(changes)%2 == 1 {
-			dgr = changes[(len(changes) / 2)]
-		} else {
-			vl := changes[len(changes)/2-1]
-			vr := changes[len(changes)/2]
-			dgr = (vl + vr) / 2.0
-		}
-	}
-
-	return dgr
+//	dgr := float64(0)
+//	if 0 < len(changes) {
+//		sort.Float64s(changes)
+//
+//		//dgr = sum / float64(c)
+//
+//		if len(changes)%2 == 1 {
+//			dgr = changes[(len(changes) / 2)]
+//		} else {
+//			vl := changes[len(changes)/2-1]
+//			vr := changes[len(changes)/2]
+//			dgr = (vl + vr) / 2.0
+//		}
+//	}
+//
+//	return dgr
 }
 
 func (g *statsGenerator) dividendChangeMR(
@@ -1436,12 +1464,12 @@ set size 1, 0.25;
 set origin 0.0,0.75;
 set title '{{.TitlePrices}}';
 set yrange [{{.PriceYrMin}}:{{.PriceYrMax}}];
-plot yieldsfile using 1:2 with filledcurves above y = 0;
+plot yieldsfile using 1:2 with filledcurves above y = 0 lc 'royalblue';
 
 set origin 0.0,0.50;
 set title '{{.TitleDivYieldFwd}}';
 set yrange [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
-plot yieldsfile using 1:3 with filledcurves above y = 0, {{.YieldStart}} title '' lw 4 lc 'red';
+plot yieldsfile using 1:3 with filledcurves above y = 0 lc 'royalblue', {{.YieldStart}} title '' lw 4 lc 'red';
 
 set style fill solid;
 set boxwidth 1 absolute;
@@ -1449,12 +1477,12 @@ set boxwidth 1 absolute;
 set origin 0.0,0.25;
 set title '{{.TitleDividends}}';
 set yrange [{{.DivYrMin}}:{{.DivYrMax}}];
-plot dividendsfile using 1:($2 == 0 ? NaN : $2) with boxes lw 4;
+plot dividendsfile using 1:($2 == 0 ? NaN : $2) with boxes lw 4 lc 'royalblue';
 
 set origin 0.0,0.0;
 set title '{{.TitleDGR}}';
 set yrange [{{.DGRYrMin}}:{{.DGRYrMax}}];
-plot dividendsfile using 1:($3 == 0 ? NaN : $3) with boxes lw 4, {{.DGR5y}} title 'DGR5y' lw 4 lc 'red', 0 title '' lw 4 lc 'purple';
+plot dividendsfile using 1:($3 == 0 ? NaN : $3) with boxes lw 4 lc 'royalblue', 0 title '' lw 4 lc 'royalblue', {{.DGR5y}} title 'DGR5y' lw 4 lc 'red';
 
 unset multiplot;
 `
