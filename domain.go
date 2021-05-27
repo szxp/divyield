@@ -400,3 +400,21 @@ type Inflation struct {
 	Rate   float64
 	Period string
 }
+
+type SP500Service interface {
+	DividendYield(
+		ctx context.Context,
+		in *SP500DividendYieldInput,
+	) (*SP500DividendYieldOutput, error)
+}
+
+type SP500DividendYieldInput struct{}
+
+type SP500DividendYieldOutput struct {
+	SP500DividendYield SP500DividendYield
+}
+
+type SP500DividendYield struct {
+	Rate      float64
+	Timestamp string
+}

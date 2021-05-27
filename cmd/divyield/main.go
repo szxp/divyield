@@ -24,6 +24,7 @@ import (
 	"szakszon.com/divyield/cli"
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/mnb"
+	"szakszon.com/divyield/multpl"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/xrates"
 )
@@ -169,6 +170,7 @@ func main() {
 	}
 
 	inflationSrv := mnb.NewInflationService()
+	sp500Srv := multpl.NewSP500Service()
 
 	currencySrv := xrates.NewCurrencyService(
 		xrates.RateLimiter(
@@ -207,6 +209,7 @@ func main() {
 		cli.PriceService(priceSrv),
 		cli.CurrencyService(currencySrv),
 		cli.InflationService(inflationSrv),
+		cli.SP500Service(sp500Srv),
 
 		cli.DividendYieldForwardMin(*divYieldFwdMin),
 		cli.DividendYieldForwardMax(*divYieldFwdMax),

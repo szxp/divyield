@@ -81,6 +81,14 @@ func (c *Command) stats(ctx context.Context) error {
 		return err
 	}
 
+	spout, err := c.opts.sp500Service.DividendYield(
+		ctx,
+		&divyield.SP500DividendYieldInput{},
+	)
+	if err != nil {
+		return err
+	}
+
 	sg := &statsGenerator{
 		db:                  c.opts.db,
 		startDate:           c.opts.startDate,
@@ -94,6 +102,7 @@ func (c *Command) stats(ctx context.Context) error {
 		noDecliningDGR:      c.opts.noDecliningDGR,
 		dgr5yAboveInflation: c.opts.dgr5yAboveInflation,
 		inflation:           &infout.Inflation,
+		sp500DividendYield:  &spout.SP500DividendYield,
 	}
 
 	stats, err := sg.Generate(ctx, symbols)
@@ -189,12 +198,40 @@ func (c *Command) writeStats(s *divyield.Stats) {
 func (c *Command) writeStatsFooter(
 	sg *statsGenerator,
 ) {
-	fmt.Fprintf(
-		c.opts.writer,
-		"Inflation: %.2f%%, %v",
+	out := &bytes.Buffer{}
+	w := tabwriter.NewWriter(
+		out, 0, 0, 2, ' ', 0)
+
+	inf := fmt.Sprintf(
+		"%.2f%%, %v",
 		sg.inflation.Rate,
 		sg.inflation.Period,
 	)
+
+	sp500DivYld := fmt.Sprintf(
+		"%.2f%%, %v",
+		sg.sp500DividendYield.Rate,
+		sg.sp500DividendYield.Timestamp,
+	)
+
+	b := &bytes.Buffer{}
+
+	b.Reset()
+	b.WriteString("Inflation:")
+	b.WriteByte('\t')
+	b.WriteString(inf)
+	b.WriteByte('\t')
+	fmt.Fprintln(w, b.String())
+
+	b.Reset()
+	b.WriteString("S&P 500 dividend yield:")
+	b.WriteByte('\t')
+	b.WriteString(sp500DivYld)
+	b.WriteByte('\t')
+	fmt.Fprintln(w, b.String())
+
+	w.Flush()
+	c.writef("%s", out.String())
 }
 
 func (c *Command) pull(ctx context.Context) error {
@@ -681,10 +718,11 @@ func (c *Command) writef(format string, v ...interface{}) {
 }
 
 type statsGenerator struct {
-	db        divyield.DB
-	writer    io.Writer
-	startDate time.Time
-	inflation *divyield.Inflation
+	db                 divyield.DB
+	writer             io.Writer
+	startDate          time.Time
+	inflation          *divyield.Inflation
+	sp500DividendYield *divyield.SP500DividendYield
 
 	divYieldFwdMin      float64
 	divYieldFwdMax      float64
@@ -1551,6 +1589,7 @@ type options struct {
 	priceService     divyield.PriceService
 	currencyService  divyield.CurrencyService
 	inflationService divyield.InflationService
+	sp500Service     divyield.SP500Service
 
 	divYieldFwdMin      float64
 	divYieldFwdMax      float64
@@ -1650,9 +1689,20 @@ func CurrencyService(v divyield.CurrencyService) Option {
 	}
 }
 
-func InflationService(v divyield.InflationService) Option {
+func InflationService(
+	v divyield.InflationService,
+) Option {
 	return func(o options) options {
 		o.inflationService = v
+		return o
+	}
+}
+
+func SP500Service(
+	v divyield.SP500Service,
+) Option {
+	return func(o options) options {
+		o.sp500Service = v
 		return o
 	}
 }

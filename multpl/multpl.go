@@ -1,4 +1,4 @@
-package mnb
+package multpl
 
 import (
 	"context"
@@ -13,46 +13,46 @@ import (
 	"szakszon.com/divyield"
 )
 
-func NewInflationService() divyield.InflationService {
-	return &inflationService{
+func NewSP500Service() divyield.SP500Service {
+	return &sp500Service{
 		mu: &sync.RWMutex{},
 	}
 
 }
 
-type inflationService struct {
-	mu        *sync.RWMutex
-	inflation divyield.Inflation
+type sp500Service struct {
+	mu                 *sync.RWMutex
+	sp500DividendYield divyield.SP500DividendYield
 }
 
-func (s *inflationService) Fetch(
+func (s *sp500Service) DividendYield(
 	ctx context.Context,
-	in *divyield.InflationFetchInput,
-) (*divyield.InflationFetchOutput, error) {
+	in *divyield.SP500DividendYieldInput,
+) (*divyield.SP500DividendYieldOutput, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.inflation == (divyield.Inflation{}) {
-		inf, err := s.fetch(ctx)
+	if s.sp500DividendYield == (divyield.SP500DividendYield{}) {
+		dv, err := s.dividendYield(ctx)
 		if err != nil {
 			return nil, err
 		}
-		s.inflation = *inf
+		s.sp500DividendYield = *dv
 	}
 
-	out := &divyield.InflationFetchOutput{
-		Inflation: s.inflation,
+	out := &divyield.SP500DividendYieldOutput{
+		SP500DividendYield: s.sp500DividendYield,
 	}
 	return out, nil
 }
 
-func (s *inflationService) fetch(
+func (s *sp500Service) dividendYield(
 	ctx context.Context,
-) (*divyield.Inflation, error) {
+) (*divyield.SP500DividendYield, error) {
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		"https://www.mnb.hu/",
+		"https://www.multpl.com/s-p-500-dividend-yield",
 		nil,
 	)
 	req.Header.Set("User-Agent", userAgent)
@@ -88,21 +88,21 @@ func (s *inflationService) fetch(
 		return nil, err
 	}
 
-	matches = periodRE.FindStringSubmatch(body)
-	period := strings.TrimSpace(matches[1])
+	matches = timestampRE.FindStringSubmatch(body)
+	timestamp := strings.TrimSpace(matches[1])
 
-	return &divyield.Inflation{
-		Rate:   rate,
-		Period: period,
+	return &divyield.SP500DividendYield{
+		Rate:      rate,
+		Timestamp: timestamp,
 	}, nil
 }
 
 var rateRE = regexp.MustCompile(
-	`(?s)Infláció.*KSH:.*>\s*([^>%\s]+)\s*%`,
+	`Current S&P 500 Dividend Yield is ([^\s]+)%`,
 )
 
-var periodRE = regexp.MustCompile(
-	`(?s)Infláció.*>([^>]+),\s*KSH`,
+var timestampRE = regexp.MustCompile(
+	`(?s)id="timestamp">([^<>]+)<`,
 )
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36 OPR/76.0.4017.123"
