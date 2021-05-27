@@ -73,26 +73,27 @@ func (c *Command) stats(ctx context.Context) error {
 		}
 	}
 
-    infout, err := c.opts.inflationService.Fetch(
-        ctx,
-        &divyield.InflationFetchInput{},
-    )
-    if err != nil {
-        return err
-    }
+	infout, err := c.opts.inflationService.Fetch(
+		ctx,
+		&divyield.InflationFetchInput{},
+	)
+	if err != nil {
+		return err
+	}
 
 	sg := &statsGenerator{
-		db:               c.opts.db,
-		startDate:        c.opts.startDate,
-		divYieldFwdMin:   c.opts.divYieldFwdMin,
-		divYieldFwdMax:   c.opts.divYieldFwdMax,
-		divYieldTotalMin: c.opts.divYieldTotalMin,
-		ggrROI:           c.opts.ggrROI,
-		ggrMin:           c.opts.ggrMin,
-		ggrMax:           c.opts.ggrMax,
-		noCutDividend:    c.opts.noCutDividend,
-		noDecliningDGR:   c.opts.noDecliningDGR,
-        inflation:        &infout.Inflation,
+		db:                  c.opts.db,
+		startDate:           c.opts.startDate,
+		divYieldFwdMin:      c.opts.divYieldFwdMin,
+		divYieldFwdMax:      c.opts.divYieldFwdMax,
+		divYieldTotalMin:    c.opts.divYieldTotalMin,
+		ggrROI:              c.opts.ggrROI,
+		ggrMin:              c.opts.ggrMin,
+		ggrMax:              c.opts.ggrMax,
+		noCutDividend:       c.opts.noCutDividend,
+		noDecliningDGR:      c.opts.noDecliningDGR,
+		dgr5yAboveInflation: c.opts.dgr5yAboveInflation,
+		inflation:           &infout.Inflation,
 	}
 
 	stats, err := sg.Generate(ctx, symbols)
@@ -186,16 +187,15 @@ func (c *Command) writeStats(s *divyield.Stats) {
 }
 
 func (c *Command) writeStatsFooter(
-    sg *statsGenerator,
+	sg *statsGenerator,
 ) {
-    fmt.Fprintf(
-        c.opts.writer, 
-        "Inflation: %.2f%%, %v",
-        sg.inflation.Rate,
-        sg.inflation.Period,
-    )
+	fmt.Fprintf(
+		c.opts.writer,
+		"Inflation: %.2f%%, %v",
+		sg.inflation.Rate,
+		sg.inflation.Period,
+	)
 }
-
 
 func (c *Command) pull(ctx context.Context) error {
 	var err error
@@ -681,19 +681,20 @@ func (c *Command) writef(format string, v ...interface{}) {
 }
 
 type statsGenerator struct {
-	db              divyield.DB
-	writer          io.Writer
-	startDate       time.Time
-    inflation       *divyield.Inflation
+	db        divyield.DB
+	writer    io.Writer
+	startDate time.Time
+	inflation *divyield.Inflation
 
-	divYieldFwdMin   float64
-	divYieldFwdMax   float64
-	divYieldTotalMin float64
-	ggrROI           float64
-	ggrMin           float64
-	ggrMax           float64
-	noCutDividend    bool
-	noDecliningDGR   bool
+	divYieldFwdMin      float64
+	divYieldFwdMax      float64
+	divYieldTotalMin    float64
+	ggrROI              float64
+	ggrMin              float64
+	ggrMax              float64
+	noCutDividend       bool
+	noDecliningDGR      bool
+	dgr5yAboveInflation bool
 }
 
 func (g *statsGenerator) Generate(
@@ -714,9 +715,9 @@ func (g *statsGenerator) Generate(
 		for res := range resultCh {
 			if res.Err != nil {
 				se := &StatsError{
-                    Symbol: res.Symbol, 
-                    Err: res.Err,
-                }
+					Symbol: res.Symbol,
+					Err:    res.Err,
+				}
 				errs = append(errs, se)
 			} else {
 				stats.Rows = append(stats.Rows, res.Row)
@@ -724,11 +725,11 @@ func (g *statsGenerator) Generate(
 		}
 
 		sort.SliceStable(
-            stats.Rows, 
-            func(i, j int) bool {
-                return stats.Rows[i].Symbol < stats.Rows[j].Symbol
-                },
-            )
+			stats.Rows,
+			func(i, j int) bool {
+				return stats.Rows[i].Symbol < stats.Rows[j].Symbol
+			},
+		)
 
 	}()
 
@@ -763,6 +764,7 @@ LOOP:
 		stats,
 		g.filterDivYieldFwdMinMax,
 		g.filterDivYieldTotalMin,
+		g.filterDGR5yAboveInflation,
 		g.filterGGRMinMax,
 		g.filterNoCutDividend,
 		g.filterNoDecliningDGR,
@@ -926,6 +928,16 @@ func (g *statsGenerator) filterDivYieldTotalMin(
 	}
 
 	return min <= row.DivYieldFwd+row.DGRs[5]
+}
+
+func (g *statsGenerator) filterDGR5yAboveInflation(
+	row *divyield.StatsRow,
+) bool {
+	if !g.dgr5yAboveInflation {
+		return true
+	}
+
+	return g.inflation.Rate < row.DGRs[5]
 }
 
 func (g *statsGenerator) filterGGRMinMax(
@@ -1525,30 +1537,31 @@ var defaultOptions = options{
 }
 
 type options struct {
-	db              divyield.DB
-	writer          io.Writer
-	dir             string
-	dryRun          bool
-	startDate       time.Time
-	reset           bool
-	profileService  divyield.ProfileService
-	isinService     divyield.ISINService
-	exchangeService divyield.ExchangeService
-	splitService    divyield.SplitService
-	dividendService divyield.DividendService
-	priceService    divyield.PriceService
-	currencyService divyield.CurrencyService
-    inflationService divyield.InflationService
+	db               divyield.DB
+	writer           io.Writer
+	dir              string
+	dryRun           bool
+	startDate        time.Time
+	reset            bool
+	profileService   divyield.ProfileService
+	isinService      divyield.ISINService
+	exchangeService  divyield.ExchangeService
+	splitService     divyield.SplitService
+	dividendService  divyield.DividendService
+	priceService     divyield.PriceService
+	currencyService  divyield.CurrencyService
+	inflationService divyield.InflationService
 
-	divYieldFwdMin   float64
-	divYieldFwdMax   float64
-	divYieldTotalMin float64
-	ggrROI           float64
-	ggrMin           float64
-	ggrMax           float64
-	noCutDividend    bool
-	noDecliningDGR   bool
-	chart            bool
+	divYieldFwdMin      float64
+	divYieldFwdMax      float64
+	divYieldTotalMin    float64
+	ggrROI              float64
+	ggrMin              float64
+	ggrMax              float64
+	noCutDividend       bool
+	noDecliningDGR      bool
+	dgr5yAboveInflation bool
+	chart               bool
 }
 
 type Option func(o options) options
@@ -1644,7 +1657,6 @@ func InflationService(v divyield.InflationService) Option {
 	}
 }
 
-
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db
@@ -1704,6 +1716,13 @@ func NoCutDividend(v bool) Option {
 func NoDecliningDGR(v bool) Option {
 	return func(o options) options {
 		o.noDecliningDGR = v
+		return o
+	}
+}
+
+func DGR5yAboveInflation(v bool) Option {
+	return func(o options) options {
+		o.dgr5yAboveInflation = v
 		return o
 	}
 }

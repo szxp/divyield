@@ -17,6 +17,7 @@ go build cmd/divyield/main.go && \
     -dividend-yield-forward-min=$divYieldFwdMin \
     -dividend-yield-forward-max=$divYieldFwdMax \
     -dividend-yield-roi-min=9.0 \
+    -dgr5y-above-inflation \
     -gordon-roi-min=10.0 \
     -gordon-growth-rate-min=3.0 \
     -gordon-growth-rate-max=5.0 \

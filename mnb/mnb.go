@@ -2,13 +2,13 @@ package mnb
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
-    "fmt"
-    "strings"
 
 	"szakszon.com/divyield"
 )
@@ -104,4 +104,4 @@ var periodRE = regexp.MustCompile(
 	`(?s)Infláció.*>([^>]+),\s*KSH`,
 )
 
-const userAget = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36 OPR/76.0.4017.123",
+const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36 OPR/76.0.4017.123"

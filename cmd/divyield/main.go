@@ -23,9 +23,9 @@ import (
 
 	"szakszon.com/divyield/cli"
 	"szakszon.com/divyield/iexcloud"
+	"szakszon.com/divyield/mnb"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/xrates"
-	"szakszon.com/divyield/mnb"
 )
 
 const defaultStocksDir = "work/stocks"
@@ -130,6 +130,11 @@ func main() {
 		0.0,
 		"maximum Gordon growth rate as a percentage")
 
+	dgr5yAboveInfFlag := optsFlagSet.Bool(
+		"dgr5y-above-inflation",
+		false,
+		"DGR5y above inflation")
+
 	chartFlag := optsFlagSet.Bool(
 		"chart",
 		false,
@@ -201,7 +206,7 @@ func main() {
 		cli.DividendService(dividendSrv),
 		cli.PriceService(priceSrv),
 		cli.CurrencyService(currencySrv),
-        cli.InflationService(inflationSrv),
+		cli.InflationService(inflationSrv),
 
 		cli.DividendYieldForwardMin(*divYieldFwdMin),
 		cli.DividendYieldForwardMax(*divYieldFwdMax),
@@ -211,8 +216,8 @@ func main() {
 		cli.GordonGrowthRateMax(*ggrMax),
 		cli.NoCutDividend(*noCutDividend),
 		cli.NoDecliningDGR(*noDecliningDGR),
+		cli.DGR5yAboveInflation(*dgr5yAboveInfFlag),
 		cli.Chart(*chartFlag),
-
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {
