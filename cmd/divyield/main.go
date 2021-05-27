@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/csv"
 	"flag"
 	"fmt"
 	_ "github.com/lib/pq"
@@ -159,25 +158,38 @@ func main() {
 
 	startDate, err := parseDate(*startDateFlag)
 	if err != nil {
-		fmt.Println("invalid start date: ", *startDateFlag)
+		fmt.Println(
+            "invalid start date: ", 
+            *startDateFlag,
+        )
 		os.Exit(1)
 	}
+
 	usr, _ := user.Current()
-	iexCloudToken, err := ioutil.ReadFile(filepath.Join(
-		usr.HomeDir,
-		*iexCloudCredentialsFileFlag,
-	))
+	iexCloudTokenBytes, err := ioutil.ReadFile(
+        filepath.Join(
+            usr.HomeDir,
+            *iexCloudCredentialsFileFlag,
+        ),
+    )
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+    iexCloudToken := strings.TrimSpace(
+        string(iexCloudTokenBytes),
+    )
 
 	inflationSrv := mnb.NewInflationService()
 	sp500Srv := multpl.NewSP500Service()
 
 	currencySrv := xrates.NewCurrencyService(
 		xrates.RateLimiter(
-			rate.NewLimiter(rate.Every(1*time.Second), 1)),
+			rate.NewLimiter(
+                rate.Every(1*time.Second), 
+                1,
+            ),
+        ),
 		xrates.Logger(stdoutSync),
 	)
 
@@ -185,7 +197,11 @@ func main() {
 		iexcloud.BaseURL(*iexCloudBaseURLFlag),
 		iexcloud.Token(string(iexCloudToken)),
 		iexcloud.RateLimiter(
-			rate.NewLimiter(rate.Every(500*time.Millisecond), 1)),
+			rate.NewLimiter(
+                rate.Every(500*time.Millisecond), 
+                1,
+            ),
+        ),
 		iexcloud.Timeout(10*time.Second),
 	)
 	comProSrv := iexc.NewProfileService()
@@ -235,7 +251,9 @@ func main() {
 	}
 }
 
-var relDateRE *regexp.Regexp = regexp.MustCompile("^-[0-9]+y$")
+var relDateRE *regexp.Regexp = regexp.MustCompile(
+    "^-[0-9]+y$",
+)
 
 func parseDate(s string) (time.Time, error) {
 	if s == "" {
@@ -243,12 +261,17 @@ func parseDate(s string) (time.Time, error) {
 	}
 
 	if relDateRE.MatchString(s) {
-		nYears, err := strconv.ParseInt(s[1:len(s)-1], 10, 64)
+		nYears, err := strconv.ParseInt(
+            s[1:len(s)-1], 
+            10, 
+            64,
+        )
 		if err != nil {
 			return time.Time{}, err
 		}
 		return time.Date(
-			time.Now().UTC().Year()-int(nYears), time.January, 1,
+			time.Now().UTC().Year()-int(nYears), 
+            time.January, 1,
 			0, 0, 0, 0, time.UTC,
 		), nil
 	}
@@ -260,87 +283,15 @@ func parseDate(s string) (time.Time, error) {
 	return date, nil
 }
 
-func parseIEXCloudAPITokens(p string) (map[string]string, error) {
-	tokens := make(map[string]string)
-
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		tokens[record[0]] = strings.TrimSpace(record[1])
-	}
-
-	return tokens, nil
-}
-
-func subcommandIndex(args []string) int {
-	subcommands := []string{"fetch", "chart", "stats"}
-	for i, a := range args {
-		for _, c := range subcommands {
-			if a == c {
-				return i
-			}
-		}
-	}
-	return len(args)
-}
-
-const usage = `usage: divyield <command> [<flags>] [<args>]
-
-Commands:
-  fetch		Fetch stock price and dividend history
-  stats		Show dividend yield stats
-  chart		Create dividend yield chart
-
-See 'divyield <command> -h' to read about a specific command.
-`
-
-const usageFetch = `usage: divyield fetch [<flags>] <tickers>
-
-Flags:
-  -outputDir string
-      output dir (default "work/stocks")
-`
-
-const usageStats = `usage: divyield stats [<flags>] <tickers>
-
-Flags:
-  -divYieldMin number
-      minimum dividend yield
-  -divYieldMax number
-      maximum dividend yield
-`
-
-const usageChart = `usage: divyield chart [<flags>] <tickers>
-
-Flags:
-  -endDate string
-      end date of the chart period, format 2010-06-05
-  -outputDir string
-      output dir (default "work/charts")
-  -stocksDir string
-      stocks dir (default "work/stocks")
-`
-
 type StdoutSync struct {
 	mu *sync.RWMutex
 	w  io.Writer
 }
 
-func (l *StdoutSync) Logf(format string, v ...interface{}) {
+func (l *StdoutSync) Logf(
+    format string, 
+    v ...interface{},
+) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	fmt.Fprintf(l.w, format, v...)
