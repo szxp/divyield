@@ -1,23 +1,23 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"math"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"text/tabwriter"
+	"text/template"
 	"time"
-    "path/filepath"
-    "path"
-    "text/template"
-    "os"
-    "os/exec"
-    "bufio"
-    "regexp"
 
 	"szakszon.com/divyield"
 )
@@ -73,6 +73,14 @@ func (c *Command) stats(ctx context.Context) error {
 		}
 	}
 
+    infout, err := c.opts.inflationService.Fetch(
+        ctx,
+        &divyield.InflationFetchInput{},
+    )
+    if err != nil {
+        return err
+    }
+
 	sg := &statsGenerator{
 		db:               c.opts.db,
 		startDate:        c.opts.startDate,
@@ -84,6 +92,7 @@ func (c *Command) stats(ctx context.Context) error {
 		ggrMax:           c.opts.ggrMax,
 		noCutDividend:    c.opts.noCutDividend,
 		noDecliningDGR:   c.opts.noDecliningDGR,
+        inflation:        &infout.Inflation,
 	}
 
 	stats, err := sg.Generate(ctx, symbols)
@@ -92,12 +101,12 @@ func (c *Command) stats(ctx context.Context) error {
 	}
 
 	if c.opts.chart {
-        cg := &chartGenerator{
-            db: c.opts.db,
-            writer: c.opts.writer,
-            dir: c.opts.dir,
-            startDate: c.opts.startDate,
-        }
+		cg := &chartGenerator{
+			db:        c.opts.db,
+			writer:    c.opts.writer,
+			dir:       c.opts.dir,
+			startDate: c.opts.startDate,
+		}
 		err = cg.Generate(ctx, stats)
 		if err != nil {
 			return err
@@ -105,6 +114,7 @@ func (c *Command) stats(ctx context.Context) error {
 	}
 
 	c.writeStats(stats)
+	c.writeStatsFooter(sg)
 	return nil
 }
 
@@ -114,11 +124,11 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		out, 0, 0, 2, ' ', tabwriter.AlignRight)
 
 	b := &bytes.Buffer{}
-	b.WriteString("Symbol")
+	b.WriteString(fmt.Sprintf("%-8v", "Symbol"))
 	b.WriteByte('\t')
-	b.WriteString("Forward dividend")
+	b.WriteString("Dividend (fwd)")
 	b.WriteByte('\t')
-	b.WriteString("Forward yield")
+	b.WriteString("Yield (fwd)")
 	b.WriteByte('\t')
 	b.WriteString("GGR")
 	b.WriteByte('\t')
@@ -141,7 +151,7 @@ func (c *Command) writeStats(s *divyield.Stats) {
 
 	for _, row := range s.Rows {
 		b.Reset()
-		b.WriteString(fmt.Sprintf("%-6v", row.Symbol))
+		b.WriteString(fmt.Sprintf("%-8v", row.Symbol))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
 		b.WriteByte('\t')
@@ -171,12 +181,21 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		fmt.Fprintln(w, b.String())
 	}
 
-	//fmt.Fprintln(w, "")
-
 	w.Flush()
-
 	c.writef("%s", out.String())
 }
+
+func (c *Command) writeStatsFooter(
+    sg *statsGenerator,
+) {
+    fmt.Fprintf(
+        c.opts.writer, 
+        "Inflation: %.2f%%, %v",
+        sg.inflation.Rate,
+        sg.inflation.Period,
+    )
+}
+
 
 func (c *Command) pull(ctx context.Context) error {
 	var err error
@@ -216,9 +235,9 @@ func (c *Command) pull(ctx context.Context) error {
 
 		if proout.Profile == nil {
 			return fmt.Errorf(
-                "profile not found: %v", 
-                symbol,
-            )
+				"profile not found: %v",
+				symbol,
+			)
 		}
 
 		var priceCurrency string
@@ -306,10 +325,10 @@ func (c *Command) pull(ctx context.Context) error {
 			}
 		}
 		c.writef(
-            "%v: %v dividends", 
-            symbol, 
-            len(dout.Dividends),
-        )
+			"%v: %v dividends",
+			symbol,
+			len(dout.Dividends),
+		)
 
 		fromPrices := from
 		if !c.opts.reset {
@@ -406,10 +425,10 @@ func (c *Command) symbolsDB(
 }
 
 func toUpper(a []string) []string {
-    for i, v := range a {
-        a[i] = strings.ToUpper(v)
-    }
-    return a
+	for i, v := range a {
+		a[i] = strings.ToUpper(v)
+	}
+	return a
 }
 
 func (c *Command) adjustFromSplits(
@@ -665,9 +684,7 @@ type statsGenerator struct {
 	db              divyield.DB
 	writer          io.Writer
 	startDate       time.Time
-	splitService    divyield.SplitService
-	dividendService divyield.DividendService
-	priceService    divyield.PriceService
+    inflation       *divyield.Inflation
 
 	divYieldFwdMin   float64
 	divYieldFwdMax   float64
@@ -696,16 +713,23 @@ func (g *statsGenerator) Generate(
 		defer resultWg.Done()
 		for res := range resultCh {
 			if res.Err != nil {
-				se := &StatsError{Symbol: res.Symbol, Err: res.Err}
+				se := &StatsError{
+                    Symbol: res.Symbol, 
+                    Err: res.Err,
+                }
 				errs = append(errs, se)
 			} else {
 				stats.Rows = append(stats.Rows, res.Row)
 			}
 		}
 
-		sort.SliceStable(stats.Rows, func(i, j int) bool {
-			return stats.Rows[i].Symbol < stats.Rows[j].Symbol
-		})
+		sort.SliceStable(
+            stats.Rows, 
+            func(i, j int) bool {
+                return stats.Rows[i].Symbol < stats.Rows[j].Symbol
+                },
+            )
+
 	}()
 
 LOOP:
@@ -985,52 +1009,52 @@ func (g *statsGenerator) dgr(
 
 	y := time.Now().UTC().Year()
 	ed := time.Date(
-        y-1, time.December, 31, 
-        0, 0, 0, 0, time.UTC,
-    )
+		y-1, time.December, 31,
+		0, 0, 0, 0, time.UTC,
+	)
 	sd := time.Date(
-        y-n, time.January, 1, 
-        0, 0, 0, 0, time.UTC,
-    )
+		y-n, time.January, 1,
+		0, 0, 0, 0, time.UTC,
+	)
 
 	//changes := make([]float64, 0, n)
 	sum := float64(0)
 	c := 0
 	for _, v := range dividends {
-        inPeriod := sd.Unix() < v.ExDate.Unix() &&
+		inPeriod := sd.Unix() < v.ExDate.Unix() &&
 			v.ExDate.Unix() < ed.Unix()
 
 		if v.Change != 0 && inPeriod {
-            // avg
+			// avg
 			sum += v.Change
 			c += 1
 
-            // median
+			// median
 			//changes = append(changes, v.Change)
 		}
 	}
 
-    if c == 0 {
-        return 0
-    }
-    return sum / float64(c)
+	if c == 0 {
+		return 0
+	}
+	return sum / float64(c)
 
-//	dgr := float64(0)
-//	if 0 < len(changes) {
-//		sort.Float64s(changes)
-//
-//		//dgr = sum / float64(c)
-//
-//		if len(changes)%2 == 1 {
-//			dgr = changes[(len(changes) / 2)]
-//		} else {
-//			vl := changes[len(changes)/2-1]
-//			vr := changes[len(changes)/2]
-//			dgr = (vl + vr) / 2.0
-//		}
-//	}
-//
-//	return dgr
+	//	dgr := float64(0)
+	//	if 0 < len(changes) {
+	//		sort.Float64s(changes)
+	//
+	//		//dgr = sum / float64(c)
+	//
+	//		if len(changes)%2 == 1 {
+	//			dgr = changes[(len(changes) / 2)]
+	//		} else {
+	//			vl := changes[len(changes)/2-1]
+	//			vr := changes[len(changes)/2]
+	//			dgr = (vl + vr) / 2.0
+	//		}
+	//	}
+	//
+	//	return dgr
 }
 
 func (g *statsGenerator) dividendChangeMR(
@@ -1057,7 +1081,7 @@ type chartGenerator struct {
 	writer    io.Writer
 	db        divyield.DB
 	startDate time.Time
-	dir string
+	dir       string
 }
 
 func (g *chartGenerator) Generate(
@@ -1066,7 +1090,7 @@ func (g *chartGenerator) Generate(
 ) error {
 	for _, row := range stats.Rows {
 		symbol := row.Symbol
-        dividends := row.Dividends
+		dividends := row.Dividends
 
 		yields, err := g.db.DividendYields(
 			ctx,
@@ -1076,7 +1100,7 @@ func (g *chartGenerator) Generate(
 			},
 		)
 
-	    chartDir := filepath.Join(g.dir, "work/chart")
+		chartDir := filepath.Join(g.dir, "work/chart")
 		err = g.writeFileYields(symbol, yields, chartDir)
 		if err != nil {
 			return err
@@ -1109,10 +1133,10 @@ func (g *chartGenerator) Generate(
 				symbol+".png",
 			),
 
-            XRangeMin: yields[len(yields)-1].
-                Date.Format("2006-01-02"),
-            XRangeMax: yields[0].
-                Date.Format("2006-01-02"),
+			XRangeMin: yields[len(yields)-1].
+				Date.Format("2006-01-02"),
+			XRangeMax: yields[0].
+				Date.Format("2006-01-02"),
 
 			TitlePrices:        symbol + " prices",
 			TitleDivYieldFwd:   symbol + " forward dividend yields",
@@ -1149,12 +1173,12 @@ func (g *chartGenerator) Generate(
 			//			),
 
 			DivYrMin: 0,
-            //math.Max(
+			//math.Max(
 			//	minDiv-((maxDiv-minDiv)*0.1),
 			//	0,
 			//),
 			DivYrMax: maxDiv * 1.1,
-            //math.Max(
+			//math.Max(
 			//	maxDiv+((maxDiv-minDiv)*0.1),
 			//	0.01,
 			//),
@@ -1164,22 +1188,27 @@ func (g *chartGenerator) Generate(
 				maxDGR+((maxDGR-minDGR)*0.1),
 				0.01,
 			),
-            DGR5y: row.DGRs[5],
+			DGR5y: row.DGRs[5],
 		}
-		chartTmpl, err := template.New("plot").Parse(chartTmpl)
+		chartTmpl, err := template.
+			New("plot").
+			Parse(chartTmpl)
 		if err != nil {
 			return err
 		}
 
 		plotCommands := bytes.NewBufferString("")
-		err = chartTmpl.Execute(plotCommands, chartParams)
+		err = chartTmpl.Execute(
+			plotCommands,
+			chartParams,
+		)
 		if err != nil {
 			return err
 		}
 
 		//fmt.Println(plotCommands)
-		
-        plotCommandsStr := nlRE.ReplaceAllString(
+
+		plotCommandsStr := nlRE.ReplaceAllString(
 			plotCommands.String(),
 			" ",
 		)
@@ -1191,7 +1220,7 @@ func (g *chartGenerator) Generate(
 			plotCommandsStr,
 		).Run()
 		if err != nil {
-            return fmt.Errorf("%v: %v", symbol, err)
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
 		//g.writef("%s: %s", symbol, "OK")
@@ -1202,7 +1231,7 @@ func (g *chartGenerator) Generate(
 func (g *chartGenerator) writeFileYields(
 	symbol string,
 	yields []*divyield.DividendYield,
-    dir string,
+	dir string,
 ) error {
 	err := os.MkdirAll(dir, 0666)
 	if err != nil {
@@ -1252,7 +1281,7 @@ func (g *chartGenerator) writeFileYields(
 func (g *chartGenerator) writeFileDividends(
 	symbol string,
 	dividends []*divyield.DividendChange,
-    dir string,
+	dir string,
 ) error {
 	p := filepath.Join(dir, symbol+".dividends.csv")
 	d, err := os.Create(p)
@@ -1295,8 +1324,8 @@ func (g *chartGenerator) writeFileDividends(
 }
 
 func (g *chartGenerator) writef(
-    format string, 
-    v ...interface{},
+	format string,
+	v ...interface{},
 ) {
 	if g.writer != nil {
 		fmt.Fprintf(g.writer, format, v...)
@@ -1407,8 +1436,8 @@ type chartParams struct {
 	Dividendsfile string
 	Imgfile       string
 
-    XRangeMin string
-    XRangeMax string
+	XRangeMin string
+	XRangeMax string
 
 	TitlePrices        string
 	TitleDivYieldFwd   string
@@ -1477,7 +1506,7 @@ set boxwidth 1 absolute;
 set origin 0.0,0.25;
 set title '{{.TitleDividends}}';
 set yrange [{{.DivYrMin}}:{{.DivYrMax}}];
-plot dividendsfile using 1:($2 == 0 ? NaN : $2) with boxes lw 4 lc 'royalblue';
+plot dividendsfile using 1:($2 == 0 ? NaN : $2) with fsteps lw 4 lc 'royalblue', dividendsfile using 1:($2 == 0 ? NaN : $2) with boxes lw 4 lc 'royalblue';
 
 set origin 0.0,0.0;
 set title '{{.TitleDGR}}';
@@ -1509,6 +1538,7 @@ type options struct {
 	dividendService divyield.DividendService
 	priceService    divyield.PriceService
 	currencyService divyield.CurrencyService
+    inflationService divyield.InflationService
 
 	divYieldFwdMin   float64
 	divYieldFwdMax   float64
@@ -1606,6 +1636,15 @@ func CurrencyService(v divyield.CurrencyService) Option {
 		return o
 	}
 }
+
+func InflationService(v divyield.InflationService) Option {
+	return func(o options) options {
+		o.inflationService = v
+		return o
+	}
+}
+
+
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db

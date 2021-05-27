@@ -368,7 +368,7 @@ type Stats struct {
 }
 
 type StatsRow struct {
-    Symbol               string
+	Symbol               string
 	DivYieldFwd          float64
 	DivFwd               float64
 	GordonGrowthRate     float64
@@ -381,4 +381,22 @@ type StatsRow struct {
 type DividendChange struct {
 	*Dividend
 	Change float64
+}
+
+type InflationService interface {
+	Fetch(
+		ctx context.Context,
+		in *InflationFetchInput,
+	) (*InflationFetchOutput, error)
+}
+
+type InflationFetchInput struct{}
+
+type InflationFetchOutput struct {
+	Inflation Inflation
+}
+
+type Inflation struct {
+	Rate   float64
+	Period string
 }

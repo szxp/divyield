@@ -25,6 +25,7 @@ import (
 	"szakszon.com/divyield/iexcloud"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/xrates"
+	"szakszon.com/divyield/mnb"
 )
 
 const defaultStocksDir = "work/stocks"
@@ -162,6 +163,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	inflationSrv := mnb.NewInflationService()
+
 	currencySrv := xrates.NewCurrencyService(
 		xrates.RateLimiter(
 			rate.NewLimiter(rate.Every(1*time.Second), 1)),
@@ -198,6 +201,7 @@ func main() {
 		cli.DividendService(dividendSrv),
 		cli.PriceService(priceSrv),
 		cli.CurrencyService(currencySrv),
+        cli.InflationService(inflationSrv),
 
 		cli.DividendYieldForwardMin(*divYieldFwdMin),
 		cli.DividendYieldForwardMax(*divYieldFwdMax),
@@ -208,6 +212,7 @@ func main() {
 		cli.NoCutDividend(*noCutDividend),
 		cli.NoDecliningDGR(*noDecliningDGR),
 		cli.Chart(*chartFlag),
+
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {
