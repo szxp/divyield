@@ -2,11 +2,6 @@
 
 #set -x
 
-divYieldFwdMin=$(echo $sp500DivYield 1.5 | awk '{print $1 * $2}')
-divYieldFwdMax=$(echo $sp500DivYield 5.0 | awk '{print $1 * $2}')
-
-tickers="$(cat tickers.csv | cut -d',' -f1 | tr '\r\n' ' ' | tr '\n', ' ')"
-
 go build cmd/divyield/main.go && \
     ./main.exe \
     stats \
