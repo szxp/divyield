@@ -92,8 +92,10 @@ func (c *Command) stats(ctx context.Context) error {
 	sg := &statsGenerator{
 		db:                  c.opts.db,
 		startDate:           c.opts.startDate,
-		divYieldFwdMin:      c.opts.divYieldFwdMin,
-		divYieldFwdMax:      c.opts.divYieldFwdMax,
+		inflation:           &infout.Inflation,
+		sp500DividendYield:  &spout.SP500DividendYield,
+		divYieldFwdSP500Min: c.opts.divYieldFwdSP500Min,
+		divYieldFwdSP500Max: c.opts.divYieldFwdSP500Max,
 		divYieldTotalMin:    c.opts.divYieldTotalMin,
 		ggrROI:              c.opts.ggrROI,
 		ggrMin:              c.opts.ggrMin,
@@ -101,8 +103,6 @@ func (c *Command) stats(ctx context.Context) error {
 		noCutDividend:       c.opts.noCutDividend,
 		noDecliningDGR:      c.opts.noDecliningDGR,
 		dgr5yAboveInflation: c.opts.dgr5yAboveInflation,
-		inflation:           &infout.Inflation,
-		sp500DividendYield:  &spout.SP500DividendYield,
 	}
 
 	stats, err := sg.Generate(ctx, symbols)
@@ -724,8 +724,8 @@ type statsGenerator struct {
 	inflation          *divyield.Inflation
 	sp500DividendYield *divyield.SP500DividendYield
 
-	divYieldFwdMin      float64
-	divYieldFwdMax      float64
+	divYieldFwdSP500Min float64
+	divYieldFwdSP500Max float64
 	divYieldTotalMin    float64
 	ggrROI              float64
 	ggrMin              float64
@@ -800,7 +800,7 @@ LOOP:
 
 	g.filter(
 		stats,
-		g.filterDivYieldFwdMinMax,
+		g.filterDivYieldFwdSP500MinMax,
 		g.filterDivYieldTotalMin,
 		g.filterDGR5yAboveInflation,
 		g.filterGGRMinMax,
@@ -934,11 +934,13 @@ func (g *statsGenerator) filterNoCutDividend(
 	return true
 }
 
-func (g *statsGenerator) filterDivYieldFwdMinMax(
+func (g *statsGenerator) filterDivYieldFwdSP500MinMax(
 	row *divyield.StatsRow,
 ) bool {
-	min := g.divYieldFwdMin
-	max := g.divYieldFwdMax
+	min := g.sp500DividendYield.Rate *
+		g.divYieldFwdSP500Min
+	max := g.sp500DividendYield.Rate *
+		g.divYieldFwdSP500Max
 
 	if min <= 0 && max <= 0 {
 		return true
@@ -1591,8 +1593,8 @@ type options struct {
 	inflationService divyield.InflationService
 	sp500Service     divyield.SP500Service
 
-	divYieldFwdMin      float64
-	divYieldFwdMax      float64
+	divYieldFwdSP500Min float64
+	divYieldFwdSP500Max float64
 	divYieldTotalMin    float64
 	ggrROI              float64
 	ggrMin              float64
@@ -1714,9 +1716,9 @@ func DB(db divyield.DB) Option {
 	}
 }
 
-func DividendYieldForwardMin(v float64) Option {
+func DividendYieldForwardSP500Min(v float64) Option {
 	return func(o options) options {
-		o.divYieldFwdMin = v
+		o.divYieldFwdSP500Min = v
 		return o
 	}
 }
@@ -1728,9 +1730,9 @@ func DividendYieldTotalMin(v float64) Option {
 	}
 }
 
-func DividendYieldForwardMax(v float64) Option {
+func DividendYieldForwardSP500Max(v float64) Option {
 	return func(o options) options {
-		o.divYieldFwdMax = v
+		o.divYieldFwdSP500Max = v
 		return o
 	}
 }

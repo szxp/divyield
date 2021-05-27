@@ -50,12 +50,17 @@ func main() {
 		ctxCancel()
 	}()
 
-	optsFlagSet := flag.NewFlagSet("options", flag.ExitOnError)
+	optsFlagSet := flag.NewFlagSet(
+		"options",
+		flag.ExitOnError,
+	)
 	dirFlag := optsFlagSet.String(
 		"directory",
 		".",
-		"An optional directory to which to create files. "+
-			"By default, all files and subdirectories are created "+
+		"An optional directory to "+
+			"which to create files. "+
+			"By default, all files and "+
+			"subdirectories are created "+
 			"in the current directory.",
 	)
 	iexCloudBaseURLFlag := optsFlagSet.String(
@@ -66,12 +71,8 @@ func main() {
 	iexCloudCredentialsFileFlag := optsFlagSet.String(
 		"iexcloud-credentials-file",
 		".divyield/iexcloud-credentials",
-		"IEX Cloud credentials file relative to the user's home directory.",
-	)
-	dryRunFlag := optsFlagSet.Bool(
-		"dry-run",
-		false,
-		"Show what would be done, without making any changes.",
+		"IEX Cloud credentials file "+
+			"relative to the user's home directory.",
 	)
 	dbConnStrFlag := optsFlagSet.String(
 		"database",
@@ -99,21 +100,23 @@ func main() {
 		false,
 		"no declining DGR")
 
-	divYieldFwdMin := optsFlagSet.Float64(
-		"dividend-yield-forward-min",
+	divYieldFwdSP500Min := optsFlagSet.Float64(
+		"dividend-yield-forward-sp500-min",
 		0.0,
 		"minimum forward dividend yield")
 
-	divYieldFwdMax := optsFlagSet.Float64(
-		"dividend-yield-forward-max",
+	divYieldFwdSP500Max := optsFlagSet.Float64(
+		"dividend-yield-forward-sp500-max",
 		0.0,
 		"maximum forward dividend yield")
 
 	divYieldROIMin := optsFlagSet.Float64(
 		"dividend-yield-roi-min",
 		0.0,
-		"forward dividend yield + DGR-5y average yield "+
-			"must be a greater than or equal to the given total yield")
+		"forward dividend yield + "+
+			"DGR-5y average yield "+
+			"must be a greater than or "+
+			"equal to the given total yield")
 
 	ggrROIMin := optsFlagSet.Float64(
 		"gordon-roi-min",
@@ -198,7 +201,6 @@ func main() {
 		cli.DB(pdb),
 		cli.Writer(stdoutSync),
 		cli.Dir(*dirFlag),
-		cli.DryRun(*dryRunFlag),
 		cli.StartDate(startDate),
 		cli.Reset(*reset),
 		cli.ProfileService(comProSrv),
@@ -211,8 +213,12 @@ func main() {
 		cli.InflationService(inflationSrv),
 		cli.SP500Service(sp500Srv),
 
-		cli.DividendYieldForwardMin(*divYieldFwdMin),
-		cli.DividendYieldForwardMax(*divYieldFwdMax),
+		cli.DividendYieldForwardSP500Min(
+			*divYieldFwdSP500Min,
+		),
+		cli.DividendYieldForwardSP500Max(
+			*divYieldFwdSP500Max,
+		),
 		cli.DividendYieldTotalMin(*divYieldROIMin),
 		cli.GordonROI(*ggrROIMin),
 		cli.GordonGrowthRateMin(*ggrMin),
