@@ -159,26 +159,26 @@ func main() {
 	startDate, err := parseDate(*startDateFlag)
 	if err != nil {
 		fmt.Println(
-            "invalid start date: ", 
-            *startDateFlag,
-        )
+			"invalid start date: ",
+			*startDateFlag,
+		)
 		os.Exit(1)
 	}
 
 	usr, _ := user.Current()
 	iexCloudTokenBytes, err := ioutil.ReadFile(
-        filepath.Join(
-            usr.HomeDir,
-            *iexCloudCredentialsFileFlag,
-        ),
-    )
+		filepath.Join(
+			usr.HomeDir,
+			*iexCloudCredentialsFileFlag,
+		),
+	)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-    iexCloudToken := strings.TrimSpace(
-        string(iexCloudTokenBytes),
-    )
+	iexCloudToken := strings.TrimSpace(
+		string(iexCloudTokenBytes),
+	)
 
 	inflationSrv := mnb.NewInflationService()
 	sp500Srv := multpl.NewSP500Service()
@@ -186,10 +186,10 @@ func main() {
 	currencySrv := xrates.NewCurrencyService(
 		xrates.RateLimiter(
 			rate.NewLimiter(
-                rate.Every(1*time.Second), 
-                1,
-            ),
-        ),
+				rate.Every(1*time.Second),
+				1,
+			),
+		),
 		xrates.Logger(stdoutSync),
 	)
 
@@ -198,11 +198,11 @@ func main() {
 		iexcloud.Token(string(iexCloudToken)),
 		iexcloud.RateLimiter(
 			rate.NewLimiter(
-                rate.Every(500*time.Millisecond), 
-                1,
-            ),
-        ),
-		iexcloud.Timeout(10*time.Second),
+				rate.Every(250*time.Millisecond),
+				1,
+			),
+		),
+		iexcloud.Timeout(30*time.Second),
 	)
 	comProSrv := iexc.NewProfileService()
 	isinSrv := iexc.NewISINService()
@@ -252,7 +252,7 @@ func main() {
 }
 
 var relDateRE *regexp.Regexp = regexp.MustCompile(
-    "^-[0-9]+y$",
+	"^-[0-9]+y$",
 )
 
 func parseDate(s string) (time.Time, error) {
@@ -262,16 +262,16 @@ func parseDate(s string) (time.Time, error) {
 
 	if relDateRE.MatchString(s) {
 		nYears, err := strconv.ParseInt(
-            s[1:len(s)-1], 
-            10, 
-            64,
-        )
+			s[1:len(s)-1],
+			10,
+			64,
+		)
 		if err != nil {
 			return time.Time{}, err
 		}
 		return time.Date(
-			time.Now().UTC().Year()-int(nYears), 
-            time.January, 1,
+			time.Now().UTC().Year()-int(nYears),
+			time.January, 1,
 			0, 0, 0, 0, time.UTC,
 		), nil
 	}
@@ -289,8 +289,8 @@ type StdoutSync struct {
 }
 
 func (l *StdoutSync) Logf(
-    format string, 
-    v ...interface{},
+	format string,
+	v ...interface{},
 ) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

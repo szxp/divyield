@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"golang.org/x/time/rate"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/chromedp/chromedp"
 	"szakszon.com/divyield"
 	"szakszon.com/divyield/httprate"
 	"szakszon.com/divyield/logger"
@@ -195,3 +197,101 @@ func (f *SplitFetcher) log(format string, v ...interface{}) {
 		f.opts.logger.Logf(format, v...)
 	}
 }
+
+func fcf() {
+	opts := append(
+		chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
+	)
+	actx, cancel := chromedp.NewExecAllocator(
+		context.Background(),
+		opts...,
+	)
+	ctx, cancel := chromedp.NewContext(
+		actx,
+		chromedp.WithLogf(log.Printf),
+		//chromedp.WithDebugf(log.Printf),
+		chromedp.WithErrorf(log.Printf),
+	)
+	defer cancel()
+
+	u := "https://finance.yahoo.com/quote/CVX/cash-flow?p=CVX"
+
+	var res [][]string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(u),
+		chromedp.Click(
+			"form.consent-form button",
+			chromedp.ByQuery,
+			chromedp.NodeVisible,
+		),
+		chromedp.WaitVisible(
+			"button.expandPf",
+			chromedp.ByQuery,
+		),
+		chromedp.Evaluate(clickExpandBtnJS, &[]byte{}),
+		chromedp.WaitVisible(
+			"button[aria-label=\"Cash Dividends Paid\"]",
+			chromedp.ByQuery,
+		),
+		chromedp.Evaluate(extractJS, &res),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println(res)
+}
+
+const clickExpandBtnJS = `
+var clickExpandBtn = async function(root) {
+    var t = setInterval(function(){
+        var btn = root.querySelector('button.expandPf');  
+        if (btn) {
+            if (btn.textContent.includes('Collapse All')) {
+                clearInterval(t);
+            } else {
+                btn.click();
+            }
+        }
+    }, 1000);
+}
+
+clickExpandBtn(document);
+`
+
+const extractJS = `
+function cellsContent(root) {
+    var cells, c, i, res = [];
+    if (!root) {
+        return res;
+    }
+    cells = root.getElementsByClassName('Ta(c)');
+    for (i=0; i<cells.length; i++) {
+        c = cells[i];
+        res = res.concat([c.textContent.trim()]);
+    }
+    return res;
+}
+
+function findRow(root, label) {
+    var i;
+    var rows = root.getElementsByClassName('D(tbr)')
+    for (i=0; i<rows.length; i++) {
+        if (rows[i].textContent.includes(label)) {
+            return rows[i];
+        }
+    }
+}
+
+function parse(root) {
+    var lines = [];
+    lines = lines.concat([cellsContent(findRow(root, 'Breakdown'))]);
+    lines = lines.concat([cellsContent(findRow(root, 'Cash Dividends Paid'))]);
+    lines = lines.concat([cellsContent(findRow(root, 'Free Cash Flow'))]);
+    return lines;
+}
+
+parse(document);
+
+`
