@@ -121,7 +121,7 @@ func (s *financialsService) cashFlow(
 		),
 		chromedp.Evaluate(clickExpandBtnJS, &[]byte{}),
 		chromedp.WaitVisible(
-			"button[aria-label=\"Cash Dividends Paid\"]",
+			"button[aria-label=\"Cash Flow from Continuing Financing Activities\"]",
 			chromedp.ByQuery,
 		),
 		chromedp.Evaluate(extractJS, &res),
