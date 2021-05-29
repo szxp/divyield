@@ -442,6 +442,9 @@ type FinancialsCashFlow struct {
 }
 
 func (f *FinancialsCashFlow) DPSPerFCF() float64 {
+    if f.FreeCashFlow == 0 {
+        return 0
+    }
     return (math.Abs(f.DividendPaid) / f.FreeCashFlow) * 100
 }
 
