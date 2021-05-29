@@ -121,8 +121,8 @@ func (s *financialsService) cashFlow(
 		),
 		chromedp.Evaluate(clickExpandBtnJS, &[]byte{}),
 		chromedp.WaitVisible(
-			"button[aria-label=\"Cash Flow from Continuing Financing Activities\"]",
-			chromedp.ByQuery,
+			"//span[contains(text(),'Collapse All')]",
+			chromedp.BySearch,
 		),
 		chromedp.Evaluate(extractJS, &res),
 	)
@@ -142,7 +142,7 @@ func (s *financialsService) parse(
     var fcf float64
     var err error
 
-    if divPaidStr != "" {
+    if divPaidStr != "" && divPaidStr != "-" {
         divPaidStr = strings.ReplaceAll(divPaidStr, ",", "")
         divPaid, err = strconv.ParseFloat(divPaidStr, 64)
         if err != nil {
@@ -150,7 +150,7 @@ func (s *financialsService) parse(
        }
     }
 
-    if fcfStr != "" {
+    if fcfStr != "" && fcfStr != "-" {
         fcfStr = strings.ReplaceAll(fcfStr, ",", "")
         fcf, err = strconv.ParseFloat(fcfStr, 64)
         if err != nil {
