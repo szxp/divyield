@@ -287,6 +287,9 @@ func (c *Command) writeCashFlow(
 		fmt.Fprintln(w, b.String())
 	}
 
+    fmt.Fprintln(w)
+    fmt.Fprintln(w, "All numbers in thousands")
+
 	w.Flush()
 	c.writef("%s", out.String())
 }
