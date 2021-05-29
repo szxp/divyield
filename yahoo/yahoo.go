@@ -2,37 +2,20 @@ package yahoo
 
 import (
 	"context"
-	"encoding/csv"
-	"fmt"
-	"golang.org/x/time/rate"
-	"io"
 	"log"
-	"net/http"
-	"sort"
-	"strconv"
-	"strings"
 	"time"
+    "strconv"
+    "strings"
 
 	"github.com/chromedp/chromedp"
 	"szakszon.com/divyield"
-	"szakszon.com/divyield/httprate"
-	"szakszon.com/divyield/logger"
 )
 
 type options struct {
-	rateLimiter *rate.Limiter
-	timeout     time.Duration // http client timeout, 0 means no timeout
-	logger      logger.Logger
+	timeout     time.Duration
 }
 
 type Option func(o options) options
-
-func RateLimiter(l *rate.Limiter) Option {
-	return func(o options) options {
-		o.rateLimiter = l
-		return o
-	}
-}
 
 func Timeout(d time.Duration) Option {
 	return func(o options) options {
@@ -41,164 +24,69 @@ func Timeout(d time.Duration) Option {
 	}
 }
 
-func Log(l logger.Logger) Option {
-	return func(o options) options {
-		o.logger = l
-		return o
-	}
-}
 
 var defaultOptions = options{
-	rateLimiter: rate.NewLimiter(rate.Every(1*time.Second), 1),
 	timeout:     0,
-	logger:      nil,
 }
 
-// SplitFetcher is safe for concurrent use by multiple goroutines.
-func NewSplitFetcher(os ...Option) *SplitFetcher {
+func NewFinancialsService(
+    os ...Option,
+) divyield.FinancialsService {
 	opts := defaultOptions
 	for _, o := range os {
 		opts = o(opts)
 	}
 
-	return &SplitFetcher{
-		client: &httprate.RLClient{
-			Client: &http.Client{
-				Timeout: opts.timeout,
-			},
-			Ratelimiter: opts.rateLimiter,
-		},
+	return &financialsService{
 		opts: opts,
 	}
 }
 
-// SplitFetcher is safe for concurrent use by multiple goroutines.
-type SplitFetcher struct {
-	client *httprate.RLClient
+type financialsService struct {
 	opts   options
 }
 
-func (f *SplitFetcher) Fetch(
+func (s *financialsService) CashFlow(
 	ctx context.Context,
-	ticker string,
-	startDate time.Time,
-	endDate time.Time,
-) ([]*divyield.Split, error) {
-	if startDate.IsZero() {
-		startDate = time.Date(1800, time.January, 1, 0, 0, 0, 0, time.UTC)
-	}
-	if endDate.IsZero() {
-		endDate = time.Now().UTC()
-	}
+    in *divyield.FinancialsCashFlowInput,
+) (*divyield.FinancialsCashFlowOutput, error) {
 
-	if ticker == "BF.B" {
-		ticker = "BF-B"
-	}
 
-	u := splitsURL(ticker, startDate, endDate)
+    fcf, err := s.cashFlow(in.Symbol)
+    if err != nil {
+        return nil, err
+    }
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := f.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+    periods := fcf[0]
+    divsPaid := fcf[1]
+    fcfs := fcf[2]
 
-	f.log("%v: %v %v", ticker, resp.StatusCode, u)
+    cfs := make([]*divyield.FinancialsCashFlow, 0, len(periods))
+    for i, period := range periods {
+        divPaid := ""
+        if i < len(divsPaid) {
+            divPaid = divsPaid[i]
+        }
+        fcf := ""
+        if i < len(fcfs) {
+            fcf = fcfs[i]
+        }
+        cf, err :=  s.parse(period, divPaid, fcf)
+        if err != nil {
+            return nil, err
+        }
+        cfs = append(cfs, cf)
+    }
 
-	if resp.StatusCode < 200 || 299 < resp.StatusCode {
-		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
-	}
-
-	splits, err := parseSplits(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("parse splits: %s", err)
-	}
-
-	sortSplitsDesc(splits)
-
-	return splits, nil
+    return &divyield.FinancialsCashFlowOutput{
+        CashFlow: cfs,
+    }, nil
 }
 
-func splitsURL(
-	ticker string,
-	startDate time.Time,
-	endDate time.Time,
-) string {
-	return "https://query1.finance.yahoo.com" +
-		"/v7/finance/download/" + strings.ToUpper(ticker) +
-		"?period1=" + strconv.FormatInt(startDate.Unix(), 10) +
-		"&period2=" + strconv.FormatInt(endDate.Unix(), 10) +
-		"&interval=1d" +
-		"&events=split" +
-		"&includeAdjustedClose=true"
-}
 
-func parseSplits(in io.Reader) ([]*divyield.Split, error) {
-	splits := make([]*divyield.Split, 0)
-
-	records := make([][]string, 0)
-	r := csv.NewReader(in)
-	for {
-		record, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		records = append(records, record)
-	}
-
-	if len(records) > 0 {
-		// forget the header row
-		records = records[1:]
-
-		for _, rec := range records {
-			exDate, err := time.Parse(divyield.DateFormat, rec[0])
-			if err != nil {
-				return nil, err
-			}
-
-			factors := strings.Split(rec[1], ":")
-			toFactor, err := strconv.Atoi(factors[0])
-			if err != nil {
-				return nil, err
-			}
-			fromFactor, err := strconv.Atoi(factors[1])
-			if err != nil {
-				return nil, err
-			}
-
-			split := &divyield.Split{
-				ExDate:     exDate,
-				ToFactor:   toFactor,
-				FromFactor: fromFactor,
-			}
-
-			splits = append(splits, split)
-		}
-	}
-
-	return splits, nil
-}
-
-func sortSplitsDesc(a []*divyield.Split) {
-	sort.SliceStable(a, func(i, j int) bool {
-		return a[i].ExDate.After(a[j].ExDate)
-	})
-}
-
-func (f *SplitFetcher) log(format string, v ...interface{}) {
-	if f.opts.logger != nil {
-		f.opts.logger.Logf(format, v...)
-	}
-}
-
-func fcf() {
+func (s *financialsService) cashFlow(
+    symbol string,
+) ([][]string, error) {
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
@@ -215,7 +103,9 @@ func fcf() {
 	)
 	defer cancel()
 
-	u := "https://finance.yahoo.com/quote/CVX/cash-flow?p=CVX"
+	u := "https://finance.yahoo.com/quote/"+
+    symbol+
+    "/cash-flow?p=CVX"
 
 	var res [][]string
 	err := chromedp.Run(ctx,
@@ -237,11 +127,44 @@ func fcf() {
 		chromedp.Evaluate(extractJS, &res),
 	)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	log.Println(res)
+	return res, nil
 }
+
+func (s *financialsService) parse(
+    period string,
+    divPaidStr string,
+    fcfStr string,
+) (*divyield.FinancialsCashFlow, error) {
+    var divPaid float64
+    var fcf float64
+    var err error
+
+    if divPaidStr != "" {
+        divPaidStr = strings.ReplaceAll(divPaidStr, ",", "")
+        divPaid, err = strconv.ParseFloat(divPaidStr, 64)
+        if err != nil {
+            return nil, err
+       }
+    }
+
+    if fcfStr != "" {
+        fcfStr = strings.ReplaceAll(fcfStr, ",", "")
+        fcf, err = strconv.ParseFloat(fcfStr, 64)
+        if err != nil {
+            return nil, err
+        }
+    }
+
+    return &divyield.FinancialsCashFlow{
+        Period: period,
+        DividendPaid: divPaid,
+        FreeCashFlow: fcf,
+    }, nil
+}
+
 
 const clickExpandBtnJS = `
 var clickExpandBtn = async function(root) {

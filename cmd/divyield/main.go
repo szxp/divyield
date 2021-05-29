@@ -26,6 +26,7 @@ import (
 	"szakszon.com/divyield/multpl"
 	"szakszon.com/divyield/postgres"
 	"szakszon.com/divyield/xrates"
+	"szakszon.com/divyield/yahoo"
 )
 
 const defaultStocksDir = "work/stocks"
@@ -182,6 +183,7 @@ func main() {
 
 	inflationSrv := mnb.NewInflationService()
 	sp500Srv := multpl.NewSP500Service()
+	financialsSrv := yahoo.NewFinancialsService()
 
 	currencySrv := xrates.NewCurrencyService(
 		xrates.RateLimiter(
@@ -228,6 +230,7 @@ func main() {
 		cli.CurrencyService(currencySrv),
 		cli.InflationService(inflationSrv),
 		cli.SP500Service(sp500Srv),
+		cli.FinancialsService(financialsSrv),
 
 		cli.DividendYieldForwardSP500Min(
 			*divYieldFwdSP500Min,

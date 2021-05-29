@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+    "math"
 )
 
 type Command interface {
@@ -418,3 +419,29 @@ type SP500DividendYield struct {
 	Rate      float64
 	Timestamp string
 }
+
+type FinancialsService interface {
+	CashFlow(
+		ctx context.Context,
+		in *FinancialsCashFlowInput,
+	) (*FinancialsCashFlowOutput, error)
+}
+
+type FinancialsCashFlowInput struct{
+    Symbol string
+}
+
+type FinancialsCashFlowOutput struct {
+	CashFlow []*FinancialsCashFlow
+}
+
+type FinancialsCashFlow struct {
+	Period       string
+    DividendPaid float64
+    FreeCashFlow float64
+}
+
+func (f *FinancialsCashFlow) DPSPerFCF() float64 {
+    return (math.Abs(f.DividendPaid) / f.FreeCashFlow) * 100
+}
+

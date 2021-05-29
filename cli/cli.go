@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"szakszon.com/divyield"
+    "golang.org/x/text/language"
+    "golang.org/x/text/message"
 )
 
 type Command struct {
@@ -51,6 +53,8 @@ func (c *Command) Execute(ctx context.Context) error {
 		return c.pull(ctx)
 	case "stats":
 		return c.stats(ctx)
+	case "cashflow":
+		return c.cashflow(ctx)
 	case "profile":
 		return c.profile(ctx)
 	case "symbols":
@@ -229,6 +233,59 @@ func (c *Command) writeStatsFooter(
 	b.WriteString(sp500DivYld)
 	b.WriteByte('\t')
 	fmt.Fprintln(w, b.String())
+
+	w.Flush()
+	c.writef("%s", out.String())
+}
+
+func (c *Command) cashflow(ctx context.Context) error {
+    symbol := strings.ToUpper(c.args[0])
+	out, err := c.opts.financialsService.CashFlow(
+		ctx,
+		&divyield.FinancialsCashFlowInput{
+            Symbol: symbol,
+        },
+	)
+	if err != nil {
+		return err
+	}
+
+    c.writeCashFlow(out.CashFlow)
+    return nil
+}
+
+func (c *Command) writeCashFlow(
+    f []*divyield.FinancialsCashFlow,
+) {
+	out := &bytes.Buffer{}
+	w := tabwriter.NewWriter(
+		out, 0, 0, 2, ' ', tabwriter.AlignRight)
+
+    p := message.NewPrinter(language.English)
+
+	b := &bytes.Buffer{}
+	b.WriteString("Period")
+	b.WriteByte('\t')
+	b.WriteString("DPS/FCF")
+	b.WriteByte('\t')
+	b.WriteString("Dividend paid")
+	b.WriteByte('\t')
+	b.WriteString("Free cash flow")
+	b.WriteByte('\t')
+	fmt.Fprintln(w, b.String())
+
+	for _, cf := range f {
+		b.Reset()
+		b.WriteString(cf.Period)
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f%%", cf.DPSPerFCF()))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", cf.DividendPaid))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", cf.FreeCashFlow))
+		b.WriteByte('\t')
+		fmt.Fprintln(w, b.String())
+	}
 
 	w.Flush()
 	c.writef("%s", out.String())
@@ -1592,6 +1649,7 @@ type options struct {
 	currencyService  divyield.CurrencyService
 	inflationService divyield.InflationService
 	sp500Service     divyield.SP500Service
+    financialsService divyield.FinancialsService
 
 	divYieldFwdSP500Min float64
 	divYieldFwdSP500Max float64
@@ -1708,6 +1766,17 @@ func SP500Service(
 		return o
 	}
 }
+
+func FinancialsService(
+	v divyield.FinancialsService,
+) Option {
+	return func(o options) options {
+		o.financialsService = v
+		return o
+	}
+}
+
+
 
 func DB(db divyield.DB) Option {
 	return func(o options) options {
