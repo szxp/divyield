@@ -144,7 +144,7 @@ func main() {
 		false,
 		"generate chart")
 
-	optsFlagSet.Parse(os.Args[2:])
+    optsFlagSet.Parse(os.Args[2:])
 
 	db, err := sql.Open("postgres", *dbConnStrFlag)
 	if err != nil {

@@ -69,13 +69,13 @@ func (c *Command) Execute(ctx context.Context) error {
 func (c *Command) stats(ctx context.Context) error {
 	var err error
 
-	symbols := toUpper(c.args)
-	if len(symbols) == 0 {
-		symbols, err = c.symbolsDB(ctx)
-		if err != nil {
-			return err
-		}
-	}
+	symbols, err := c.resolveSymbols(ctx, c.args)
+    if err != nil {
+        return err
+    }
+    if len(symbols) == 0 {
+        return fmt.Errorf("Symbol not found")
+    }
 
 	infout, err := c.opts.inflationService.Fetch(
 		ctx,
@@ -239,7 +239,14 @@ func (c *Command) writeStatsFooter(
 }
 
 func (c *Command) cashflow(ctx context.Context) error {
-    symbol := strings.ToUpper(c.args[0])
+	symbols, err := c.resolveSymbols(ctx, c.args)
+    if err != nil {
+        return err
+    }
+    if len(symbols) == 0 {
+        return fmt.Errorf("Symbol not found")
+    }
+    symbol := symbols[0]
 	out, err := c.opts.financialsService.CashFlow(
 		ctx,
 		&divyield.FinancialsCashFlowInput{
@@ -298,13 +305,13 @@ func (c *Command) pull(ctx context.Context) error {
 	var err error
 	from := c.opts.startDate
 
-	symbols := toUpper(c.args)
-	if len(symbols) == 0 {
-		symbols, err = c.symbolsDB(ctx)
-		if err != nil {
-			return err
-		}
-	}
+	symbols, err := c.resolveSymbols(ctx, c.args)
+    if err != nil {
+        return err
+    }
+    if len(symbols) == 0 {
+        return fmt.Errorf("Symbol not found")
+    }
 
 	err = c.opts.db.InitSchema(ctx, symbols)
 	if err != nil {
@@ -504,10 +511,16 @@ func (c *Command) pull(ctx context.Context) error {
 	return nil
 }
 
-func (c *Command) symbolsDB(
+const symbolPatternChar = "%"
+
+func (c *Command) resolveSymbols(
 	ctx context.Context,
+    symbols []string,
 ) ([]string, error) {
-	symbols := make([]string, 0)
+	for i, v := range symbols {
+		symbols[i] = strings.ToUpper(v)
+	}
+
 	out, err := c.opts.db.Profiles(
 		ctx,
 		&divyield.DBProfilesInput{},
@@ -515,10 +528,27 @@ func (c *Command) symbolsDB(
 	if err != nil {
 		return nil, err
 	}
-	for _, v := range out.Profiles {
-		symbols = append(symbols, strings.ToUpper(v.Symbol))
+
+    symbolsMap := make(map[string]struct{})
+	for _, v := range symbols {
+        if strings.HasSuffix(v, symbolPatternChar) {
+            prefix := strings.TrimRight(v, symbolPatternChar)
+	        for _, p := range out.Profiles {
+        		if strings.HasPrefix(p.Symbol, prefix) {
+                    symbolsMap[p.Symbol] = struct{}{}
+                }
+        	}
+        } else {
+            symbolsMap[v] = struct{}{}
+        }
 	}
-	return symbols, nil
+
+    symbolsRes := make([]string, 0, len(symbols))
+    for v, _ := range symbolsMap {
+        symbolsRes = append(symbolsRes, v)
+    }
+    sort.Strings(symbolsRes)
+	return symbolsRes, nil
 }
 
 func toUpper(a []string) []string {
@@ -577,8 +607,16 @@ func (c *Command) adjustFromPrices(
 }
 
 func (c *Command) profile(ctx context.Context) error {
+	symbols, err := c.resolveSymbols(ctx, c.args)
+    if err != nil {
+        return err
+    }
+    if len(symbols) == 0 {
+        return fmt.Errorf("Symbol not found")
+    }
+    symbol := symbols[0]
 	in := &divyield.ProfileFetchInput{
-		Symbol: c.args[0],
+		Symbol: symbol,
 	}
 
 	out, err := c.opts.profileService.Fetch(ctx, in)
@@ -1857,3 +1895,4 @@ func Chart(v bool) Option {
 		return o
 	}
 }
+
