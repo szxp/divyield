@@ -19,9 +19,9 @@ import (
 	"text/template"
 	"time"
 
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 	"szakszon.com/divyield"
-    "golang.org/x/text/language"
-    "golang.org/x/text/message"
 )
 
 type Command struct {
@@ -70,12 +70,12 @@ func (c *Command) stats(ctx context.Context) error {
 	var err error
 
 	symbols, err := c.resolveSymbols(ctx, c.args)
-    if err != nil {
-        return err
-    }
-    if len(symbols) == 0 {
-        return fmt.Errorf("Symbol not found")
-    }
+	if err != nil {
+		return err
+	}
+	if len(symbols) == 0 {
+		return fmt.Errorf("Symbol not found")
+	}
 
 	infout, err := c.opts.inflationService.Fetch(
 		ctx,
@@ -240,35 +240,35 @@ func (c *Command) writeStatsFooter(
 
 func (c *Command) cashflow(ctx context.Context) error {
 	symbols, err := c.resolveSymbols(ctx, c.args)
-    if err != nil {
-        return err
-    }
-    if len(symbols) == 0 {
-        return fmt.Errorf("Symbol not found")
-    }
-    symbol := symbols[0]
+	if err != nil {
+		return err
+	}
+	if len(symbols) == 0 {
+		return fmt.Errorf("Symbol not found")
+	}
+	symbol := symbols[0]
 	out, err := c.opts.financialsService.CashFlow(
 		ctx,
 		&divyield.FinancialsCashFlowInput{
-            Symbol: symbol,
-        },
+			Symbol: symbol,
+		},
 	)
 	if err != nil {
 		return err
 	}
 
-    c.writeCashFlow(out.CashFlow)
-    return nil
+	c.writeCashFlow(out.CashFlow)
+	return nil
 }
 
 func (c *Command) writeCashFlow(
-    f []*divyield.FinancialsCashFlow,
+	f []*divyield.FinancialsCashFlow,
 ) {
 	out := &bytes.Buffer{}
 	w := tabwriter.NewWriter(
 		out, 0, 0, 2, ' ', tabwriter.AlignRight)
 
-    p := message.NewPrinter(language.English)
+	p := message.NewPrinter(language.English)
 
 	b := &bytes.Buffer{}
 	b.WriteString("Period")
@@ -294,8 +294,8 @@ func (c *Command) writeCashFlow(
 		fmt.Fprintln(w, b.String())
 	}
 
-    fmt.Fprintln(w)
-    fmt.Fprintln(w, "All numbers in thousands")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "All numbers in thousands")
 
 	w.Flush()
 	c.writef("%s", out.String())
@@ -306,12 +306,12 @@ func (c *Command) pull(ctx context.Context) error {
 	from := c.opts.startDate
 
 	symbols, err := c.resolveSymbols(ctx, c.args)
-    if err != nil {
-        return err
-    }
-    if len(symbols) == 0 {
-        return fmt.Errorf("Symbol not found")
-    }
+	if err != nil {
+		return err
+	}
+	if len(symbols) == 0 {
+		return fmt.Errorf("Symbol not found")
+	}
 
 	err = c.opts.db.InitSchema(ctx, symbols)
 	if err != nil {
@@ -515,12 +515,8 @@ const symbolPatternChar = "%"
 
 func (c *Command) resolveSymbols(
 	ctx context.Context,
-    symbols []string,
+	symbols []string,
 ) ([]string, error) {
-	for i, v := range symbols {
-		symbols[i] = strings.ToUpper(v)
-	}
-
 	out, err := c.opts.db.Profiles(
 		ctx,
 		&divyield.DBProfilesInput{},
@@ -529,25 +525,38 @@ func (c *Command) resolveSymbols(
 		return nil, err
 	}
 
-    symbolsMap := make(map[string]struct{})
-	for _, v := range symbols {
-        if strings.HasSuffix(v, symbolPatternChar) {
-            prefix := strings.TrimRight(v, symbolPatternChar)
-	        for _, p := range out.Profiles {
-        		if strings.HasPrefix(p.Symbol, prefix) {
-                    symbolsMap[p.Symbol] = struct{}{}
-                }
-        	}
-        } else {
-            symbolsMap[v] = struct{}{}
-        }
+	symbolsDB := make([]string, 0)
+	for _, p := range out.Profiles {
+		symbolsDB = append(symbolsDB, p.Symbol)
 	}
 
-    symbolsRes := make([]string, 0, len(symbols))
-    for v, _ := range symbolsMap {
-        symbolsRes = append(symbolsRes, v)
-    }
-    sort.Strings(symbolsRes)
+	if len(symbols) == 0 {
+		return symbolsDB, nil
+	}
+
+	for i, v := range symbols {
+		symbols[i] = strings.ToUpper(v)
+	}
+
+	symbolsMap := make(map[string]struct{})
+	for _, v := range symbols {
+		if strings.HasSuffix(v, symbolPatternChar) {
+			prefix := strings.TrimRight(v, symbolPatternChar)
+			for _, sdb := range symbolsDB {
+				if strings.HasPrefix(sdb, prefix) {
+					symbolsMap[sdb] = struct{}{}
+				}
+			}
+		} else {
+			symbolsMap[v] = struct{}{}
+		}
+	}
+
+	symbolsRes := make([]string, 0, len(symbolsMap))
+	for v, _ := range symbolsMap {
+		symbolsRes = append(symbolsRes, v)
+	}
+	sort.Strings(symbolsRes)
 	return symbolsRes, nil
 }
 
@@ -608,13 +617,13 @@ func (c *Command) adjustFromPrices(
 
 func (c *Command) profile(ctx context.Context) error {
 	symbols, err := c.resolveSymbols(ctx, c.args)
-    if err != nil {
-        return err
-    }
-    if len(symbols) == 0 {
-        return fmt.Errorf("Symbol not found")
-    }
-    symbol := symbols[0]
+	if err != nil {
+		return err
+	}
+	if len(symbols) == 0 {
+		return fmt.Errorf("Symbol not found")
+	}
+	symbol := symbols[0]
 	in := &divyield.ProfileFetchInput{
 		Symbol: symbol,
 	}
@@ -1675,22 +1684,22 @@ var defaultOptions = options{
 }
 
 type options struct {
-	db               divyield.DB
-	writer           io.Writer
-	dir              string
-	dryRun           bool
-	startDate        time.Time
-	reset            bool
-	profileService   divyield.ProfileService
-	isinService      divyield.ISINService
-	exchangeService  divyield.ExchangeService
-	splitService     divyield.SplitService
-	dividendService  divyield.DividendService
-	priceService     divyield.PriceService
-	currencyService  divyield.CurrencyService
-	inflationService divyield.InflationService
-	sp500Service     divyield.SP500Service
-    financialsService divyield.FinancialsService
+	db                divyield.DB
+	writer            io.Writer
+	dir               string
+	dryRun            bool
+	startDate         time.Time
+	reset             bool
+	profileService    divyield.ProfileService
+	isinService       divyield.ISINService
+	exchangeService   divyield.ExchangeService
+	splitService      divyield.SplitService
+	dividendService   divyield.DividendService
+	priceService      divyield.PriceService
+	currencyService   divyield.CurrencyService
+	inflationService  divyield.InflationService
+	sp500Service      divyield.SP500Service
+	financialsService divyield.FinancialsService
 
 	divYieldFwdSP500Min float64
 	divYieldFwdSP500Max float64
@@ -1817,8 +1826,6 @@ func FinancialsService(
 	}
 }
 
-
-
 func DB(db divyield.DB) Option {
 	return func(o options) options {
 		o.db = db
@@ -1895,4 +1902,3 @@ func Chart(v bool) Option {
 		return o
 	}
 }
-

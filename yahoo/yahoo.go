@@ -3,16 +3,16 @@ package yahoo
 import (
 	"context"
 	"log"
+	"strconv"
+	"strings"
 	"time"
-    "strconv"
-    "strings"
 
 	"github.com/chromedp/chromedp"
 	"szakszon.com/divyield"
 )
 
 type options struct {
-	timeout     time.Duration
+	timeout time.Duration
 }
 
 type Option func(o options) options
@@ -24,13 +24,12 @@ func Timeout(d time.Duration) Option {
 	}
 }
 
-
 var defaultOptions = options{
-	timeout:     0,
+	timeout: 0,
 }
 
 func NewFinancialsService(
-    os ...Option,
+	os ...Option,
 ) divyield.FinancialsService {
 	opts := defaultOptions
 	for _, o := range os {
@@ -43,49 +42,47 @@ func NewFinancialsService(
 }
 
 type financialsService struct {
-	opts   options
+	opts options
 }
 
 func (s *financialsService) CashFlow(
 	ctx context.Context,
-    in *divyield.FinancialsCashFlowInput,
+	in *divyield.FinancialsCashFlowInput,
 ) (*divyield.FinancialsCashFlowOutput, error) {
 
+	fcf, err := s.cashFlow(in.Symbol)
+	if err != nil {
+		return nil, err
+	}
 
-    fcf, err := s.cashFlow(in.Symbol)
-    if err != nil {
-        return nil, err
-    }
+	periods := fcf[0]
+	divsPaid := fcf[1]
+	fcfs := fcf[2]
 
-    periods := fcf[0]
-    divsPaid := fcf[1]
-    fcfs := fcf[2]
+	cfs := make([]*divyield.FinancialsCashFlow, 0, len(periods))
+	for i, period := range periods {
+		divPaid := ""
+		if i < len(divsPaid) {
+			divPaid = divsPaid[i]
+		}
+		fcf := ""
+		if i < len(fcfs) {
+			fcf = fcfs[i]
+		}
+		cf, err := s.parse(period, divPaid, fcf)
+		if err != nil {
+			return nil, err
+		}
+		cfs = append(cfs, cf)
+	}
 
-    cfs := make([]*divyield.FinancialsCashFlow, 0, len(periods))
-    for i, period := range periods {
-        divPaid := ""
-        if i < len(divsPaid) {
-            divPaid = divsPaid[i]
-        }
-        fcf := ""
-        if i < len(fcfs) {
-            fcf = fcfs[i]
-        }
-        cf, err :=  s.parse(period, divPaid, fcf)
-        if err != nil {
-            return nil, err
-        }
-        cfs = append(cfs, cf)
-    }
-
-    return &divyield.FinancialsCashFlowOutput{
-        CashFlow: cfs,
-    }, nil
+	return &divyield.FinancialsCashFlowOutput{
+		CashFlow: cfs,
+	}, nil
 }
 
-
 func (s *financialsService) cashFlow(
-    symbol string,
+	symbol string,
 ) ([][]string, error) {
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[:],
@@ -103,9 +100,9 @@ func (s *financialsService) cashFlow(
 	)
 	defer cancel()
 
-	u := "https://finance.yahoo.com/quote/"+
-    symbol+
-    "/cash-flow?p=CVX"
+	u := "https://finance.yahoo.com/quote/" +
+		symbol +
+		"/cash-flow?p=CVX"
 
 	var res [][]string
 	err := chromedp.Run(ctx,
@@ -134,37 +131,36 @@ func (s *financialsService) cashFlow(
 }
 
 func (s *financialsService) parse(
-    period string,
-    divPaidStr string,
-    fcfStr string,
+	period string,
+	divPaidStr string,
+	fcfStr string,
 ) (*divyield.FinancialsCashFlow, error) {
-    var divPaid float64
-    var fcf float64
-    var err error
+	var divPaid float64
+	var fcf float64
+	var err error
 
-    if divPaidStr != "" && divPaidStr != "-" {
-        divPaidStr = strings.ReplaceAll(divPaidStr, ",", "")
-        divPaid, err = strconv.ParseFloat(divPaidStr, 64)
-        if err != nil {
-            return nil, err
-       }
-    }
+	if divPaidStr != "" && divPaidStr != "-" {
+		divPaidStr = strings.ReplaceAll(divPaidStr, ",", "")
+		divPaid, err = strconv.ParseFloat(divPaidStr, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-    if fcfStr != "" && fcfStr != "-" {
-        fcfStr = strings.ReplaceAll(fcfStr, ",", "")
-        fcf, err = strconv.ParseFloat(fcfStr, 64)
-        if err != nil {
-            return nil, err
-        }
-    }
+	if fcfStr != "" && fcfStr != "-" {
+		fcfStr = strings.ReplaceAll(fcfStr, ",", "")
+		fcf, err = strconv.ParseFloat(fcfStr, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-    return &divyield.FinancialsCashFlow{
-        Period: period,
-        DividendPaid: divPaid,
-        FreeCashFlow: fcf,
-    }, nil
+	return &divyield.FinancialsCashFlow{
+		Period:       period,
+		DividendPaid: divPaid,
+		FreeCashFlow: fcf,
+	}, nil
 }
-
 
 const clickExpandBtnJS = `
 var clickExpandBtn = async function(root) {

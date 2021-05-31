@@ -3,8 +3,8 @@ package divyield
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
-    "math"
 )
 
 type Command interface {
@@ -427,8 +427,8 @@ type FinancialsService interface {
 	) (*FinancialsCashFlowOutput, error)
 }
 
-type FinancialsCashFlowInput struct{
-    Symbol string
+type FinancialsCashFlowInput struct {
+	Symbol string
 }
 
 type FinancialsCashFlowOutput struct {
@@ -437,14 +437,13 @@ type FinancialsCashFlowOutput struct {
 
 type FinancialsCashFlow struct {
 	Period       string
-    DividendPaid float64
-    FreeCashFlow float64
+	DividendPaid float64
+	FreeCashFlow float64
 }
 
 func (f *FinancialsCashFlow) DPSPerFCF() float64 {
-    if f.FreeCashFlow == 0 {
-        return 0
-    }
-    return (math.Abs(f.DividendPaid) / f.FreeCashFlow) * 100
+	if f.FreeCashFlow == 0 {
+		return 0
+	}
+	return (math.Abs(f.DividendPaid) / f.FreeCashFlow) * 100
 }
-
