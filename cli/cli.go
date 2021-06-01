@@ -334,12 +334,12 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
 		if proout.Profile == nil {
 			return fmt.Errorf(
-				"profile not found: %v",
+				"%v: profile not found",
 				symbol,
 			)
 		}
@@ -355,7 +355,8 @@ func (c *Command) pull(ctx context.Context) error {
 			}
 			if priceCurrency == "" {
 				return fmt.Errorf(
-					"currency not found: %v",
+					"%v: currency not found: %v",
+					symbol,
 					symbolSuffix,
 				)
 			}
@@ -371,7 +372,7 @@ func (c *Command) pull(ctx context.Context) error {
 				from,
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("%v: %v", symbol, err)
 			}
 		}
 
@@ -383,9 +384,9 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
-		c.writef("%v: %v splits", symbol, len(sout.Splits))
+		c.writef("%-5v %v splits", symbol, len(sout.Splits))
 
 		fromDividends := from
 		if !c.opts.reset {
@@ -395,7 +396,7 @@ func (c *Command) pull(ctx context.Context) error {
 				from,
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("%v: %v", symbol, err)
 			}
 		}
 
@@ -407,7 +408,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 		for _, v := range dout.Dividends {
 			if v.Currency != priceCurrency {
@@ -421,7 +422,7 @@ func (c *Command) pull(ctx context.Context) error {
 					},
 				)
 				if err != nil {
-					return err
+					return fmt.Errorf("%v: %v", symbol, err)
 				}
 
 				v.Currency = priceCurrency
@@ -429,7 +430,7 @@ func (c *Command) pull(ctx context.Context) error {
 			}
 		}
 		c.writef(
-			"%v: %v dividends",
+			"%-5v %v dividends",
 			symbol,
 			len(dout.Dividends),
 		)
@@ -442,7 +443,7 @@ func (c *Command) pull(ctx context.Context) error {
 				from,
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("%v: %v", symbol, err)
 			}
 		}
 
@@ -454,12 +455,12 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 		for _, v := range pout.Prices {
 			v.Currency = priceCurrency
 		}
-		c.writef("%v: %v prices", symbol, len(pout.Prices))
+		c.writef("%-5v %v prices", symbol, len(pout.Prices))
 
 		_, err = c.opts.db.SaveProfile(
 			ctx,
@@ -469,7 +470,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
 		_, err = c.opts.db.SaveSplits(
@@ -481,7 +482,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
 		_, err = c.opts.db.SaveDividends(
@@ -493,7 +494,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
 		_, err = c.opts.db.SavePrices(
@@ -505,13 +506,14 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
 	}
 	return nil
 }
 
 const symbolPatternChar = "%"
+const symbolPatternExclude = "-"
 
 func (c *Command) resolveSymbols(
 	ctx context.Context,
@@ -539,22 +541,39 @@ func (c *Command) resolveSymbols(
 	}
 
 	symbolsMap := make(map[string]struct{})
+	excludeMap := make(map[string]struct{})
 	for _, v := range symbols {
+		exclude := false
+		if strings.HasPrefix(v, symbolPatternExclude) {
+			exclude = true
+			v = v[1:]
+		}
+
 		if strings.HasSuffix(v, symbolPatternChar) {
 			prefix := strings.TrimRight(v, symbolPatternChar)
 			for _, sdb := range symbolsDB {
 				if strings.HasPrefix(sdb, prefix) {
-					symbolsMap[sdb] = struct{}{}
+					if exclude {
+						excludeMap[sdb] = struct{}{}
+					} else {
+						symbolsMap[sdb] = struct{}{}
+					}
 				}
 			}
 		} else {
-			symbolsMap[v] = struct{}{}
+			if exclude {
+				excludeMap[v] = struct{}{}
+			} else {
+				symbolsMap[v] = struct{}{}
+			}
 		}
 	}
 
 	symbolsRes := make([]string, 0, len(symbolsMap))
 	for v, _ := range symbolsMap {
-		symbolsRes = append(symbolsRes, v)
+		if _, ok := excludeMap[v]; !ok {
+			symbolsRes = append(symbolsRes, v)
+		}
 	}
 	sort.Strings(symbolsRes)
 	return symbolsRes, nil

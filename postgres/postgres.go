@@ -654,8 +654,8 @@ func (db *DB) Splits(
 
 		for rows.Next() {
 			var exDate time.Time
-			var toFactor int
-			var fromFactor int
+			var toFactor float64
+			var fromFactor float64
 
 			err = rows.Scan(&exDate, &toFactor, &fromFactor)
 			if err != nil {

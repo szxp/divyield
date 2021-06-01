@@ -344,6 +344,9 @@ func (d *dividend) String() string {
 }
 
 func (d *dividend) FrequencyNumber() int {
+	if d.Frequency == "bimonthly" {
+		return 24
+	}
 	if d.Frequency == "monthly" {
 		return 12
 	}
@@ -400,7 +403,7 @@ func (s *splitService) Fetch(
 
 	splits, err := s.parseSplits(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("parse splits: %s", err)
+		return nil, fmt.Errorf("parse splits: %s", in.Symbol, err)
 	}
 	sortSplitsDesc(splits)
 
@@ -460,9 +463,9 @@ func sortSplitsDesc(a []*split) {
 }
 
 type split struct {
-	ExDate     date `json:"exDate"`
-	FromFactor int  `json:"fromFactor"`
-	ToFactor   int  `json:"toFactor"`
+	ExDate     date    `json:"exDate"`
+	FromFactor float64 `json:"fromFactor"`
+	ToFactor   float64 `json:"toFactor"`
 }
 
 func (c *IEXCloud) NewProfileService() divyield.ProfileService {

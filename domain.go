@@ -254,8 +254,8 @@ type SplitFetchOutput struct {
 
 type Split struct {
 	ExDate     time.Time
-	ToFactor   int
-	FromFactor int
+	ToFactor   float64
+	FromFactor float64
 }
 
 func (s *Split) String() string {
