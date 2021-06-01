@@ -13,7 +13,7 @@ go build cmd/divyield/main.go && \
     -gordon-growth-rate-min=3.0 \
     -gordon-growth-rate-max=5.0 \
     -no-cut-dividend=true \
-    -start-date=-10y \
+    -start-date=-5y \
     $@
     
 #    -no-declining-dgr=true \
