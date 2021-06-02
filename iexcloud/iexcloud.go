@@ -272,7 +272,9 @@ func (s *dividendService) Fetch(
 	return out, nil
 }
 
-func (s *dividendService) parseDividends(r io.Reader) ([]*dividend, error) {
+func (s *dividendService) parseDividends(
+	r io.Reader,
+) ([]*dividend, error) {
 	dividends := make([]*dividend, 0)
 
 	dec := json.NewDecoder(r)
@@ -297,7 +299,7 @@ func (s *dividendService) parseDividends(r io.Reader) ([]*dividend, error) {
 			continue
 		}
 
-		if v.Amount == 0 {
+		if v.Amount <= 0 {
 			continue
 		}
 

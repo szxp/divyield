@@ -221,6 +221,7 @@ func (db *DB) SavePrices(
 				"open",
 				"volume",
 				"currency",
+				"created",
 			),
 		)
 		if err != nil {
@@ -245,6 +246,7 @@ func (db *DB) SavePrices(
 				v.Open,
 				v.Volume,
 				v.Currency,
+				time.Now(),
 			)
 			if err != nil {
 				return err
@@ -281,8 +283,15 @@ func (db *DB) Dividends(
 		schema := schemaStock(ticker)
 
 		q := sq.Select(
-			"ex_date", "amount", "amount_adj", "currency",
-			"frequency", "symbol", "payment_type").
+			"ex_date",
+			"amount",
+			"amount_adj",
+			"currency",
+			"frequency",
+			"symbol",
+			"payment_type",
+			"created",
+		).
 			From(schema + ".dividend_view").
 			OrderBy("ex_date desc").
 			PlaceholderFormat(sq.Dollar)
@@ -323,9 +332,18 @@ func (db *DB) Dividends(
 			var frequency int
 			var symbol string
 			var paymentType string
+			var created time.Time
 
-			err = rows.Scan(&exDate, &amount, &amountAdj, &currency,
-				&frequency, &symbol, &paymentType)
+			err = rows.Scan(
+				&exDate,
+				&amount,
+				&amountAdj,
+				&currency,
+				&frequency,
+				&symbol,
+				&paymentType,
+				&created,
+			)
 			if err != nil {
 				return err
 			}
@@ -337,6 +355,7 @@ func (db *DB) Dividends(
 				Frequency:   frequency,
 				Symbol:      symbol,
 				PaymentType: paymentType,
+				Created:     created,
 			}
 			dividends = append(dividends, v)
 		}
@@ -367,6 +386,11 @@ func (db *DB) SaveDividends(
 			}
 		}
 
+		processedIDs, err := db.dividendIDs(ctx, runner, in.Symbol)
+		if err != nil {
+			return err
+		}
+
 		stmt, err := runner.PrepareContext(
 			ctx,
 			pq.CopyInSchema(
@@ -379,6 +403,7 @@ func (db *DB) SaveDividends(
 				"currency",
 				"frequency",
 				"payment_type",
+				"created",
 			),
 		)
 		if err != nil {
@@ -393,6 +418,11 @@ func (db *DB) SaveDividends(
 				// noop
 			}
 
+			if _, found := processedIDs[v.ID]; found {
+				fmt.Printf("%v: Ignore %v\n", in.Symbol, v)
+				continue
+			}
+
 			_, err = stmt.ExecContext(
 				ctx,
 				v.ID,
@@ -402,9 +432,10 @@ func (db *DB) SaveDividends(
 				v.Currency,
 				v.Frequency,
 				v.PaymentType,
+				time.Now(),
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("%v: %v", v, err)
 			}
 		}
 
@@ -427,9 +458,42 @@ func (db *DB) SaveDividends(
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%v: %v", in.Symbol, err)
 	}
 	return &divyield.DBSaveDividendsOutput{}, nil
+}
+
+func (db *DB) dividendIDs(
+	ctx context.Context,
+	runner runner,
+	symbol string,
+) (map[int64]struct{}, error) {
+	ids := make(map[int64]struct{})
+	schema := schemaStock(symbol)
+
+	s, args, err := sq.Select("id").
+		From(schema + ".dividend").
+		PlaceholderFormat(sq.Dollar).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := runner.QueryContext(ctx, s, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		err = rows.Scan(&id)
+		if err != nil {
+			return nil, err
+		}
+		ids[id] = struct{}{}
+	}
+	return ids, nil
 }
 
 func (db *DB) DividendYields(
@@ -563,6 +627,7 @@ func (db *DB) SaveSplits(
 				"ex_date",
 				"to_factor",
 				"from_factor",
+				"created",
 			),
 		)
 		if err != nil {
@@ -582,6 +647,7 @@ func (db *DB) SaveSplits(
 				v.ExDate,
 				v.ToFactor,
 				v.FromFactor,
+				time.Now(),
 			)
 			if err != nil {
 				return err
@@ -722,6 +788,7 @@ func (db *DB) SaveProfile(
 				Update("").
 				Table("public.profile").
 				SetMap(valuesMap).
+				SetMap(sq.Eq{"updated": time.Now()}).
 				Where("symbol = ?", in.Symbol).
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
@@ -747,6 +814,7 @@ func (db *DB) SaveProfile(
 					"phone",
 				).
 				SetMap(valuesMap).
+				SetMap(sq.Eq{"created": time.Now()}).
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
 		}

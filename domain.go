@@ -175,6 +175,7 @@ type Dividend struct {
 	Frequency   int
 	Symbol      string
 	PaymentType string
+	Created     time.Time
 }
 
 func (d *Dividend) Year() int {
@@ -183,8 +184,10 @@ func (d *Dividend) Year() int {
 
 func (d *Dividend) String() string {
 	return fmt.Sprintf(
-		"%v: %v %v",
+		"Dividend(ID=%v ExDate=%v Amount=%v AmoundAdj=%v Currency=%v)",
+		d.ID,
 		time.Time(d.ExDate).Format(DateFormat),
+		d.Amount,
 		d.AmountAdj,
 		d.Currency,
 	)
@@ -217,7 +220,8 @@ func (y *DividendYield) ForwardTTM() float64 {
 	if y.CloseAdj == 0 {
 		return 0
 	}
-	return ((y.DividendAdj * float64(y.Frequency)) / y.CloseAdj) * 100
+	return ((y.DividendAdj * float64(y.Frequency)) /
+		y.CloseAdj) * 100
 }
 
 func (y *DividendYield) TrailingTTM() float64 {

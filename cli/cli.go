@@ -386,7 +386,7 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("%v: %v", symbol, err)
 		}
-		c.writef("%-5v %v splits", symbol, len(sout.Splits))
+		c.writef("%v: %v splits", symbol, len(sout.Splits))
 
 		fromDividends := from
 		if !c.opts.reset {
@@ -430,7 +430,7 @@ func (c *Command) pull(ctx context.Context) error {
 			}
 		}
 		c.writef(
-			"%-5v %v dividends",
+			"%v: %v dividends",
 			symbol,
 			len(dout.Dividends),
 		)
@@ -460,7 +460,7 @@ func (c *Command) pull(ctx context.Context) error {
 		for _, v := range pout.Prices {
 			v.Currency = priceCurrency
 		}
-		c.writef("%-5v %v prices", symbol, len(pout.Prices))
+		c.writef("%v: %v prices", symbol, len(pout.Prices))
 
 		_, err = c.opts.db.SaveProfile(
 			ctx,
@@ -470,7 +470,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return fmt.Errorf("%v: %v", symbol, err)
+			return fmt.Errorf("%v: save profile: %v", symbol, err)
 		}
 
 		_, err = c.opts.db.SaveSplits(
@@ -482,7 +482,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return fmt.Errorf("%v: %v", symbol, err)
+			return fmt.Errorf("%v: save splits: %v", symbol, err)
 		}
 
 		_, err = c.opts.db.SaveDividends(
@@ -494,7 +494,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return fmt.Errorf("%v: %v", symbol, err)
+			return fmt.Errorf("%v: save dividends: %v", symbol, err)
 		}
 
 		_, err = c.opts.db.SavePrices(
@@ -506,7 +506,7 @@ func (c *Command) pull(ctx context.Context) error {
 			},
 		)
 		if err != nil {
-			return fmt.Errorf("%v: %v", symbol, err)
+			return fmt.Errorf("%v: save prices: %v", symbol, err)
 		}
 	}
 	return nil
@@ -1667,6 +1667,7 @@ set format x '%Y %b %d';
 
 set multiplot;
 set size 1, 0.25;
+set style fill solid 1.0;
 
 set origin 0.0,0.75;
 set title '{{.TitlePrices}}';
@@ -1678,7 +1679,6 @@ set title '{{.TitleDivYieldFwd}}';
 set yrange [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
 plot yieldsfile using 1:3 with filledcurves above y = 0 lc 'royalblue', {{.YieldStart}} title '' lw 4 lc 'red';
 
-set style fill solid;
 set boxwidth 1 absolute;
 
 set origin 0.0,0.25;

@@ -22,6 +22,8 @@ begin
 		zip              text,
 		country          text,
 		phone            text,
+        created          timestamp with time zone,     
+        updated          timestamp with time zone,     
         PRIMARY KEY(symbol)	
     )';
 end $$;
@@ -37,27 +39,6 @@ begin
         quote_ident(schema_name);
 
     execute 'create table if not exists ' || 
-        'public.profile (
-		symbol           varchar(10) not null,
-		name             text,
-		exchange         text,
-		issue_type       text,
-		industry         text,
-		sector           text,
-		description      text,
-		website          text,
-		primary_sic_code text,
-		address          text,
-		state            text,
-		city             text,
-		zip              text,
-		country          text,
-		phone            text,
-        PRIMARY KEY(symbol)	
-    )';
-
-
-    execute 'create table if not exists ' || 
         quote_ident(schema_name) || '.price (
         date        date not null,
         symbol      varchar(10) not null,
@@ -69,6 +50,7 @@ begin
         volume      numeric not null,
         factor_adj  numeric not null default 1,
         close_adj   numeric not null default 0,
+        created     timestamp with time zone,     
         PRIMARY KEY(date)	
     )';
 
@@ -83,6 +65,7 @@ begin
         payment_type text not null, 
         factor_adj   numeric not null default 1,
         amount_adj   numeric not null default 0,
+        created      timestamp with time zone,     
         PRIMARY KEY(id)	
     )';
 
@@ -91,6 +74,7 @@ begin
         ex_date      date not null,
         to_factor     numeric not null,
         from_factor   numeric not null,
+        created      timestamp with time zone,     
         PRIMARY KEY(ex_date)	
     )';
 
@@ -111,7 +95,8 @@ begin
             frequency, 
             payment_type, 
             factor_adj, 
-            sum(amount_adj) amount_adj
+            sum(amount_adj) amount_adj,
+            max(created) created
         from ' || quote_ident(schema_name) || '.dividend
         group by 
             ex_date, 
