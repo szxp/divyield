@@ -142,7 +142,13 @@ func main() {
 	chartFlag := optsFlagSet.Bool(
 		"chart",
 		false,
-		"generate chart")
+		"generate chart",
+    )
+	forceFlag := optsFlagSet.Bool(
+		"force",
+		false,
+		"Force",
+    )
 
 	optsFlagSet.Parse(os.Args[2:])
 
@@ -246,6 +252,7 @@ func main() {
 		cli.NoDecliningDGR(*noDecliningDGR),
 		cli.DGR5yAboveInflation(*dgr5yAboveInfFlag),
 		cli.Chart(*chartFlag),
+		cli.Force(*forceFlag),
 	)
 	err = cmd.Execute(ctx)
 	if err != nil {

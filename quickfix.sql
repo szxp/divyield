@@ -5,9 +5,8 @@ DECLARE
 BEGIN
 
 
-        EXECUTE 'alter table ' || 
-            
-            'public.profile rename column update to updated';
+--        EXECUTE 'alter table public.profile ' || 
+--            'add column pulled timestamp with time zone';
 
 
     FOR r IN select schema_name 

@@ -746,6 +746,8 @@ func (db *DB) SaveProfile(
 	ctx context.Context,
 	in *divyield.DBSaveProfileInput,
 ) (*divyield.DBSaveProfileOutput, error) {
+    now := time.Now()
+
 	err := execTx(ctx, db.DB, func(runner runner) error {
 
 		s, args, err := sq.
@@ -781,6 +783,7 @@ func (db *DB) SaveProfile(
 			"state":            in.Profile.State,
 			"country":          in.Profile.Country,
 			"phone":            in.Profile.Phone,
+			"pulled":           in.Profile.Pulled,
 		}
 
 		if exists {
@@ -788,7 +791,7 @@ func (db *DB) SaveProfile(
 				Update("").
 				Table("public.profile").
 				SetMap(valuesMap).
-				SetMap(sq.Eq{"updated": time.Now()}).
+				SetMap(sq.Eq{"updated": now}).
 				Where("symbol = ?", in.Symbol).
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
@@ -812,13 +815,16 @@ func (db *DB) SaveProfile(
 					"state",
 					"country",
 					"phone",
+					"pulled",
 				).
 				SetMap(valuesMap).
-				SetMap(sq.Eq{"created": time.Now()}).
+				SetMap(sq.Eq{
+                    "created": now,
+                    "updated": now,
+                }).
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
 		}
-
 		_, err = runner.ExecContext(ctx, s, args...)
 		return err
 	})
@@ -835,7 +841,7 @@ func (db *DB) Profiles(
 	profiles := make([]*divyield.Profile, 0)
 
 	err := execNonTx(ctx, db.DB, func(runner runner) error {
-		s, args, err := sq.Select(
+		q := sq.Select(
 			"symbol",
 			"name",
 			"exchange",
@@ -851,11 +857,17 @@ func (db *DB) Profiles(
 			"state",
 			"country",
 			"phone",
+			"pulled",
 		).
-			From("public.profile").
-			OrderBy("symbol asc").
-			PlaceholderFormat(sq.Dollar).
-			ToSql()
+        From("public.profile").
+		OrderBy("symbol asc").
+		PlaceholderFormat(sq.Dollar)
+
+		if len(in.Symbols) > 0 {
+            q = q.Where(sq.Eq{"symbol": in.Symbols})
+		}
+
+		s, args, err := q.ToSql()
 		if err != nil {
 			return err
 		}
@@ -882,6 +894,7 @@ func (db *DB) Profiles(
 			var state string
 			var country string
 			var phone string
+			var pulled *time.Time
 
 			err = rows.Scan(
 				&symbol,
@@ -899,6 +912,7 @@ func (db *DB) Profiles(
 				&state,
 				&country,
 				&phone,
+                &pulled,
 			)
 			if err != nil {
 				return err
@@ -920,6 +934,9 @@ func (db *DB) Profiles(
 				Country:        country,
 				Phone:          phone,
 			}
+            if pulled != nil {
+                v.Pulled = *pulled
+            }
 			profiles = append(profiles, v)
 		}
 		return nil
@@ -938,7 +955,10 @@ func updateDividendAdj(
 	schema string,
 ) error {
 	_, err := runner.ExecContext(
-		ctx, "call public.update_dividend_adj($1);", schema)
+		ctx,
+        "call public.update_dividend_adj($1);",
+        schema,
+    )
 	return err
 }
 
@@ -948,15 +968,36 @@ func updateCloseAdj(
 	schema string,
 ) error {
 	_, err := runner.ExecContext(
-		ctx, "call public.update_price_adj($1);", schema)
+		ctx,
+        "call public.update_price_adj($1);",
+        schema,
+    )
 	return err
 }
 
 type runner interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
-	PrepareContext(context.Context, string) (*sql.Stmt, error)
-	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
-	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+	ExecContext(
+        context.Context,
+        string,
+        ...interface{},
+    ) (sql.Result, error)
+
+    PrepareContext(
+        context.Context,
+        string,
+    ) (*sql.Stmt, error)
+
+	QueryContext(
+        context.Context,
+        string,
+        ...interface{},
+    ) (*sql.Rows, error)
+
+	QueryRowContext(
+        context.Context,
+        string,
+        ...interface{},
+    ) *sql.Row
 }
 
 func execTx(
@@ -964,7 +1005,12 @@ func execTx(
 	db *sql.DB,
 	fn func(runner runner) error,
 ) error {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	tx, err := db.BeginTx(
+        ctx,
+        &sql.TxOptions{
+            Isolation: sql.LevelSerializable,
+        },
+    )
 	if err != nil {
 		return err
 	}
@@ -972,11 +1018,14 @@ func execTx(
 	err = fn(tx)
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
-			return fmt.Errorf("tx err: %v, rb err: %v", err, rbErr)
+			return fmt.Errorf(
+                "tx err: %v, rb err: %v",
+                err,
+                rbErr,
+            )
 		}
 		return err
 	}
-
 	return tx.Commit()
 }
 

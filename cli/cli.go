@@ -303,7 +303,7 @@ func (c *Command) writeCashFlow(
 
 func (c *Command) pull(ctx context.Context) error {
 	var err error
-	from := c.opts.startDate
+    from := c.opts.startDate
 
 	symbols, err := c.resolveSymbols(ctx, c.args)
 	if err != nil {
@@ -327,6 +327,21 @@ func (c *Command) pull(ctx context.Context) error {
 	}
 
 	for _, symbol := range symbols {
+        utd, err := c.upToDate(ctx, symbol)
+        if err != nil {
+            return fmt.Errorf(
+                "%v: check up to date: %v",
+                symbol,
+                err,
+            )
+        }
+        if utd {
+			c.writef("%v: up to date", symbol)
+            continue
+        }
+
+        pullStart := time.Now()
+
 		proout, err := c.opts.profileService.Fetch(
 			ctx,
 			&divyield.ProfileFetchInput{
@@ -337,7 +352,8 @@ func (c *Command) pull(ctx context.Context) error {
 			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
-		if proout.Profile == nil {
+        profile := proout.Profile
+		if profile == nil {
 			return fmt.Errorf(
 				"%v: profile not found",
 				symbol,
@@ -462,11 +478,12 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 		c.writef("%v: %v prices", symbol, len(pout.Prices))
 
+        profile.Pulled = pullStart
 		_, err = c.opts.db.SaveProfile(
 			ctx,
 			&divyield.DBSaveProfileInput{
 				Symbol:  symbol,
-				Profile: proout.Profile,
+				Profile: profile,
 			},
 		)
 		if err != nil {
@@ -510,6 +527,36 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (c *Command) upToDate(
+	ctx context.Context,
+	symbol string,
+) (bool, error) {
+	out, err := c.opts.db.Profiles(
+		ctx,
+		&divyield.DBProfilesInput{
+            Symbols: []string{symbol},
+        },
+	)
+	if err != nil {
+		return false, err
+	}
+
+    if len(out.Profiles) == 0 {
+        return false, nil
+    }
+
+    today := date(time.Now())
+    pulledDate := date(out.Profiles[0].Pulled)
+    return !c.opts.force && pulledDate.Equal(today), nil
+}
+
+func date(t time.Time) time.Time {
+    return time.Date(
+        t.Year(), t.Month(), t.Day(),
+        0, 0, 0, 0, t.Location(),
+    )
 }
 
 const symbolPatternChar = "%"
@@ -1730,6 +1777,7 @@ type options struct {
 	noDecliningDGR      bool
 	dgr5yAboveInflation bool
 	chart               bool
+	force               bool
 }
 
 type Option func(o options) options
@@ -1918,6 +1966,13 @@ func DGR5yAboveInflation(v bool) Option {
 func Chart(v bool) Option {
 	return func(o options) options {
 		o.chart = v
+		return o
+	}
+}
+
+func Force(v bool) Option {
+	return func(o options) options {
+		o.force = v
 		return o
 	}
 }

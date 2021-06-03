@@ -103,6 +103,7 @@ type DBSaveProfileOutput struct {
 }
 
 type DBProfilesInput struct {
+    Symbols []string
 }
 
 type DBProfilesOutput struct {
@@ -304,6 +305,7 @@ type Profile struct {
 	State          string
 	Country        string
 	Phone          string
+	Pulled         time.Time
 }
 
 type ISINService interface {

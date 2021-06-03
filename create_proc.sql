@@ -24,6 +24,7 @@ begin
 		phone            text,
         created          timestamp with time zone,     
         updated          timestamp with time zone,     
+        pulled           timestamp with time zone,     
         PRIMARY KEY(symbol)	
     )';
 end $$;
