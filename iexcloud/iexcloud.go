@@ -498,15 +498,23 @@ func (s *profileService) Fetch(
 		if resp.StatusCode == 404 {
 			return &divyield.ProfileFetchOutput{}, nil
 		}
-		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+		return nil, fmt.Errorf(
+            "http error: %d", 
+            resp.StatusCode,
+        )
 	}
 
 	cp, err := s.parseProfile(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("parse company profile: %s", err)
+		return nil, fmt.Errorf(
+            "parse company profile: %s", 
+            err,
+        )
 	}
 
-	address := strings.TrimSpace(cp.Address + " " + cp.Address2)
+	address := strings.TrimSpace(
+        cp.Address + " " + cp.Address2,
+    )
 
 	comPro := &divyield.Profile{
 		Symbol:         cp.Symbol,

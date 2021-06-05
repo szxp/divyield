@@ -787,15 +787,17 @@ func (db *DB) SaveProfile(
 		}
 
 		if exists {
+            valuesMap["updated"] = now
 			s, args, err = sq.
 				Update("").
 				Table("public.profile").
 				SetMap(valuesMap).
-				SetMap(sq.Eq{"updated": now}).
 				Where("symbol = ?", in.Symbol).
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
 		} else {
+            valuesMap["created"] = now
+            valuesMap["updated"] = now
 			s, args, err = sq.
 				Insert("").
 				Into("public.profile").
@@ -815,13 +817,11 @@ func (db *DB) SaveProfile(
 					"state",
 					"country",
 					"phone",
+                    "created",
+                    "updated",
 					"pulled",
 				).
 				SetMap(valuesMap).
-				SetMap(sq.Eq{
-                    "created": now,
-                    "updated": now,
-                }).
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
 		}

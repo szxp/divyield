@@ -478,18 +478,6 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 		c.writef("%v: %v prices", symbol, len(pout.Prices))
 
-        profile.Pulled = pullStart
-		_, err = c.opts.db.SaveProfile(
-			ctx,
-			&divyield.DBSaveProfileInput{
-				Symbol:  symbol,
-				Profile: profile,
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("%v: save profile: %v", symbol, err)
-		}
-
 		_, err = c.opts.db.SaveSplits(
 			ctx,
 			&divyield.DBSaveSplitsInput{
@@ -525,6 +513,20 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("%v: save prices: %v", symbol, err)
 		}
+
+        profile.Pulled = pullStart
+		_, err = c.opts.db.SaveProfile(
+			ctx,
+			&divyield.DBSaveProfileInput{
+				Symbol:  symbol,
+				Profile: profile,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("%v: save profile: %v", symbol, err)
+		}
+
+
 	}
 	return nil
 }

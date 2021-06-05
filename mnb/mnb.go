@@ -52,7 +52,7 @@ func (s *inflationService) fetch(
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		"https://www.mnb.hu/",
+		"https://www.mnb.hu/web/fooldal",
 		nil,
 	)
 	req.Header.Set("User-Agent", userAgent)
@@ -81,28 +81,22 @@ func (s *inflationService) fetch(
 
 	body := string(b)
 	matches := rateRE.FindStringSubmatch(body)
-	rateStr := strings.ReplaceAll(matches[1], ",", ".")
+	period := strings.TrimSpace(matches[1])
+	rateStr := strings.ReplaceAll(matches[2], ",", ".")
 	rateStr = strings.TrimSpace(rateStr)
 	rate, err := strconv.ParseFloat(rateStr, 64)
 	if err != nil {
 		return nil, err
 	}
 
-	matches = periodRE.FindStringSubmatch(body)
-	period := strings.TrimSpace(matches[1])
-
-	return &divyield.Inflation{
+    return &divyield.Inflation{
 		Rate:   rate,
 		Period: period,
 	}, nil
 }
 
 var rateRE = regexp.MustCompile(
-	`(?s)Infláció.*KSH:.*>\s*([^>%\s]+)\s*%`,
-)
-
-var periodRE = regexp.MustCompile(
-	`(?s)Infláció.*>([^>]+),\s*KSH`,
+    `(?s)Infláció.*>([^<>]+KSH).*-value">([^>]+)<span`,
 )
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36 OPR/76.0.4017.123"
