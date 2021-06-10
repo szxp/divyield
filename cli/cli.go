@@ -140,11 +140,11 @@ func (c *Command) writeStats(s *divyield.Stats) {
 	b := &bytes.Buffer{}
 	b.WriteString(fmt.Sprintf("%-38v", "Company"))
 	b.WriteByte('\t')
-	b.WriteString(fmt.Sprintf("%-35v", "Exchange"))
+	b.WriteString(fmt.Sprintf("%-33v", "Exchange"))
 	b.WriteByte('\t')
-	b.WriteString("Dividend")
+	b.WriteString("Dividend fwd")
 	b.WriteByte('\t')
-	b.WriteString("Yield")
+	b.WriteString("Yield fwd")
 	b.WriteByte('\t')
 	b.WriteString("GGR")
 	b.WriteByte('\t')
@@ -173,7 +173,7 @@ func (c *Command) writeStats(s *divyield.Stats) {
         ))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf(
-            "%-35v", 
+            "%-33v", 
             row.Profile.Exchange,
         ))
 		b.WriteByte('\t')
@@ -216,26 +216,36 @@ func (c *Command) writeStatsFooter(
 	w := tabwriter.NewWriter(
 		out, 0, 0, 2, ' ', 0)
 
-	inf := fmt.Sprintf(
+
+	b := &bytes.Buffer{}
+
+	b.Reset()
+	b.WriteString("Start date:")
+	b.WriteByte('\t')
+	b.WriteString(sg.startDate.Format(divyield.DateFormat))
+	b.WriteByte('\t')
+	fmt.Fprintln(w, b.String())
+
+
+
+    inf := fmt.Sprintf(
 		"%.2f%%, %v",
 		sg.inflation.Rate,
 		sg.inflation.Period,
 	)
 
-	sp500DivYld := fmt.Sprintf(
-		"%.2f%%, %v",
-		sg.sp500DividendYield.Rate,
-		sg.sp500DividendYield.Timestamp,
-	)
-
-	b := &bytes.Buffer{}
-
 	b.Reset()
-	b.WriteString("Inflation:")
+	b.WriteString("Inflation (HUN current):")
 	b.WriteByte('\t')
 	b.WriteString(inf)
 	b.WriteByte('\t')
 	fmt.Fprintln(w, b.String())
+
+    sp500DivYld := fmt.Sprintf(
+		"%.2f%%, %v",
+		sg.sp500DividendYield.Rate,
+		sg.sp500DividendYield.Timestamp,
+	)
 
 	b.Reset()
 	b.WriteString("S&P 500 dividend yield:")
@@ -243,6 +253,96 @@ func (c *Command) writeStatsFooter(
 	b.WriteString(sp500DivYld)
 	b.WriteByte('\t')
 	fmt.Fprintln(w, b.String())
+
+    /*
+   	divYieldFwdSP500Min float64
+	divYieldFwdSP500Max float64
+	divYieldTotalMin    float64
+*/
+
+    if sg.divYieldTotalMin > 0 {
+        b.Reset()
+        b.WriteString("Dividend yield total min:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf("%.2f%%", sg.divYieldTotalMin))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+    if sg.divYieldFwdMin() > 0 {
+        b.Reset()
+        b.WriteString("Dividend yield fwd min:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf(
+            "%.2f%%", 
+            sg.divYieldFwdMin(),
+        ))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+    if sg.divYieldFwdMax() > 0 {
+        b.Reset()
+        b.WriteString("Dividend yield fwd max:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf(
+            "%.2f%%", 
+            sg.divYieldFwdMax(),
+        ))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+
+
+
+    if sg.ggrROI > 0 {
+        b.Reset()
+        b.WriteString("GGR ROI:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf("%.2f%%", sg.ggrROI))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+    if sg.ggrMin > 0 {
+        b.Reset()
+        b.WriteString("GGR min:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf("%.2f%%", sg.ggrMin))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+    if sg.ggrMax > 0 {
+        b.Reset()
+        b.WriteString("GGR max:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf("%.2f%%", sg.ggrMax))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+
+
+
+    if sg.dgr5yMin > 0 {
+        b.Reset()
+        b.WriteString("DGR5y min:")
+        b.WriteByte('\t')
+        b.WriteString(fmt.Sprintf("%.2f%%", sg.dgr5yMin))
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+
+    if sg.noCutDividend {
+        b.Reset()
+        b.WriteString("No cut dividend")
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+    if sg.noDecliningDGR {
+        b.Reset()
+        b.WriteString("No declining DGR")
+        b.WriteByte('\t')
+        fmt.Fprintln(w, b.String())
+    }
+
+
 
 	w.Flush()
 	c.writef("%s", out.String())
@@ -919,6 +1019,14 @@ type statsGenerator struct {
 	dgr5yMin            float64
 }
 
+func (g *statsGenerator) divYieldFwdMin() float64 {
+    return g.sp500DividendYield.Rate * g.divYieldFwdSP500Min
+}
+
+func (g *statsGenerator) divYieldFwdMax() float64 {
+	return g.sp500DividendYield.Rate * g.divYieldFwdSP500Max
+}
+
 func (g *statsGenerator) Generate(
 	ctx context.Context,
 	symbols []string,
@@ -1132,10 +1240,8 @@ func (g *statsGenerator) filterNoCutDividend(
 func (g *statsGenerator) filterDivYieldFwdSP500MinMax(
 	row *divyield.StatsRow,
 ) bool {
-	min := g.sp500DividendYield.Rate *
-		g.divYieldFwdSP500Min
-	max := g.sp500DividendYield.Rate *
-		g.divYieldFwdSP500Max
+	min := g.divYieldFwdMin()
+	max := g.divYieldFwdMax()
 
 	if min <= 0 && max <= 0 {
 		return true
