@@ -138,13 +138,11 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		out, 0, 0, 2, ' ', tabwriter.AlignRight)
 
 	b := &bytes.Buffer{}
-	b.WriteString(fmt.Sprintf("%-7v", "Symbol"))
+	b.WriteString(fmt.Sprintf("%-40v", "Company"))
 	b.WriteByte('\t')
-	b.WriteString("Company")
+	b.WriteString("Dividend")
 	b.WriteByte('\t')
-	b.WriteString("Dividend (fwd)")
-	b.WriteByte('\t')
-	b.WriteString("Yield (fwd)")
+	b.WriteString("Yield")
 	b.WriteByte('\t')
 	b.WriteString("GGR")
 	b.WriteByte('\t')
@@ -167,9 +165,10 @@ func (c *Command) writeStats(s *divyield.Stats) {
 
 	for _, row := range s.Rows {
 		b.Reset()
-		b.WriteString(fmt.Sprintf("%-7v", row.Profile.Symbol))
-		b.WriteByte('\t')
-		b.WriteString(row.Profile.Name)
+		b.WriteString(fmt.Sprintf(
+            "%-40v",
+            row.Profile.Symbol + " - " + row.Profile.Name,
+        ))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
 		b.WriteByte('\t')
