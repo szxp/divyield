@@ -103,7 +103,7 @@ type DBSaveProfileOutput struct {
 }
 
 type DBProfilesInput struct {
-    Symbols []string
+	Symbols []string
 }
 
 type DBProfilesOutput struct {

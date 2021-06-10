@@ -499,22 +499,22 @@ func (s *profileService) Fetch(
 			return &divyield.ProfileFetchOutput{}, nil
 		}
 		return nil, fmt.Errorf(
-            "http error: %d", 
-            resp.StatusCode,
-        )
+			"http error: %d",
+			resp.StatusCode,
+		)
 	}
 
 	cp, err := s.parseProfile(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf(
-            "parse company profile: %s", 
-            err,
-        )
+			"parse company profile: %s",
+			err,
+		)
 	}
 
 	address := strings.TrimSpace(
-        cp.Address + " " + cp.Address2,
-    )
+		cp.Address + " " + cp.Address2,
+	)
 
 	comPro := &divyield.Profile{
 		Symbol:         cp.Symbol,

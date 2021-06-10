@@ -106,7 +106,7 @@ func (c *Command) stats(ctx context.Context) error {
 		ggrMax:              c.opts.ggrMax,
 		noCutDividend:       c.opts.noCutDividend,
 		noDecliningDGR:      c.opts.noDecliningDGR,
-		dgr5yAboveInflation: c.opts.dgr5yAboveInflation,
+		dgr5yMin:            c.opts.dgr5yMin,
 	}
 
 	stats, err := sg.Generate(ctx, symbols)
@@ -303,7 +303,7 @@ func (c *Command) writeCashFlow(
 
 func (c *Command) pull(ctx context.Context) error {
 	var err error
-    from := c.opts.startDate
+	from := c.opts.startDate
 
 	symbols, err := c.resolveSymbols(ctx, c.args)
 	if err != nil {
@@ -327,20 +327,20 @@ func (c *Command) pull(ctx context.Context) error {
 	}
 
 	for _, symbol := range symbols {
-        utd, err := c.upToDate(ctx, symbol)
-        if err != nil {
-            return fmt.Errorf(
-                "%v: check up to date: %v",
-                symbol,
-                err,
-            )
-        }
-        if utd {
+		utd, err := c.upToDate(ctx, symbol)
+		if err != nil {
+			return fmt.Errorf(
+				"%v: check up to date: %v",
+				symbol,
+				err,
+			)
+		}
+		if utd {
 			c.writef("%v: up to date", symbol)
-            continue
-        }
+			continue
+		}
 
-        pullStart := time.Now()
+		pullStart := time.Now()
 
 		proout, err := c.opts.profileService.Fetch(
 			ctx,
@@ -352,7 +352,7 @@ func (c *Command) pull(ctx context.Context) error {
 			return fmt.Errorf("%v: %v", symbol, err)
 		}
 
-        profile := proout.Profile
+		profile := proout.Profile
 		if profile == nil {
 			return fmt.Errorf(
 				"%v: profile not found",
@@ -514,7 +514,7 @@ func (c *Command) pull(ctx context.Context) error {
 			return fmt.Errorf("%v: save prices: %v", symbol, err)
 		}
 
-        profile.Pulled = pullStart
+		profile.Pulled = pullStart
 		_, err = c.opts.db.SaveProfile(
 			ctx,
 			&divyield.DBSaveProfileInput{
@@ -525,7 +525,6 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("%v: save profile: %v", symbol, err)
 		}
-
 
 	}
 	return nil
@@ -538,27 +537,27 @@ func (c *Command) upToDate(
 	out, err := c.opts.db.Profiles(
 		ctx,
 		&divyield.DBProfilesInput{
-            Symbols: []string{symbol},
-        },
+			Symbols: []string{symbol},
+		},
 	)
 	if err != nil {
 		return false, err
 	}
 
-    if len(out.Profiles) == 0 {
-        return false, nil
-    }
+	if len(out.Profiles) == 0 {
+		return false, nil
+	}
 
-    today := date(time.Now())
-    pulledDate := date(out.Profiles[0].Pulled)
-    return !c.opts.force && pulledDate.Equal(today), nil
+	today := date(time.Now())
+	pulledDate := date(out.Profiles[0].Pulled)
+	return !c.opts.force && pulledDate.Equal(today), nil
 }
 
 func date(t time.Time) time.Time {
-    return time.Date(
-        t.Year(), t.Month(), t.Day(),
-        0, 0, 0, 0, t.Location(),
-    )
+	return time.Date(
+		t.Year(), t.Month(), t.Day(),
+		0, 0, 0, 0, t.Location(),
+	)
 }
 
 const symbolPatternChar = "%"
@@ -907,7 +906,7 @@ type statsGenerator struct {
 	ggrMax              float64
 	noCutDividend       bool
 	noDecliningDGR      bool
-	dgr5yAboveInflation bool
+	dgr5yMin            float64
 }
 
 func (g *statsGenerator) Generate(
@@ -977,7 +976,7 @@ LOOP:
 		stats,
 		g.filterDivYieldFwdSP500MinMax,
 		g.filterDivYieldTotalMin,
-		g.filterDGR5yAboveInflation,
+		g.filterDGR5yMin,
 		g.filterGGRMinMax,
 		g.filterNoCutDividend,
 		g.filterNoDecliningDGR,
@@ -1145,14 +1144,14 @@ func (g *statsGenerator) filterDivYieldTotalMin(
 	return min <= row.DivYieldFwd+row.DGRs[5]
 }
 
-func (g *statsGenerator) filterDGR5yAboveInflation(
+func (g *statsGenerator) filterDGR5yMin(
 	row *divyield.StatsRow,
 ) bool {
-	if !g.dgr5yAboveInflation {
+	if g.dgr5yMin <= 0 {
 		return true
 	}
 
-	return g.inflation.Rate < row.DGRs[5]
+	return g.dgr5yMin <= row.DGRs[5]
 }
 
 func (g *statsGenerator) filterGGRMinMax(
@@ -1777,7 +1776,7 @@ type options struct {
 	ggrMax              float64
 	noCutDividend       bool
 	noDecliningDGR      bool
-	dgr5yAboveInflation bool
+	dgr5yMin            float64
 	chart               bool
 	force               bool
 }
@@ -1958,9 +1957,9 @@ func NoDecliningDGR(v bool) Option {
 	}
 }
 
-func DGR5yAboveInflation(v bool) Option {
+func DGR5yMin(v float64) Option {
 	return func(o options) options {
-		o.dgr5yAboveInflation = v
+		o.dgr5yMin = v
 		return o
 	}
 }

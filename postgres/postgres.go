@@ -746,7 +746,7 @@ func (db *DB) SaveProfile(
 	ctx context.Context,
 	in *divyield.DBSaveProfileInput,
 ) (*divyield.DBSaveProfileOutput, error) {
-    now := time.Now()
+	now := time.Now()
 
 	err := execTx(ctx, db.DB, func(runner runner) error {
 
@@ -787,7 +787,7 @@ func (db *DB) SaveProfile(
 		}
 
 		if exists {
-            valuesMap["updated"] = now
+			valuesMap["updated"] = now
 			s, args, err = sq.
 				Update("").
 				Table("public.profile").
@@ -796,8 +796,8 @@ func (db *DB) SaveProfile(
 				PlaceholderFormat(sq.Dollar).
 				ToSql()
 		} else {
-            valuesMap["created"] = now
-            valuesMap["updated"] = now
+			valuesMap["created"] = now
+			valuesMap["updated"] = now
 			s, args, err = sq.
 				Insert("").
 				Into("public.profile").
@@ -817,8 +817,8 @@ func (db *DB) SaveProfile(
 					"state",
 					"country",
 					"phone",
-                    "created",
-                    "updated",
+					"created",
+					"updated",
 					"pulled",
 				).
 				SetMap(valuesMap).
@@ -859,12 +859,12 @@ func (db *DB) Profiles(
 			"phone",
 			"pulled",
 		).
-        From("public.profile").
-		OrderBy("symbol asc").
-		PlaceholderFormat(sq.Dollar)
+			From("public.profile").
+			OrderBy("symbol asc").
+			PlaceholderFormat(sq.Dollar)
 
 		if len(in.Symbols) > 0 {
-            q = q.Where(sq.Eq{"symbol": in.Symbols})
+			q = q.Where(sq.Eq{"symbol": in.Symbols})
 		}
 
 		s, args, err := q.ToSql()
@@ -912,7 +912,7 @@ func (db *DB) Profiles(
 				&state,
 				&country,
 				&phone,
-                &pulled,
+				&pulled,
 			)
 			if err != nil {
 				return err
@@ -934,9 +934,9 @@ func (db *DB) Profiles(
 				Country:        country,
 				Phone:          phone,
 			}
-            if pulled != nil {
-                v.Pulled = *pulled
-            }
+			if pulled != nil {
+				v.Pulled = *pulled
+			}
 			profiles = append(profiles, v)
 		}
 		return nil
@@ -956,9 +956,9 @@ func updateDividendAdj(
 ) error {
 	_, err := runner.ExecContext(
 		ctx,
-        "call public.update_dividend_adj($1);",
-        schema,
-    )
+		"call public.update_dividend_adj($1);",
+		schema,
+	)
 	return err
 }
 
@@ -969,35 +969,35 @@ func updateCloseAdj(
 ) error {
 	_, err := runner.ExecContext(
 		ctx,
-        "call public.update_price_adj($1);",
-        schema,
-    )
+		"call public.update_price_adj($1);",
+		schema,
+	)
 	return err
 }
 
 type runner interface {
 	ExecContext(
-        context.Context,
-        string,
-        ...interface{},
-    ) (sql.Result, error)
+		context.Context,
+		string,
+		...interface{},
+	) (sql.Result, error)
 
-    PrepareContext(
-        context.Context,
-        string,
-    ) (*sql.Stmt, error)
+	PrepareContext(
+		context.Context,
+		string,
+	) (*sql.Stmt, error)
 
 	QueryContext(
-        context.Context,
-        string,
-        ...interface{},
-    ) (*sql.Rows, error)
+		context.Context,
+		string,
+		...interface{},
+	) (*sql.Rows, error)
 
 	QueryRowContext(
-        context.Context,
-        string,
-        ...interface{},
-    ) *sql.Row
+		context.Context,
+		string,
+		...interface{},
+	) *sql.Row
 }
 
 func execTx(
@@ -1006,11 +1006,11 @@ func execTx(
 	fn func(runner runner) error,
 ) error {
 	tx, err := db.BeginTx(
-        ctx,
-        &sql.TxOptions{
-            Isolation: sql.LevelSerializable,
-        },
-    )
+		ctx,
+		&sql.TxOptions{
+			Isolation: sql.LevelSerializable,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -1019,10 +1019,10 @@ func execTx(
 	if err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			return fmt.Errorf(
-                "tx err: %v, rb err: %v",
-                err,
-                rbErr,
-            )
+				"tx err: %v, rb err: %v",
+				err,
+				rbErr,
+			)
 		}
 		return err
 	}

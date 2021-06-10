@@ -93,63 +93,62 @@ func main() {
 	noCutDividend := optsFlagSet.Bool(
 		"no-cut-dividend",
 		false,
-		"Dividends were not decreased")
-
+		"Dividends were not decreased",
+	)
 	noDecliningDGR := optsFlagSet.Bool(
 		"no-declining-dgr",
 		false,
-		"no declining DGR")
-
+		"no declining DGR",
+	)
 	divYieldFwdSP500Min := optsFlagSet.Float64(
 		"dividend-yield-forward-sp500-min",
 		0.0,
-		"minimum forward dividend yield")
-
+		"minimum forward dividend yield",
+	)
 	divYieldFwdSP500Max := optsFlagSet.Float64(
 		"dividend-yield-forward-sp500-max",
 		0.0,
-		"maximum forward dividend yield")
-
+		"maximum forward dividend yield",
+	)
 	divYieldROIMin := optsFlagSet.Float64(
 		"dividend-yield-roi-min",
 		0.0,
 		"forward dividend yield + "+
 			"DGR-5y average yield "+
 			"must be a greater than or "+
-			"equal to the given total yield")
-
+			"equal to the given total yield",
+	)
 	ggrROIMin := optsFlagSet.Float64(
 		"gordon-roi-min",
 		10.0,
 		"expected return on investment (ROI) "+
-			"in the Gordon formula as a percentage")
-
+			"in the Gordon formula as a percentage",
+	)
 	ggrMin := optsFlagSet.Float64(
 		"gordon-growth-rate-min",
 		0.0,
-		"minimum Gordon growth rate as a percentage")
-
+		"minimum Gordon growth rate as a percentage",
+	)
 	ggrMax := optsFlagSet.Float64(
 		"gordon-growth-rate-max",
 		0.0,
-		"maximum Gordon growth rate as a percentage")
-
-	dgr5yAboveInfFlag := optsFlagSet.Bool(
-		"dgr5y-above-inflation",
-		false,
-		"DGR5y above inflation")
-
+		"maximum Gordon growth rate as a percentage",
+	)
+	dgr5yMinFlag := optsFlagSet.Float64(
+		"dgr5y-min",
+		0.0,
+		"DGR5y above inflation",
+	)
 	chartFlag := optsFlagSet.Bool(
 		"chart",
 		false,
 		"generate chart",
-    )
+	)
 	forceFlag := optsFlagSet.Bool(
 		"force",
 		false,
 		"Force",
-    )
-
+	)
 	optsFlagSet.Parse(os.Args[2:])
 
 	db, err := sql.Open("postgres", *dbConnStrFlag)
@@ -250,7 +249,7 @@ func main() {
 		cli.GordonGrowthRateMax(*ggrMax),
 		cli.NoCutDividend(*noCutDividend),
 		cli.NoDecliningDGR(*noDecliningDGR),
-		cli.DGR5yAboveInflation(*dgr5yAboveInfFlag),
+		cli.DGR5yMin(*dgr5yMinFlag),
 		cli.Chart(*chartFlag),
 		cli.Force(*forceFlag),
 	)
