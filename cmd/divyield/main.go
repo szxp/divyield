@@ -139,6 +139,12 @@ func main() {
 		0.0,
 		"DGR5y above inflation",
 	)
+	dgrYearlyFlag := optsFlagSet.Bool(
+		"dgr-yearly",
+		false,
+		"DGR yearly",
+	)
+
 	chartFlag := optsFlagSet.Bool(
 		"chart",
 		false,
@@ -250,6 +256,7 @@ func main() {
 		cli.NoCutDividend(*noCutDividend),
 		cli.NoDecliningDGR(*noDecliningDGR),
 		cli.DGR5yMin(*dgr5yMinFlag),
+		cli.DGRYearly(*dgrYearlyFlag),
 		cli.Chart(*chartFlag),
 		cli.Force(*forceFlag),
 	)
