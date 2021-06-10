@@ -376,6 +376,7 @@ type Stats struct {
 
 type StatsRow struct {
 	Symbol               string
+	Profile              *Profile
 	DivYieldFwd          float64
 	DivFwd               float64
 	GordonGrowthRate     float64
