@@ -138,7 +138,9 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		out, 0, 0, 2, ' ', tabwriter.AlignRight)
 
 	b := &bytes.Buffer{}
-	b.WriteString(fmt.Sprintf("%-40v", "Company"))
+	b.WriteString(fmt.Sprintf("%-38v", "Company"))
+	b.WriteByte('\t')
+	b.WriteString(fmt.Sprintf("%-35v", "Exchange"))
 	b.WriteByte('\t')
 	b.WriteString("Dividend")
 	b.WriteByte('\t')
@@ -166,8 +168,13 @@ func (c *Command) writeStats(s *divyield.Stats) {
 	for _, row := range s.Rows {
 		b.Reset()
 		b.WriteString(fmt.Sprintf(
-            "%-40v",
+            "%-38v",
             row.Profile.Symbol + " - " + row.Profile.Name,
+        ))
+		b.WriteByte('\t')
+		b.WriteString(fmt.Sprintf(
+            "%-35v", 
+            row.Profile.Exchange,
         ))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
@@ -1378,11 +1385,11 @@ func (g *chartGenerator) Generate(
 			XRangeMax: yields[0].
 				Date.Format("2006-01-02"),
 
-			TitlePrices:        symbol + " prices",
-			TitleDivYieldFwd:   symbol + " forward dividend yields",
-			TitleDivYieldTrail: symbol + " trailing dividend yields",
-			TitleDividends:     symbol + " dividends",
-			TitleDGR:           symbol + " dividend growth rates",
+			TitlePrices:        symbol + " - " + row.Profile.Name + " prices",
+			TitleDivYieldFwd:   symbol + " - " + row.Profile.Name + " forward dividend yields",
+			TitleDivYieldTrail: symbol + " - " + row.Profile.Name + " trailing dividend yields",
+			TitleDividends:     symbol + " - " + row.Profile.Name + " dividends",
+			TitleDGR:           symbol + " - " + row.Profile.Name + " dividend growth rates",
 
 			PriceYrMin: math.Max(
 				minPrice-((maxPrice-minPrice)*0.1),
