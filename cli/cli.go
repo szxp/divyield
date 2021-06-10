@@ -138,7 +138,9 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		out, 0, 0, 2, ' ', tabwriter.AlignRight)
 
 	b := &bytes.Buffer{}
-	b.WriteString(fmt.Sprintf("%-8v", "Symbol"))
+	b.WriteString(fmt.Sprintf("%-7v", "Symbol"))
+	b.WriteByte('\t')
+	b.WriteString("Company")
 	b.WriteByte('\t')
 	b.WriteString("Dividend (fwd)")
 	b.WriteByte('\t')
@@ -165,7 +167,9 @@ func (c *Command) writeStats(s *divyield.Stats) {
 
 	for _, row := range s.Rows {
 		b.Reset()
-		b.WriteString(fmt.Sprintf("%-8v", row.Symbol))
+		b.WriteString(fmt.Sprintf("%-7v", row.Profile.Symbol))
+		b.WriteByte('\t')
+		b.WriteString(row.Profile.Name)
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f", row.DivFwd))
 		b.WriteByte('\t')
@@ -939,7 +943,7 @@ func (g *statsGenerator) Generate(
 		sort.SliceStable(
 			stats.Rows,
 			func(i, j int) bool {
-				return stats.Rows[i].Symbol < stats.Rows[j].Symbol
+				return stats.Rows[i].Profile.Symbol < stats.Rows[j].Profile.Symbol
 			},
 		)
 
@@ -996,6 +1000,17 @@ func (g *statsGenerator) generateStatsRow(
 	symbol string,
 ) (*divyield.StatsRow, error) {
 
+    proOut, err := g.db.Profiles(
+        ctx,
+        &divyield.DBProfilesInput{
+            Symbols: []string{symbol},
+        },
+    )
+    if err != nil {
+        return nil, err
+    }
+    profile := proOut.Profiles[0]
+
 	dyf := &divyield.DividendYieldFilter{
 		Limit: 1,
 	}
@@ -1038,7 +1053,7 @@ func (g *statsGenerator) generateStatsRow(
 	divChangeMR, divChangeMRDate := g.dividendChangeMR(dividends)
 
 	row := &divyield.StatsRow{
-		Symbol:               symbol,
+		Profile:              profile,
 		DivYieldFwd:          divYieldFwd,
 		DivFwd:               divFwd,
 		GordonGrowthRate:     ggr,
@@ -1315,7 +1330,7 @@ func (g *chartGenerator) Generate(
 	stats *divyield.Stats,
 ) error {
 	for _, row := range stats.Rows {
-		symbol := row.Symbol
+		symbol := row.Profile.Symbol
 		dividends := row.Dividends
 
 		yields, err := g.db.DividendYields(
