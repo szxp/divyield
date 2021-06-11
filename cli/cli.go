@@ -512,6 +512,19 @@ func (c *Command) pull(ctx context.Context) error {
 		}
 		c.writef("%v: %v splits", symbol, len(sout.Splits))
 
+		_, err = c.opts.db.SaveSplits(
+			ctx,
+			&divyield.DBSaveSplitsInput{
+				Symbol: symbol,
+				Splits: sout.Splits,
+				Reset:  c.opts.reset,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("%v: save splits: %v", symbol, err)
+		}
+
+
 		fromDividends := from
 		if !c.opts.reset {
 			fromDividends, err = c.adjustFromDividends(
@@ -558,6 +571,18 @@ func (c *Command) pull(ctx context.Context) error {
 			symbol,
 			len(dout.Dividends),
 		)
+		_, err = c.opts.db.SaveDividends(
+			ctx,
+			&divyield.DBSaveDividendsInput{
+				Symbol:    symbol,
+				Dividends: dout.Dividends,
+				Reset:     c.opts.reset,
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("%v: save dividends: %v", symbol, err)
+		}
+
 
 		fromPrices := from
 		if !c.opts.reset {
@@ -585,30 +610,6 @@ func (c *Command) pull(ctx context.Context) error {
 			v.Currency = priceCurrency
 		}
 		c.writef("%v: %v prices", symbol, len(pout.Prices))
-
-		_, err = c.opts.db.SaveSplits(
-			ctx,
-			&divyield.DBSaveSplitsInput{
-				Symbol: symbol,
-				Splits: sout.Splits,
-				Reset:  c.opts.reset,
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("%v: save splits: %v", symbol, err)
-		}
-
-		_, err = c.opts.db.SaveDividends(
-			ctx,
-			&divyield.DBSaveDividendsInput{
-				Symbol:    symbol,
-				Dividends: dout.Dividends,
-				Reset:     c.opts.reset,
-			},
-		)
-		if err != nil {
-			return fmt.Errorf("%v: save dividends: %v", symbol, err)
-		}
 
 		_, err = c.opts.db.SavePrices(
 			ctx,

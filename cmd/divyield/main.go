@@ -81,9 +81,9 @@ func main() {
 	)
 	startDateFlag := optsFlagSet.String(
 		"start-date",
-		"-11y",
+		"-6y",
 		"Start date of the period, "+
-			"format 2010-06-05 or relative -11y.",
+			"format 2010-06-05 or relative -6y.",
 	)
 	reset := optsFlagSet.Bool(
 		"reset",
