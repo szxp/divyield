@@ -21,12 +21,17 @@ BEGIN
 --        EXECUTE 'call public.init_schema_tables(''' || 
 --            quote_ident(r.schema_name) || ''')';
         
---        EXECUTE 'call public.init_schema_views(''' || 
+--        EXECUTE 'call public.update_price_adj(''' || 
 --            quote_ident(r.schema_name) || ''')';
 
 --         EXECUTE 'alter table ' || 
 --             quote_ident(r.schema_name) || 
---             '.price add column created timestamp with time zone';
+--             '.price add column factor_adj_splits numeric not null default 1';
+
+--         EXECUTE 'alter table ' || 
+--             quote_ident(r.schema_name) || 
+--             '.price add column close_adj_splits numeric not null default 0';
+
 --         EXECUTE 'update ' || 
 --             quote_ident(r.schema_name) || 
 --             '.dividend set created = current_timestamp';

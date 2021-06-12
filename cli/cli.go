@@ -524,7 +524,6 @@ func (c *Command) pull(ctx context.Context) error {
 			return fmt.Errorf("%v: save splits: %v", symbol, err)
 		}
 
-
 		fromDividends := from
 		if !c.opts.reset {
 			fromDividends, err = c.adjustFromDividends(
@@ -582,7 +581,6 @@ func (c *Command) pull(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("%v: save dividends: %v", symbol, err)
 		}
-
 
 		fromPrices := from
 		if !c.opts.reset {
@@ -1632,7 +1630,7 @@ func (g *chartGenerator) writeFileYields(
 
 	_, err = w.Write([]byte("" +
 		"Date," +
-		"CloseAdj," +
+		"CloseAdjSplits," +
 		"DivYieldForwardTTM,",
 	))
 	if err != nil {
@@ -1650,7 +1648,7 @@ func (g *chartGenerator) writeFileYields(
 			w,
 			"%s,%.2f,%.2f",
 			y.Date.Format("2006-01-02"),
-			y.CloseAdj,
+			y.CloseAdjSplits,
 			y.ForwardTTM(),
 		)
 		if err != nil {
@@ -1721,14 +1719,14 @@ func (g *chartGenerator) rangePrices(
 	if len(yields) == 0 {
 		return 0, 0
 	}
-	min := yields[0].CloseAdj
-	max := yields[0].CloseAdj
+	min := yields[0].CloseAdjSplits
+	max := yields[0].CloseAdjSplits
 	for _, v := range yields {
-		if v.CloseAdj < min {
-			min = v.CloseAdj
+		if v.CloseAdjSplits < min {
+			min = v.CloseAdjSplits
 		}
-		if v.CloseAdj > max {
-			max = v.CloseAdj
+		if v.CloseAdjSplits > max {
+			max = v.CloseAdjSplits
 		}
 	}
 	return min, max
@@ -1871,17 +1869,20 @@ set xrange ['{{.XRangeMin}}':'{{.XRangeMax}}'];
 set format x '%Y %b %d';
 
 set multiplot;
-set size 1, 0.25;
+set y2tics;
+set size 0.96, 0.25;
 set style fill solid 1.0;
 
 set origin 0.0,0.75;
 set title '{{.TitlePrices}}';
 set yrange [{{.PriceYrMin}}:{{.PriceYrMax}}];
+set y2range [{{.PriceYrMin}}:{{.PriceYrMax}}];
 plot yieldsfile using 1:2 with filledcurves above y = 0 lc 'royalblue';
 
 set origin 0.0,0.50;
 set title '{{.TitleDivYieldFwd}}';
 set yrange [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
+set y2range [{{.YieldFwdYrMin}}:{{.YieldFwdYrMax}}];
 plot yieldsfile using 1:3 with filledcurves above y = 0 lc 'royalblue', {{.YieldStart}} title '' lw 4 lc 'red';
 
 set boxwidth 1 absolute;
@@ -1889,11 +1890,13 @@ set boxwidth 1 absolute;
 set origin 0.0,0.25;
 set title '{{.TitleDividends}}';
 set yrange [{{.DivYrMin}}:{{.DivYrMax}}];
+set y2range [{{.DivYrMin}}:{{.DivYrMax}}];
 plot dividendsfile using 1:($2 == 0 ? NaN : $2) with fsteps lw 4 lc 'royalblue', dividendsfile using 1:($2 == 0 ? NaN : $2) with boxes lw 4 lc 'royalblue';
 
 set origin 0.0,0.0;
 set title '{{.TitleDGR}}';
 set yrange [{{.DGRYrMin}}:{{.DGRYrMax}}];
+set y2range [{{.DGRYrMin}}:{{.DGRYrMax}}];
 plot dividendsfile using 1:($3 == 0 ? NaN : $3) with boxes lw 4 lc 'royalblue', 0 title '' lw 4 lc 'royalblue', {{.DGR5y}} title 'DGR5y' lw 4 lc 'red';
 
 unset multiplot;

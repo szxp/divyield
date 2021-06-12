@@ -109,20 +109,20 @@ func (c *IEXCloud) httpGet(
 	if err != nil {
 		return nil, err
 	}
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return nil, err
-    }
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
-        defer resp.Body.Close()
-        body, err := io.ReadAll(resp.Body)
-	    if err != nil {
-		    return nil, err
-	    }
-        return nil, fmt.Errorf("http error: %d: %q", resp.StatusCode, string(body))
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("http error: %d: %q", resp.StatusCode, string(body))
 	}
-    return resp, nil
+	return resp, nil
 }
 
 func (c *IEXCloud) NewPriceService() divyield.PriceService {
@@ -149,7 +149,7 @@ func (s *priceService) Fetch(
 	fmt.Printf("%v: %v %v\n", in.Symbol, resp.StatusCode, u)
 
 	if resp.StatusCode < 200 || 299 < resp.StatusCode {
-        return nil, fmt.Errorf("http error: %d", resp.StatusCode)
+		return nil, fmt.Errorf("http error: %d", resp.StatusCode)
 	}
 
 	prices, err := s.parsePrices(resp.Body)

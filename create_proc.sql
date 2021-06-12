@@ -52,6 +52,8 @@ begin
         factor_adj  numeric not null default 1,
         close_adj   numeric not null default 0,
         created     timestamp with time zone,     
+        factor_adj_splits  numeric not null default 1,
+        close_adj_splits   numeric not null default 0,
         PRIMARY KEY(date)	
     )';
 
@@ -161,6 +163,11 @@ begin
 
         execute 'update ' 
             || quote_ident(schema_name) || '.price set ' || 
+            ' factor_adj_splits = factor_adj_splits * ' || factor ||  
+            ' where date < ''' || r.ex_date || '''';
+
+        execute 'update ' 
+            || quote_ident(schema_name) || '.price set ' || 
             ' factor_adj = factor_adj * ' || factor ||  
             ' where date < ''' || r.ex_date || '''';
     end loop;
@@ -189,8 +196,10 @@ begin
 
     execute 'update ' || quote_ident(schema_name) 
         || '.price set ' || 
-        ' factor_adj = round(factor_adj, 4) ' 
-        ', close_adj = round(close * factor_adj, 4) ';
+        ' factor_adj = round(factor_adj, 4), ' 
+        ' close_adj = round(close * factor_adj, 4), '
+        ' factor_adj_splits = round(factor_adj_splits, 4), ' 
+        ' close_adj_splits = round(close * factor_adj_splits, 4) ';
 
 end $$;
 

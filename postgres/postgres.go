@@ -113,7 +113,7 @@ func (db *DB) Prices(
 			"date",
 			"symbol",
 			"close",
-			"close_adj",
+			"close_adj_splits",
 			"high",
 			"low",
 			"open",
@@ -147,7 +147,7 @@ func (db *DB) Prices(
 			var date time.Time
 			var symbol string
 			var close float64
-			var closeAdj float64
+			var closeAdjSplits float64
 			var high float64
 			var low float64
 			var open float64
@@ -158,7 +158,7 @@ func (db *DB) Prices(
 				&date,
 				&symbol,
 				&close,
-				&closeAdj,
+				&closeAdjSplits,
 				&high,
 				&low,
 				&open,
@@ -169,15 +169,15 @@ func (db *DB) Prices(
 				return err
 			}
 			np := &divyield.Price{
-				Date:     date,
-				Symbol:   symbol,
-				Close:    close,
-				CloseAdj: closeAdj,
-				High:     high,
-				Low:      low,
-				Open:     open,
-				Volume:   volume,
-				Currency: currency,
+				Date:           date,
+				Symbol:         symbol,
+				Close:          close,
+				CloseAdjSplits: closeAdjSplits,
+				High:           high,
+				Low:            low,
+				Open:           open,
+				Volume:         volume,
+				Currency:       currency,
 			}
 			prices = append(prices, np)
 		}
@@ -508,7 +508,8 @@ func (db *DB) DividendYields(
 
 		q := sq.Select(
 			"date",
-			"close_adj",
+			"close",
+			"close_adj_splits",
 			`coalesce(
                 (select amount_adj from `+
 				schema+`.dividend_view 
@@ -569,14 +570,19 @@ func (db *DB) DividendYields(
 
 		for rows.Next() {
 			var date time.Time
-			var closeAdj float64
+			var close float64
+			var closeAdjSplits float64
 			var divAdj float64
 			var frequency int
 			var divTrailTTM float64
 
 			err = rows.Scan(
-				&date, &closeAdj, &divAdj,
-				&frequency, &divTrailTTM,
+				&date,
+				&close,
+				&closeAdjSplits,
+				&divAdj,
+				&frequency,
+				&divTrailTTM,
 			)
 			if err != nil {
 
@@ -585,7 +591,8 @@ func (db *DB) DividendYields(
 			}
 			v := &divyield.DividendYield{
 				Date:                   date,
-				CloseAdj:               closeAdj,
+				Close:                  close,
+				CloseAdjSplits:         closeAdjSplits,
 				DividendAdj:            divAdj,
 				Frequency:              frequency,
 				DividendAdjTrailingTTM: divTrailTTM,

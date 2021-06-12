@@ -128,15 +128,15 @@ type PriceFetchOutput struct {
 	Prices []*Price
 }
 type Price struct {
-	Date     time.Time
-	Symbol   string
-	Close    float64
-	CloseAdj float64
-	High     float64
-	Low      float64
-	Open     float64
-	Volume   float64
-	Currency string
+	Date           time.Time
+	Symbol         string
+	Close          float64
+	CloseAdjSplits float64
+	High           float64
+	Low            float64
+	Open           float64
+	Volume         float64
+	Currency       string
 }
 
 func (p *Price) String() string {
@@ -207,7 +207,8 @@ type DividendFilter struct {
 
 type DividendYield struct {
 	Date                   time.Time
-	CloseAdj               float64
+	Close                  float64
+	CloseAdjSplits         float64
 	DividendAdj            float64
 	Frequency              int
 	DividendAdjTrailingTTM float64
@@ -218,18 +219,18 @@ func (y *DividendYield) DividendForwardTTM() float64 {
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
-	if y.CloseAdj == 0 {
+	if y.Close == 0 {
 		return 0
 	}
 	return ((y.DividendAdj * float64(y.Frequency)) /
-		y.CloseAdj) * 100
+		y.Close) * 100
 }
 
 func (y *DividendYield) TrailingTTM() float64 {
-	if y.CloseAdj == 0 {
+	if y.Close == 0 {
 		return 0
 	}
-	return (y.DividendAdjTrailingTTM / y.CloseAdj) * 100
+	return (y.DividendAdjTrailingTTM / y.Close) * 100
 }
 
 type DividendYieldFilter struct {
