@@ -219,18 +219,18 @@ func (y *DividendYield) DividendForwardTTM() float64 {
 }
 
 func (y *DividendYield) ForwardTTM() float64 {
-	if y.Close == 0 {
+	if y.CloseAdjSplits == 0 {
 		return 0
 	}
 	return ((y.DividendAdj * float64(y.Frequency)) /
-		y.Close) * 100
+		y.CloseAdjSplits) * 100
 }
 
 func (y *DividendYield) TrailingTTM() float64 {
-	if y.Close == 0 {
+	if y.CloseAdjSplits == 0 {
 		return 0
 	}
-	return (y.DividendAdjTrailingTTM / y.Close) * 100
+	return (y.DividendAdjTrailingTTM / y.CloseAdjSplits) * 100
 }
 
 type DividendYieldFilter struct {
