@@ -107,7 +107,7 @@ func (c *Command) stats(ctx context.Context) error {
 		ggrMax:              c.opts.ggrMax,
 		noCutDividend:       c.opts.noCutDividend,
 		noDecliningDGR:      c.opts.noDecliningDGR,
-		dgr5yMin:            c.opts.dgr5yMin,
+		dgrAvgMin:            c.opts.dgrAvgMin,
 		dgrYearly:           c.opts.dgrYearly,
 	}
 
@@ -317,11 +317,11 @@ func (c *Command) writeStatsFooter(
 		fmt.Fprintln(w, b.String())
 	}
 
-	if sg.dgr5yMin > 0 {
+	if sg.dgrAvgMin > 0 {
 		b.Reset()
 		b.WriteString("DGRAvg min:")
 		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", sg.dgr5yMin))
+		b.WriteString(fmt.Sprintf("%.2f%%", sg.dgrAvgMin))
 		b.WriteByte('\t')
 		fmt.Fprintln(w, b.String())
 	}
@@ -1016,7 +1016,7 @@ type statsGenerator struct {
 	ggrMax              float64
 	noCutDividend       bool
 	noDecliningDGR      bool
-	dgr5yMin            float64
+	dgrAvgMin            float64
 	dgrYearly           bool
 }
 
@@ -1277,11 +1277,11 @@ func (g *statsGenerator) filterDivYieldTotalMin(
 func (g *statsGenerator) filterDGRAvgMin(
 	row *divyield.StatsRow,
 ) bool {
-	if g.dgr5yMin <= 0 {
+	if g.dgrAvgMin <= 0 {
 		return true
 	}
 
-	return g.dgr5yMin <= row.DGRs[4]
+	return g.dgrAvgMin <= row.DGRs[4]
 }
 
 func (g *statsGenerator) filterGGRMinMax(
@@ -1974,7 +1974,7 @@ type options struct {
 	ggrMax              float64
 	noCutDividend       bool
 	noDecliningDGR      bool
-	dgr5yMin            float64
+	dgrAvgMin            float64
 	dgrYearly           bool
 	chart               bool
 	force               bool
@@ -2158,7 +2158,7 @@ func NoDecliningDGR(v bool) Option {
 
 func DGRAvgMin(v float64) Option {
 	return func(o options) options {
-		o.dgr5yMin = v
+		o.dgrAvgMin = v
 		return o
 	}
 }
