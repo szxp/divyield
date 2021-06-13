@@ -18,6 +18,7 @@ import (
 	"text/tabwriter"
 	"text/template"
 	"time"
+    "strconv"
 
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -129,7 +130,7 @@ func (c *Command) stats(ctx context.Context) error {
 	}
 
 	c.writeStats(stats)
-	c.writeStatsFooter(sg)
+	c.writeStatsFooter(sg, stats)
 	return nil
 }
 
@@ -161,8 +162,8 @@ func (c *Command) writeStats(s *divyield.Stats) {
 	b.WriteByte('\t')
 	b.WriteString("DGR-4y")
 	b.WriteByte('\t')
-	b.WriteString("DGR-5y")
-	b.WriteByte('\t')
+	//b.WriteString("DGR-5y")
+	//b.WriteByte('\t')
 
 	fmt.Fprintln(w, b.String())
 
@@ -199,8 +200,8 @@ func (c *Command) writeStats(s *divyield.Stats) {
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[3]))
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[4]))
-		b.WriteByte('\t')
-		b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[5]))
+		//b.WriteByte('\t')
+		//b.WriteString(fmt.Sprintf("%.2f%%", row.DGRs[5]))
 		b.WriteByte('\t')
 
 		fmt.Fprintln(w, b.String())
@@ -212,12 +213,20 @@ func (c *Command) writeStats(s *divyield.Stats) {
 
 func (c *Command) writeStatsFooter(
 	sg *statsGenerator,
+    stats *divyield.Stats,
 ) {
 	out := &bytes.Buffer{}
 	w := tabwriter.NewWriter(
 		out, 0, 0, 2, ' ', 0)
 
 	b := &bytes.Buffer{}
+
+    b.Reset()
+	b.WriteString("Number of companies:")
+	b.WriteByte('\t')
+	b.WriteString(strconv.Itoa(len(stats.Rows)))
+	b.WriteByte('\t')
+	fmt.Fprintln(w, b.String())
 
 	b.Reset()
 	b.WriteString("Start date:")
@@ -251,12 +260,6 @@ func (c *Command) writeStatsFooter(
 	b.WriteString(sp500DivYld)
 	b.WriteByte('\t')
 	fmt.Fprintln(w, b.String())
-
-	/*
-		   	divYieldFwdSP500Min float64
-			divYieldFwdSP500Max float64
-			divYieldTotalMin    float64
-	*/
 
 	if sg.divYieldTotalMin > 0 {
 		b.Reset()
@@ -316,7 +319,7 @@ func (c *Command) writeStatsFooter(
 
 	if sg.dgr5yMin > 0 {
 		b.Reset()
-		b.WriteString("DGR5y min:")
+		b.WriteString("DGRAvg min:")
 		b.WriteByte('\t')
 		b.WriteString(fmt.Sprintf("%.2f%%", sg.dgr5yMin))
 		b.WriteByte('\t')
@@ -1092,7 +1095,7 @@ LOOP:
 		stats,
 		g.filterDivYieldFwdSP500MinMax,
 		g.filterDivYieldTotalMin,
-		g.filterDGR5yMin,
+		g.filterDGRAvgMin,
 		g.filterGGRMinMax,
 		g.filterNoCutDividend,
 		g.filterNoDecliningDGR,
@@ -1173,13 +1176,14 @@ func (g *statsGenerator) generateStatsRow(
 		Dividends:            dividends,
 		DividendChangeMR:     divChangeMR,
 		DividendChangeMRDate: divChangeMRDate,
-		DGRs: map[int]float64{
-			1: g.dgr(dividends, 1),
-			2: g.dgr(dividends, 2),
-			3: g.dgr(dividends, 3),
-			4: g.dgr(dividends, 4),
-			5: g.dgr(dividends, 5),
-		},
+        DGRs: g.dgrs(dividends),
+//        DGRs: map[int]float64{
+//			1: g.dgr(dividends, 1),
+//			2: g.dgr(dividends, 2),
+//			3: g.dgr(dividends, 3),
+//			4: g.dgr(dividends, 4),
+//			5: g.dgr(dividends, 5),
+//		},
 	}
 
 	return row, nil
@@ -1267,17 +1271,17 @@ func (g *statsGenerator) filterDivYieldTotalMin(
 		return true
 	}
 
-	return min <= row.DivYieldFwd+row.DGRs[5]
+	return min <= row.DivYieldFwd+row.DGRs[4]
 }
 
-func (g *statsGenerator) filterDGR5yMin(
+func (g *statsGenerator) filterDGRAvgMin(
 	row *divyield.StatsRow,
 ) bool {
 	if g.dgr5yMin <= 0 {
 		return true
 	}
 
-	return g.dgr5yMin <= row.DGRs[5]
+	return g.dgr5yMin <= row.DGRs[4]
 }
 
 func (g *statsGenerator) filterGGRMinMax(
@@ -1311,7 +1315,7 @@ func (g *statsGenerator) filterNoDecliningDGR(
 	}
 
 	dgrs := []float64{
-		row.DGRs[5],
+		//row.DGRs[5],
 		row.DGRs[4],
 		row.DGRs[3],
 		row.DGRs[2],
@@ -1374,6 +1378,40 @@ func (g *statsGenerator) writef(
 	if g.writer != nil {
 		fmt.Fprintf(g.writer, format, v...)
 	}
+}
+
+func (g *statsGenerator) dgrs(
+	dividends []*divyield.DividendChange,
+) map[int]float64 {
+	if len(dividends) == 0 {
+		return nil
+	}
+
+    amounts := make(map[int]float64)
+	for _, v := range dividends {
+        y := v.ExDate.Year()
+	    amounts[y] += v.AmountAdj
+	}
+    //fmt.Println(amounts)
+
+	y := time.Now().UTC().Year()
+	ye := y-1
+    changes := make(map[int]float64)
+    for _, i := range []int{1,2,3,4} {
+        c := math.Pow(
+            amounts[ye]/amounts[ye-i],
+            float64(1)/float64(i),
+        ) - 1
+        changes[i] = c * 100
+    }
+    //fmt.Println(changes)
+
+    return map[int]float64{
+        1: changes[1],
+        2: changes[2],
+        3: changes[3],
+        4: changes[4],
+    }
 }
 
 func (g *statsGenerator) dgr(
@@ -1569,7 +1607,7 @@ func (g *chartGenerator) Generate(
 				maxDGR+((maxDGR-minDGR)*0.1),
 				0.01,
 			),
-			DGR5y: row.DGRs[5],
+			DGRAvg: row.DGRs[4],
 		}
 		chartTmpl, err := template.
 			New("plot").
@@ -1841,7 +1879,7 @@ type chartParams struct {
 
 	DGRYrMin float64
 	DGRYrMax float64
-	DGR5y    float64
+	DGRAvg    float64
 }
 
 const chartTmpl = `
@@ -1897,7 +1935,7 @@ set origin 0.0,0.0;
 set title '{{.TitleDGR}}';
 set yrange [{{.DGRYrMin}}:{{.DGRYrMax}}];
 set y2range [{{.DGRYrMin}}:{{.DGRYrMax}}];
-plot dividendsfile using 1:($3 == 0 ? NaN : $3) with boxes lw 4 lc 'royalblue', 0 title '' lw 4 lc 'royalblue', {{.DGR5y}} title 'DGR5y' lw 4 lc 'red';
+plot dividendsfile using 1:($3 == 0 ? NaN : $3) with boxes lw 4 lc 'royalblue', 0 title '' lw 4 lc 'royalblue', {{.DGRAvg}} title 'DGRAvg' lw 4 lc 'red';
 
 unset multiplot;
 `
@@ -2118,7 +2156,7 @@ func NoDecliningDGR(v bool) Option {
 	}
 }
 
-func DGR5yMin(v float64) Option {
+func DGRAvgMin(v float64) Option {
 	return func(o options) options {
 		o.dgr5yMin = v
 		return o

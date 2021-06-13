@@ -134,10 +134,10 @@ func main() {
 		0.0,
 		"maximum Gordon growth rate as a percentage",
 	)
-	dgr5yMinFlag := optsFlagSet.Float64(
-		"dgr5y-min",
+	dgrAvgMinFlag := optsFlagSet.Float64(
+		"dgr-avg-min",
 		0.0,
-		"DGR5y above inflation",
+		"DGR avverage minimum",
 	)
 	dgrYearlyFlag := optsFlagSet.Bool(
 		"dgr-yearly",
@@ -255,7 +255,7 @@ func main() {
 		cli.GordonGrowthRateMax(*ggrMax),
 		cli.NoCutDividend(*noCutDividend),
 		cli.NoDecliningDGR(*noDecliningDGR),
-		cli.DGR5yMin(*dgr5yMinFlag),
+		cli.DGRAvgMin(*dgrAvgMinFlag),
 		cli.DGRYearly(*dgrYearlyFlag),
 		cli.Chart(*chartFlag),
 		cli.Force(*forceFlag),

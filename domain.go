@@ -194,7 +194,7 @@ func (d *Dividend) String() string {
 	)
 }
 
-func (d *Dividend) AmountNorm() float64 {
+func (d *Dividend) AmountAdjYear() float64 {
 	return d.AmountAdj * float64(d.Frequency)
 }
 

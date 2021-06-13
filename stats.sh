@@ -10,7 +10,8 @@ go build cmd/divyield/main.go && \
     stats \
     -start-date=-5y \
     -no-cut-dividend=true \
-    -dgr5y-min=4.0 \
+    -no-declining-dgr=true \
+    -dgr-avg-min=4.0 \
     -dgr-yearly=true \
     -dividend-yield-forward-sp500-min=2.0 \
     -dividend-yield-forward-sp500-max=5.0 \
@@ -20,5 +21,4 @@ go build cmd/divyield/main.go && \
     -gordon-growth-rate-max=5.0 \
     $@
     
-    #-no-declining-dgr=true \
 
