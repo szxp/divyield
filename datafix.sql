@@ -53,3 +53,10 @@ call update_dividend_adj('s_otex');
 call update_price_adj('s_otex');
 
 
+
+delete from s_istr.dividend 
+    where ex_date = '2021-03-26' 
+    and amount = 0.18;
+
+call update_dividend_adj('s_istr');
+call update_price_adj('s_istr');

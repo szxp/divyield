@@ -1,6 +1,7 @@
 package divyield
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -433,6 +434,11 @@ type FinancialsService interface {
 		ctx context.Context,
 		in *FinancialsCashFlowInput,
 	) (*FinancialsCashFlowOutput, error)
+
+	BalanceSheets(
+		ctx context.Context,
+		in *FinancialsBalanceSheetsInput,
+	) (*FinancialsBalanceSheetsOutput, error)
 }
 
 type FinancialsCashFlowInput struct {
@@ -454,4 +460,34 @@ func (f *FinancialsCashFlow) DPSPerFCF() float64 {
 		return 0
 	}
 	return (math.Abs(f.DividendPaid) / f.FreeCashFlow) * 100
+}
+
+type FinancialsBalanceSheetsInput struct {
+	Symbol       string
+	PeriodLength string
+}
+
+type FinancialsBalanceSheetsOutput struct {
+	Symbol        string
+	BalanceSheets []*FinancialsBalanceSheet
+}
+
+type FinancialsBalanceSheet struct {
+	Symbol  string
+	Period  time.Time
+	Entries []*FinancialsBalanceSheetEntry
+}
+
+type FinancialsBalanceSheetEntry struct {
+	Key   string
+	Value float64
+}
+
+func (bs *FinancialsBalanceSheet) String() string {
+	b := &bytes.Buffer{}
+	fmt.Fprintf(b, "%v\n", bs.Period.Format(DateFormat))
+	for _, e := range bs.Entries {
+		fmt.Fprintf(b, "%v: %f\n", e.Key, e.Value)
+	}
+	return b.String()
 }

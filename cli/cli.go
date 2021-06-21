@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"math"
@@ -13,12 +14,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"text/tabwriter"
 	"text/template"
 	"time"
-    "strconv"
 
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -54,8 +55,16 @@ func (c *Command) Execute(ctx context.Context) error {
 		return c.pull(ctx)
 	case "stats":
 		return c.stats(ctx)
-	case "cashflow":
-		return c.cashflow(ctx)
+	case "cash-flow":
+		fallthrough
+	case "cf":
+		return c.cashFlow(ctx)
+	case "balance-sheet":
+		fallthrough
+	case "bs":
+		return c.balanceSheet(ctx)
+	case "bs-test":
+		return c.balanceSheetTest(ctx)
 	case "profile":
 		return c.profile(ctx)
 	case "symbols":
@@ -107,7 +116,7 @@ func (c *Command) stats(ctx context.Context) error {
 		ggrMax:              c.opts.ggrMax,
 		noCutDividend:       c.opts.noCutDividend,
 		noDecliningDGR:      c.opts.noDecliningDGR,
-		dgrAvgMin:            c.opts.dgrAvgMin,
+		dgrAvgMin:           c.opts.dgrAvgMin,
 		dgrYearly:           c.opts.dgrYearly,
 	}
 
@@ -213,7 +222,7 @@ func (c *Command) writeStats(s *divyield.Stats) {
 
 func (c *Command) writeStatsFooter(
 	sg *statsGenerator,
-    stats *divyield.Stats,
+	stats *divyield.Stats,
 ) {
 	out := &bytes.Buffer{}
 	w := tabwriter.NewWriter(
@@ -221,7 +230,7 @@ func (c *Command) writeStatsFooter(
 
 	b := &bytes.Buffer{}
 
-    b.Reset()
+	b.Reset()
 	b.WriteString("Number of companies:")
 	b.WriteByte('\t')
 	b.WriteString(strconv.Itoa(len(stats.Rows)))
@@ -349,7 +358,7 @@ func (c *Command) writeStatsFooter(
 	c.writef("%s", out.String())
 }
 
-func (c *Command) cashflow(ctx context.Context) error {
+func (c *Command) cashFlow(ctx context.Context) error {
 	symbols, err := c.resolveSymbols(ctx, c.args)
 	if err != nil {
 		return err
@@ -410,6 +419,228 @@ func (c *Command) writeCashFlow(
 
 	w.Flush()
 	c.writef("%s", out.String())
+}
+
+func (c *Command) balanceSheet(ctx context.Context) error {
+	symbols, err := c.resolveSymbols(ctx, c.args)
+	if err != nil {
+		return err
+	}
+	if len(symbols) == 0 {
+		return fmt.Errorf("Symbol not found")
+	}
+	symbol := symbols[0]
+	out, err := c.opts.financialsService.BalanceSheets(
+		ctx,
+		&divyield.FinancialsBalanceSheetsInput{
+			Symbol: symbol,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	if 0 < len(out.BalanceSheets) {
+		fmt.Print(out.Symbol)
+		for _, e := range out.BalanceSheets[0].Entries {
+			fmt.Printf(",%v", e.Key)
+		}
+		fmt.Println()
+
+		for _, bs := range out.BalanceSheets {
+			fmt.Print(bs.Period.Format(divyield.DateFormat))
+			for _, e := range bs.Entries {
+				fmt.Printf(",%.f", e.Value)
+			}
+			fmt.Println()
+		}
+	}
+	return nil
+}
+
+func (c *Command) balanceSheetTest(ctx context.Context) error {
+	dir := "work/bs/us"
+
+	symbols, err := symbols(dir, 400)
+	if err != nil {
+		return err
+	}
+
+	tests := make([]*bsTest, 0)
+	for symbol := range symbols {
+		//        fmt.Println(symbol)
+		pricesFile := filepath.Join(dir, symbol+".prices.csv")
+		pricesCSV, err := readAllCSV(pricesFile)
+		if err != nil {
+			return err
+		}
+
+		closeCol := columnCSV(pricesCSV[0], "Close")
+		close, err := csvValue(
+			pricesCSV,
+			len(pricesCSV)-1,
+			closeCol,
+		)
+		if err != nil {
+			return err
+		}
+
+		bsFile := filepath.Join(dir, symbol+".csv")
+		bsCSV, err := readAllCSV(bsFile)
+		if err != nil {
+			return err
+		}
+
+		curAss, err := bsValue(bsCSV, "Current Assets")
+		if err != nil {
+			return err
+		}
+
+		curLia, err := bsValue(bsCSV, "Current Liabilities")
+		if err != nil {
+			return err
+		}
+
+		sharesCol := columnCSV(bsCSV[0], "Share Issued")
+		var shares float64
+		if 0 < sharesCol {
+			shares, err = csvValue(bsCSV, 1, sharesCol)
+			if err != nil {
+				return err
+			}
+		}
+
+		var marCap float64
+		var nwc float64
+		var nwcRatio float64
+		if 0 < shares &&
+			0 < close &&
+			0 < curAss &&
+			0 < curLia {
+
+			marCap = shares * close
+			nwc = curAss - curLia
+			nwcRatio = (marCap / nwc) * 100
+
+			test := &bsTest{
+				Symbol:   symbol,
+				MarCap:   marCap,
+				Nwc:      nwc,
+				NwcRatio: nwcRatio,
+			}
+
+			tests = append(tests, test)
+
+		}
+	}
+
+	sort.SliceStable(
+		tests,
+		func(i, j int) bool {
+			return tests[i].NwcRatio < tests[j].NwcRatio
+		},
+	)
+
+	p := message.NewPrinter(language.English)
+	for i, v := range tests {
+		if 0 < v.NwcRatio && v.NwcRatio < 100 {
+			fmt.Printf(
+				"%v\t%v\t%v\t%v\t%v",
+				i,
+				v.Symbol,
+				p.Sprintf("%.2f%%", v.NwcRatio),
+				p.Sprintf("%.f", v.MarCap),
+				p.Sprintf("%.f", v.Nwc),
+			)
+			fmt.Println()
+		}
+	}
+	return nil
+}
+
+type bsTest struct {
+	Symbol   string
+	MarCap   float64
+	Nwc      float64
+	NwcRatio float64
+}
+
+func bsValue(csv [][]string, s string) (float64, error) {
+	col := columnCSV(csv[0], s)
+	var v float64
+	var err error
+	if 0 < col {
+		v, err = csvValue(csv, 1, col)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return v, nil
+
+}
+
+func readAllCSV(p string) ([][]string, error) {
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func columnCSV(row []string, s string) int {
+	for i, v := range row {
+		if v == s {
+			return i
+		}
+	}
+	return -1
+}
+
+func csvValue(csv [][]string, row, col int) (float64, error) {
+	v := csv[row][col]
+
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, err
+	}
+	return f, nil
+}
+
+func symbols(
+	dir string,
+	sizeLimit int64,
+) (map[string]struct{}, error) {
+	symbols := make(map[string]struct{})
+
+	err := filepath.Walk(
+		dir,
+		func(path string, info os.FileInfo, err error) error {
+			if !strings.HasSuffix(path, ".prices.csv") {
+				return nil
+			}
+			if info.Size() < sizeLimit {
+				return nil
+			}
+
+			symbol := strings.Split(
+				filepath.Base(path),
+				".",
+			)[0]
+			symbols[symbol] = struct{}{}
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return symbols, nil
 }
 
 func (c *Command) pull(ctx context.Context) error {
@@ -1016,7 +1247,7 @@ type statsGenerator struct {
 	ggrMax              float64
 	noCutDividend       bool
 	noDecliningDGR      bool
-	dgrAvgMin            float64
+	dgrAvgMin           float64
 	dgrYearly           bool
 }
 
@@ -1176,14 +1407,14 @@ func (g *statsGenerator) generateStatsRow(
 		Dividends:            dividends,
 		DividendChangeMR:     divChangeMR,
 		DividendChangeMRDate: divChangeMRDate,
-        DGRs: g.dgrs(dividends),
-//        DGRs: map[int]float64{
-//			1: g.dgr(dividends, 1),
-//			2: g.dgr(dividends, 2),
-//			3: g.dgr(dividends, 3),
-//			4: g.dgr(dividends, 4),
-//			5: g.dgr(dividends, 5),
-//		},
+		DGRs:                 g.dgrs(dividends),
+		//        DGRs: map[int]float64{
+		//			1: g.dgr(dividends, 1),
+		//			2: g.dgr(dividends, 2),
+		//			3: g.dgr(dividends, 3),
+		//			4: g.dgr(dividends, 4),
+		//			5: g.dgr(dividends, 5),
+		//		},
 	}
 
 	return row, nil
@@ -1387,31 +1618,31 @@ func (g *statsGenerator) dgrs(
 		return nil
 	}
 
-    amounts := make(map[int]float64)
+	amounts := make(map[int]float64)
 	for _, v := range dividends {
-        y := v.ExDate.Year()
-	    amounts[y] += v.AmountAdj
+		y := v.ExDate.Year()
+		amounts[y] += v.AmountAdj
 	}
-    //fmt.Println(amounts)
+	//fmt.Println(amounts)
 
 	y := time.Now().UTC().Year()
-	ye := y-1
-    changes := make(map[int]float64)
-    for _, i := range []int{1,2,3,4} {
-        c := math.Pow(
-            amounts[ye]/amounts[ye-i],
-            float64(1)/float64(i),
-        ) - 1
-        changes[i] = c * 100
-    }
-    //fmt.Println(changes)
+	ye := y - 1
+	changes := make(map[int]float64)
+	for _, i := range []int{1, 2, 3, 4} {
+		c := math.Pow(
+			amounts[ye]/amounts[ye-i],
+			float64(1)/float64(i),
+		) - 1
+		changes[i] = c * 100
+	}
+	//fmt.Println(changes)
 
-    return map[int]float64{
-        1: changes[1],
-        2: changes[2],
-        3: changes[3],
-        4: changes[4],
-    }
+	return map[int]float64{
+		1: changes[1],
+		2: changes[2],
+		3: changes[3],
+		4: changes[4],
+	}
 }
 
 func (g *statsGenerator) dgr(
@@ -1879,7 +2110,7 @@ type chartParams struct {
 
 	DGRYrMin float64
 	DGRYrMax float64
-	DGRAvg    float64
+	DGRAvg   float64
 }
 
 const chartTmpl = `
@@ -1974,7 +2205,7 @@ type options struct {
 	ggrMax              float64
 	noCutDividend       bool
 	noDecliningDGR      bool
-	dgrAvgMin            float64
+	dgrAvgMin           float64
 	dgrYearly           bool
 	chart               bool
 	force               bool
