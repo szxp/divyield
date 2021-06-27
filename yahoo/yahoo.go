@@ -6,8 +6,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+    "fmt"
+    "os"
+    "io/ioutil"
+    "path/filepath"
 
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/cdproto/browser"
+//	"github.com/chromedp/cdproto/network"
 	"szakszon.com/divyield"
 )
 
@@ -165,33 +171,17 @@ func (s *financialsService) BalanceSheets(
 	ctx context.Context,
 	in *divyield.FinancialsBalanceSheetsInput,
 ) (*divyield.FinancialsBalanceSheetsOutput, error) {
-	rows, symbolYahoo, err := s.balanceSheets(
-		in.Symbol,
-		in.PeriodLength,
-	)
+	err := s.downloadStatements(in.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	sheets := make([]*divyield.FinancialsBalanceSheet, 0)
-	for i := 1; i <= len(rows[0])-1; i++ {
-		sheet, err := s.parseBalanceSheet(rows, i)
-		if err != nil {
-			return nil, err
-		}
-		sheets = append(sheets, sheet)
-	}
-
-	return &divyield.FinancialsBalanceSheetsOutput{
-		Symbol:        symbolYahoo,
-		BalanceSheets: sheets,
-	}, nil
+	return &divyield.FinancialsBalanceSheetsOutput{}, nil
 }
 
-func (s *financialsService) balanceSheets(
-	symbol string,
-	periodLength string,
-) ([][]string, string, error) {
+func (s *financialsService) downloadStatements(
+    u string,
+) (error) {
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
@@ -208,111 +198,148 @@ func (s *financialsService) balanceSheets(
 	)
 	defer cancel()
 
-	byISIN := 12 <= len(symbol)
 
-	var u string
-	if byISIN {
-		u = "https://finance.yahoo.com/quote/" +
-			"?yfin-usr-qry=" + symbol
-	} else {
-		u = "https://finance.yahoo.com/quote/" +
-			symbol + "/balance-sheet"
-	}
 
-	var res [][]string
-	var symbolYahoo string
+    parts := strings.Split(u, "/")
+    symbol := strings.ToUpper(parts[len(parts) - 2])
+
+    baseDir := filepath.Join(
+        "c:\\Users\\Admin\\Go\\src\\divyield\\statements",
+        symbol,
+    )
+    fmt.Println("Dir: ", baseDir)
+    isDir := filepath.Join(baseDir, "is")
+    bsDir := filepath.Join(baseDir, "bs")
+    cfDir := filepath.Join(baseDir, "cf")
+
+    for _, d := range []string{isDir, bsDir, cfDir} {
+        err := os.MkdirAll(d, 0777)
+        if err != nil {
+            return err
+        }
+    }
+
+    /*
+	chromedp.ListenTarget(ctx, func(v interface{}) {
+		switch ev := v.(type) {
+		case *network.EventRequestWillBeSent:
+            export := strings.Contains(
+                ev.Request.URL, 
+                "operation=export",
+            )
+
+            get := ev.Request.Method == "GET"
+            
+            if get && export {
+			    fmt.Printf(
+                    "EventRequestWillBeSent: %v: %v\n",
+                    ev.RequestID, 
+                    ev.Request.URL,
+                )
+            }
+
+//		case *network.EventLoadingFinished:
+//                fmt.Printf(
+//                    "EventLoadingFinished: %v\n",
+//                    ev.RequestID,
+//                )
+            }
+		}
+	})
+    */
 
 	actions := make([]chromedp.Action, 0)
+
 	actions = append(
 		actions,
 		chromedp.Navigate(u),
-		runWithTimeOut(&ctx, 10, chromedp.Tasks{
+		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
-				"form.consent-form button",
-				chromedp.ByQuery,
-			),
-			chromedp.Click(
-				"form.consent-form button",
-				chromedp.ByQuery,
+				"//span[contains(text(),'Normalized Diluted EPS')]",
+				chromedp.BySearch,
 			),
 		}),
-	)
 
-	if byISIN {
-		actions = append(
-			actions,
-			runWithTimeOut(&ctx, 10, chromedp.Tasks{
-				chromedp.WaitVisible(
-					"//a/span[contains(text(),'Financials')]",
-					chromedp.BySearch,
-				),
-				chromedp.Click(
-					"//a/span[contains(text(),'Financials')]",
-					chromedp.BySearch,
-				),
-			}),
-			runWithTimeOut(&ctx, 10, chromedp.Tasks{
-				chromedp.WaitVisible(
-					"//div/span[contains(text(),'Balance Sheet')]",
-					chromedp.BySearch,
-				),
-				chromedp.Click(
-					"//div/span[contains(text(),'Balance Sheet')]",
-					chromedp.BySearch,
-				),
-				chromedp.WaitVisible(
-					"//span[contains(text(),'Total Assets')]",
-					chromedp.BySearch,
-				),
-			}),
-		)
-	}
 
-	actions = append(
-		actions,
-		runWithTimeOut(&ctx, 10, chromedp.Tasks{
+		chromedp.Evaluate(libJS, &[]byte{}),
+		chromedp.Evaluate(clickIncStatLink, &[]byte{}),
+		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
-				"button.expandPf",
-				chromedp.ByQuery,
+				"//div[contains(text(),'Total Revenue')]",
+				chromedp.BySearch,
 			),
 		}),
-		chromedp.Evaluate(clickExpandBtnJS, &[]byte{}),
-		chromedp.WaitVisible(
-			"//span[contains(text(),'Collapse All')]",
-			chromedp.BySearch,
-		),
-	)
+        browser.SetDownloadBehavior(
+            browser.SetDownloadBehaviorBehaviorAllowAndName).
+			WithDownloadPath(isDir),
+		chromedp.Evaluate(clickExport, &[]byte{}),
+		chromedp.Sleep(2 * time.Second),
 
-	//if periodLength == "Quarterly" {
-	actions = append(
-		actions,
-		chromedp.WaitVisible(
-			"//button/div/span[contains(text(),'Quarterly')]",
-			chromedp.BySearch,
-		),
-		chromedp.Click(
-			"//button/div/span[contains(text(),'Quarterly')]",
-			chromedp.BySearch,
-		),
-		chromedp.WaitVisible(
-			"//button/div/span[contains(text(),'Annual')]",
-			chromedp.BySearch,
-		),
-	)
-	//}
+        chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
+		runWithTimeOut(&ctx, 5, chromedp.Tasks{
+			chromedp.WaitVisible(
+				"//div[contains(text(),'Total Assets')]",
+				chromedp.BySearch,
+			),
+		}),
+        browser.SetDownloadBehavior(
+            browser.SetDownloadBehaviorBehaviorAllowAndName).
+			WithDownloadPath(bsDir),
+		chromedp.Evaluate(clickExport, &[]byte{}),
+		chromedp.Sleep(2 * time.Second),
 
-	actions = append(
-		actions,
-		chromedp.Evaluate(extractBalanceSheetsJS, &res),
-		chromedp.Evaluate(extractSymbolJS, &symbolYahoo),
+        chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
+		runWithTimeOut(&ctx, 5, chromedp.Tasks{
+			chromedp.WaitVisible(
+				"//div[contains(text(),'Cash Flow from Operating Activities')]",
+				chromedp.BySearch,
+			),
+		}),
+        browser.SetDownloadBehavior(
+            browser.SetDownloadBehaviorBehaviorAllowAndName).
+			WithDownloadPath(cfDir),
+		chromedp.Evaluate(clickExport, &[]byte{}),
+		chromedp.Sleep(2 * time.Second),
 	)
 
 	err := chromedp.Run(ctx, actions...)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 
-	return res, symbolYahoo, nil
+    i := 0
+    for {
+        for _, d := range []string{isDir, bsDir, cfDir} {
+            files, err := ioutil.ReadDir(d)
+            if err != nil {
+                return err
+            }
+
+            for _, f := range files {
+                if filepath.Ext(f.Name()) == "" {
+                    oldpath := filepath.Join(d, f.Name())
+                    newpath := filepath.Join(
+                        filepath.Dir(oldpath),
+                        "table.xls",
+                    )
+                    err = os.Rename(oldpath, newpath)
+                    if err != nil {
+                        return err
+                    }
+                    fmt.Println(oldpath, "->", newpath)
+                    i += 1
+                }
+            }
+        }
+
+        if i == 3 {
+            break
+        }
+
+        time.Sleep(500 * time.Millisecond)
+    }
+
+	return nil
 }
 
 func runWithTimeOut(
@@ -377,6 +404,42 @@ func parseNumber(s string) (float64, error) {
 	return v, nil
 }
 
+const libJS = `
+function exportExcel() {
+  document.querySelector('.sal-financials-details__export').click();
+}
+
+function clickA(label) {
+  var i;
+  var els = document.querySelectorAll('a');
+  for (i=0; i < els.length; i++) {
+    if (els[i].innerText.includes(label)) {
+      els[i].click();
+    }
+  }
+}
+
+function clickRadio(label) {
+  var i;
+  var els = document.querySelectorAll('input[type="radio"]');
+  for (i=0; i < els.length; i++) {
+    if (els[i].getAttribute('value').includes(label)) {
+      els[i].click();
+    }
+  }
+}
+`
+
+const clickIncStatLink = `clickA('Income Statement');`
+
+const clickIncStaRadio = `clickRadio('Income Statement');`
+
+const clickBalSheRadio = `clickRadio('Balance Sheet');`
+
+const clickCasFloRadio = `clickRadio('Cash Flow');`
+
+const clickExport = `exportExcel();`
+
 const clickExpandBtnJS = `
 function cellsContent(root) {
     var label, cells, c, i, res = [];
@@ -430,6 +493,7 @@ function prevClose(root) {
     return parseFloat(root.querySelector('td[data-test="PREV_CLOSE-value"]').textContent);
 }
 
+
 function symbol(root) {
     return root.querySelector('h1').textContent.match(/.*\((.+)\)/)[1]
 }
@@ -450,6 +514,10 @@ var clickExpandBtn = async function(root) {
 clickExpandBtn(document);
 `
 
+const funcsJS = `
+
+`
+
 const extractCashFlowJS = `
 parse(document);
 `
@@ -464,4 +532,12 @@ prevClose(document);
 
 const extractSymbolJS = `
 symbol(document);
+`
+
+const extractPageJS = `
+function page() {
+    return "page";
+    return document.getElementsByTagName("html")[0].innerHTML;
+}
+page();
 `

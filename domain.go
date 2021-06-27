@@ -463,12 +463,10 @@ func (f *FinancialsCashFlow) DPSPerFCF() float64 {
 }
 
 type FinancialsBalanceSheetsInput struct {
-	Symbol       string
-	PeriodLength string
+	URL        string
 }
 
 type FinancialsBalanceSheetsOutput struct {
-	Symbol        string
 	BalanceSheets []*FinancialsBalanceSheet
 }
 

@@ -422,44 +422,22 @@ func (c *Command) writeCashFlow(
 }
 
 func (c *Command) balanceSheet(ctx context.Context) error {
-	symbols, err := c.resolveSymbols(ctx, c.args)
-	if err != nil {
-		return err
-	}
-	if len(symbols) == 0 {
-		return fmt.Errorf("Symbol not found")
-	}
-	symbol := symbols[0]
-	out, err := c.opts.financialsService.BalanceSheets(
+    u := c.args[0]
+	_, err := c.opts.financialsService.BalanceSheets(
 		ctx,
 		&divyield.FinancialsBalanceSheetsInput{
-			Symbol: symbol,
+			URL: u,
 		},
 	)
 	if err != nil {
 		return err
 	}
 
-	if 0 < len(out.BalanceSheets) {
-		fmt.Print(out.Symbol)
-		for _, e := range out.BalanceSheets[0].Entries {
-			fmt.Printf(",%v", e.Key)
-		}
-		fmt.Println()
-
-		for _, bs := range out.BalanceSheets {
-			fmt.Print(bs.Period.Format(divyield.DateFormat))
-			for _, e := range bs.Entries {
-				fmt.Printf(",%.f", e.Value)
-			}
-			fmt.Println()
-		}
-	}
 	return nil
 }
 
 func (c *Command) balanceSheetTest(ctx context.Context) error {
-	dir := "work/bs/us"
+	dir := "work/bs/symbols-water-us-div-yahoo"
 
 	symbols, err := symbols(dir, 400)
 	if err != nil {
@@ -491,12 +469,24 @@ func (c *Command) balanceSheetTest(ctx context.Context) error {
 			return err
 		}
 
-		curAss, err := bsValue(bsCSV, "Current Assets")
+		/*
+			_ , err := bsValue(bsCSV, "Current Assets")
+			if err != nil {
+				return err
+			}
+
+			_, err := bsValue(bsCSV, "Current Liabilities")
+			if err != nil {
+				return err
+			}
+		*/
+
+		totAss, err := bsValue(bsCSV, "Total Assets")
 		if err != nil {
 			return err
 		}
 
-		curLia, err := bsValue(bsCSV, "Current Liabilities")
+		totLia, err := bsValue(bsCSV, "Total Liabilities Net Minority Interest")
 		if err != nil {
 			return err
 		}
@@ -510,23 +500,27 @@ func (c *Command) balanceSheetTest(ctx context.Context) error {
 			}
 		}
 
-		var marCap float64
-		var nwc float64
-		var nwcRatio float64
 		if 0 < shares &&
 			0 < close &&
-			0 < curAss &&
-			0 < curLia {
+			0 < totAss &&
+			0 < totLia {
 
-			marCap = shares * close
-			nwc = curAss - curLia
-			nwcRatio = (marCap / nwc) * 100
+			marCap := shares * close
+			totEqu := totAss - totLia
+			totEquPerSha := totEqu / shares
+
+			//nwc = curAss - curLia
+			//nwcRatio = (marCap / nwc) * 100
 
 			test := &bsTest{
-				Symbol:   symbol,
-				MarCap:   marCap,
-				Nwc:      nwc,
-				NwcRatio: nwcRatio,
+				Symbol:        symbol,
+				MarCap:        marCap,
+				TotEqu:        totEqu,
+				TotEquPerSha:  totEquPerSha,
+				Close:         close,
+				CloseToTotEqu: (close / totEquPerSha) * 100,
+				//Nwc:      nwc,
+				//NwcRatio: nwcRatio,
 			}
 
 			tests = append(tests, test)
@@ -537,32 +531,36 @@ func (c *Command) balanceSheetTest(ctx context.Context) error {
 	sort.SliceStable(
 		tests,
 		func(i, j int) bool {
-			return tests[i].NwcRatio < tests[j].NwcRatio
+			return tests[i].CloseToTotEqu < tests[j].CloseToTotEqu
 		},
 	)
 
 	p := message.NewPrinter(language.English)
 	for i, v := range tests {
-		if 0 < v.NwcRatio && v.NwcRatio < 100 {
-			fmt.Printf(
-				"%v\t%v\t%v\t%v\t%v",
-				i,
-				v.Symbol,
-				p.Sprintf("%.2f%%", v.NwcRatio),
-				p.Sprintf("%.f", v.MarCap),
-				p.Sprintf("%.f", v.Nwc),
-			)
-			fmt.Println()
-		}
+		//if 0 < v.NwcRatio && v.NwcRatio < 100 {
+		fmt.Printf(
+			"%v\t%v\t%v\t%v\t%v",
+			i,
+			v.Symbol,
+			p.Sprintf("%.2f%%", v.CloseToTotEqu),
+			p.Sprintf("%.2f", v.Close),
+			p.Sprintf("%.2f", v.TotEquPerSha),
+		)
+		fmt.Println()
+		//}
 	}
 	return nil
 }
 
 type bsTest struct {
-	Symbol   string
-	MarCap   float64
-	Nwc      float64
-	NwcRatio float64
+	Symbol        string
+	MarCap        float64
+	Nwc           float64
+	NwcRatio      float64
+	TotEqu        float64
+	TotEquPerSha  float64
+	Close         float64
+	CloseToTotEqu float64
 }
 
 func bsValue(csv [][]string, s string) (float64, error) {

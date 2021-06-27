@@ -2,8 +2,8 @@
 
 #set -x
 
-wdir="work/bs/us"
-symbols="symbols-us-driping.txt"
+wdir="work/bs/symbols-water-us-div-yahoo"
+symbols="symbols-water-us-div-yahoo.txt"
 
 prices()
 {
