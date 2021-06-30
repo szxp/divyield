@@ -1,7 +1,6 @@
 package divyield
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -435,10 +434,15 @@ type FinancialsService interface {
 		in *FinancialsCashFlowInput,
 	) (*FinancialsCashFlowOutput, error)
 
-	BalanceSheets(
+	Statements(
 		ctx context.Context,
-		in *FinancialsBalanceSheetsInput,
-	) (*FinancialsBalanceSheetsOutput, error)
+		in *FinancialsStatementsInput,
+	) (*FinancialsStatementsOutput, error)
+
+	PullValuation(
+		ctx context.Context,
+		in *FinancialsPullValuationInput,
+	) (*FinancialsPullValuationOutput, error)
 }
 
 type FinancialsCashFlowInput struct {
@@ -462,30 +466,20 @@ func (f *FinancialsCashFlow) DPSPerFCF() float64 {
 	return (math.Abs(f.DividendPaid) / f.FreeCashFlow) * 100
 }
 
-type FinancialsBalanceSheetsInput struct {
-	URL        string
+type FinancialsStatementsInput struct {
+	URL string
 }
 
-type FinancialsBalanceSheetsOutput struct {
-	BalanceSheets []*FinancialsBalanceSheet
+type FinancialsStatementsOutput struct {
+	IncomeStatement string
+	BalanceSheet    string
+	CashFlow        string
 }
 
-type FinancialsBalanceSheet struct {
-	Symbol  string
-	Period  time.Time
-	Entries []*FinancialsBalanceSheetEntry
+type FinancialsPullValuationInput struct {
+	URL string
 }
 
-type FinancialsBalanceSheetEntry struct {
-	Key   string
-	Value float64
-}
-
-func (bs *FinancialsBalanceSheet) String() string {
-	b := &bytes.Buffer{}
-	fmt.Fprintf(b, "%v\n", bs.Period.Format(DateFormat))
-	for _, e := range bs.Entries {
-		fmt.Fprintf(b, "%v: %f\n", e.Key, e.Value)
-	}
-	return b.String()
+type FinancialsPullValuationOutput struct {
+	Valuation [][]string
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"os"
 	"os/exec"
@@ -21,6 +22,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/extrame/xls"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"szakszon.com/divyield"
@@ -55,16 +57,12 @@ func (c *Command) Execute(ctx context.Context) error {
 		return c.pull(ctx)
 	case "stats":
 		return c.stats(ctx)
-	case "cash-flow":
-		fallthrough
-	case "cf":
-		return c.cashFlow(ctx)
-	case "balance-sheet":
-		fallthrough
-	case "bs":
-		return c.balanceSheet(ctx)
-	case "bs-test":
-		return c.balanceSheetTest(ctx)
+	case "bargain":
+		return c.bargain(ctx)
+	case "pull-valuation":
+		return c.pullValuation(ctx)
+	case "pull-statements":
+		return c.pullStatements(ctx)
 	case "profile":
 		return c.profile(ctx)
 	case "symbols":
@@ -421,224 +419,429 @@ func (c *Command) writeCashFlow(
 	c.writef("%s", out.String())
 }
 
-func (c *Command) balanceSheet(ctx context.Context) error {
-    u := c.args[0]
-	_, err := c.opts.financialsService.BalanceSheets(
+func (c *Command) pullStatements(ctx context.Context) error {
+	u, symbol := morningstarURLFinancials(c.args[0])
+	dir := filepath.Join(baseDir, symbol)
+	isFile := filepath.Join(dir, "is.json")
+	bsFile := filepath.Join(dir, "bs.json")
+	cfFile := filepath.Join(dir, "cf.json")
+
+	err := os.MkdirAll(dir, 0644)
+	if err != nil {
+		return err
+	}
+
+	exists, err := exists(isFile)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		fmt.Printf("%v: OK\n", symbol)
+		return nil
+	}
+
+	out, err := c.opts.financialsService.Statements(
 		ctx,
-		&divyield.FinancialsBalanceSheetsInput{
+		&divyield.FinancialsStatementsInput{
 			URL: u,
 		},
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v: %v", symbol, err)
 	}
 
-	return nil
-}
-
-func (c *Command) balanceSheetTest(ctx context.Context) error {
-	dir := "work/bs/symbols-water-us-div-yahoo"
-
-	symbols, err := symbols(dir, 400)
+	err = ioutil.WriteFile(
+		isFile, []byte(out.IncomeStatement), 0644,
+	)
 	if err != nil {
 		return err
 	}
 
-	tests := make([]*bsTest, 0)
-	for symbol := range symbols {
-		//        fmt.Println(symbol)
-		pricesFile := filepath.Join(dir, symbol+".prices.csv")
-		pricesCSV, err := readAllCSV(pricesFile)
+	err = ioutil.WriteFile(
+		bsFile, []byte(out.BalanceSheet), 0644,
+	)
+	if err != nil {
+		return err
+	}
+
+	return ioutil.WriteFile(
+		cfFile, []byte(out.CashFlow), 0644,
+	)
+}
+
+func (c *Command) bargain(ctx context.Context) error {
+	symbols := c.args
+	for i, s := range symbols {
+		symbols[i] = strings.ToUpper(s)
+	}
+
+	financials := make([]*financials, 0)
+	for _, symbol := range symbols {
+		dir := filepath.Join(baseDir, symbol)
+
+		fin, err := c.financials(ctx, dir)
 		if err != nil {
-			return err
+			return fmt.Errorf("%v: %v", symbol, err)
 		}
+		fin.Symbol = symbol
 
-		closeCol := columnCSV(pricesCSV[0], "Close")
-		close, err := csvValue(
-			pricesCSV,
-			len(pricesCSV)-1,
-			closeCol,
-		)
-		if err != nil {
-			return err
-		}
-
-		bsFile := filepath.Join(dir, symbol+".csv")
-		bsCSV, err := readAllCSV(bsFile)
-		if err != nil {
-			return err
-		}
-
-		/*
-			_ , err := bsValue(bsCSV, "Current Assets")
-			if err != nil {
-				return err
-			}
-
-			_, err := bsValue(bsCSV, "Current Liabilities")
-			if err != nil {
-				return err
-			}
-		*/
-
-		totAss, err := bsValue(bsCSV, "Total Assets")
-		if err != nil {
-			return err
-		}
-
-		totLia, err := bsValue(bsCSV, "Total Liabilities Net Minority Interest")
-		if err != nil {
-			return err
-		}
-
-		sharesCol := columnCSV(bsCSV[0], "Share Issued")
-		var shares float64
-		if 0 < sharesCol {
-			shares, err = csvValue(bsCSV, 1, sharesCol)
-			if err != nil {
-				return err
-			}
-		}
-
-		if 0 < shares &&
-			0 < close &&
-			0 < totAss &&
-			0 < totLia {
-
-			marCap := shares * close
-			totEqu := totAss - totLia
-			totEquPerSha := totEqu / shares
-
-			//nwc = curAss - curLia
-			//nwcRatio = (marCap / nwc) * 100
-
-			test := &bsTest{
-				Symbol:        symbol,
-				MarCap:        marCap,
-				TotEqu:        totEqu,
-				TotEquPerSha:  totEquPerSha,
-				Close:         close,
-				CloseToTotEqu: (close / totEquPerSha) * 100,
-				//Nwc:      nwc,
-				//NwcRatio: nwcRatio,
-			}
-
-			tests = append(tests, test)
-
-		}
+		financials = append(financials, fin)
 	}
 
 	sort.SliceStable(
-		tests,
+		financials,
 		func(i, j int) bool {
-			return tests[i].CloseToTotEqu < tests[j].CloseToTotEqu
+			pe0 := financials[i].Valuation.
+				PriceToEarnings["Current"]
+			pe1 := financials[j].Valuation.
+				PriceToEarnings["Current"]
+
+			return pe0 < pe1
 		},
 	)
 
-	p := message.NewPrinter(language.English)
-	for i, v := range tests {
-		//if 0 < v.NwcRatio && v.NwcRatio < 100 {
-		fmt.Printf(
-			"%v\t%v\t%v\t%v\t%v",
-			i,
-			v.Symbol,
-			p.Sprintf("%.2f%%", v.CloseToTotEqu),
-			p.Sprintf("%.2f", v.Close),
-			p.Sprintf("%.2f", v.TotEquPerSha),
-		)
-		fmt.Println()
-		//}
+	for _, fin := range financials {
+		pe := fin.Valuation.PriceToEarnings["Current"]
+		pb := fin.Valuation.PriceToBook["Current"]
+
+		if (0 < pe) && (pe <= 10) && (0 < pb) && (pb <= 1) {
+
+			fmt.Printf(
+				"%v\t%.2f\t%.2f\n",
+				fin.Symbol,
+				fin.Valuation.PriceToEarnings["Current"],
+				fin.Valuation.PriceToBook["Current"],
+			)
+		}
 	}
+
 	return nil
 }
 
-type bsTest struct {
-	Symbol        string
-	MarCap        float64
-	Nwc           float64
-	NwcRatio      float64
-	TotEqu        float64
-	TotEquPerSha  float64
-	Close         float64
-	CloseToTotEqu float64
+func (c *Command) financials(
+	ctx context.Context,
+	dir string,
+) (*financials, error) {
+
+	//	cashFlows, err := c.cashFlows(ctx, dir)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+
+	valuation, err := c.valuation(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+
+	financials := &financials{
+		//		CashFlows: cashFlows,
+		Valuation: valuation,
+	}
+
+	return financials, nil
 }
 
-func bsValue(csv [][]string, s string) (float64, error) {
-	col := columnCSV(csv[0], s)
-	var v float64
-	var err error
-	if 0 < col {
-		v, err = csvValue(csv, 1, col)
-		if err != nil {
-			return 0, err
+func (c *Command) cashFlows(
+	ctx context.Context,
+	dir string,
+) ([]*cashFlow, error) {
+	cashFlows := make([]*cashFlow, 0)
+
+	cf := filepath.Join(dir, "cf", "table.xls")
+	xf, err := xls.Open(cf, "utf-8")
+	if err != nil {
+		return nil, err
+	}
+
+	table := xf.ReadAllCells(10000000)
+	//fmt.Println(table)
+
+	opCashRowNum := rowNum(
+		"Cash Flow from Operating Activities, Indirect",
+		table,
+	)
+
+	purPPPERowNum := rowNum(
+		"Purchase of Property, Plant and Equipment",
+		table,
+	)
+
+	capExRowNum := rowNum(
+		"Capital Expenditure",
+		table,
+	)
+
+	if capExRowNum == -1 && purPPPERowNum == -1 {
+		return nil, fmt.Errorf("cap ex not found: %v", cf)
+	}
+
+	//	fmt.Println("Op cash:", opCashRowNum)
+	//	fmt.Println("Cap Ex", capExRowNum)
+	//	fmt.Println("Pur PPPE:", purPPPERowNum)
+
+	for i := 1; i < len(table[0]); i++ {
+		period := table[0][i]
+		if period != "" {
+
+			var opCash float64
+			opCashStr := table[opCashRowNum][i]
+			if opCashStr != "" {
+				opCashStr = strings.ReplaceAll(opCashStr, ",", "")
+				v, err := strconv.ParseFloat(opCashStr, 64)
+				if err != nil {
+					return nil, err
+				}
+				opCash = v
+			}
+
+			var capEx float64
+			if capExRowNum > -1 {
+				capExStr := table[capExRowNum][i]
+				if capExStr != "" {
+					capExStr = strings.ReplaceAll(capExStr, ",", "")
+					v, err := strconv.ParseFloat(capExStr, 64)
+					if err != nil {
+						return nil, err
+					}
+					capEx += v
+				}
+			}
+
+			if purPPPERowNum > -1 {
+				purPPPEStr := table[purPPPERowNum][i]
+				if purPPPEStr != "" {
+					purPPPEStr = strings.ReplaceAll(purPPPEStr, ",", "")
+					v, err := strconv.ParseFloat(purPPPEStr, 64)
+					if err != nil {
+						return nil, err
+					}
+					capEx += v
+				}
+			}
+
+			cashFlow := &cashFlow{
+				Period: period,
+				OpCash: opCash,
+				CapEx:  capEx,
+			}
+
+			cashFlows = append(cashFlows, cashFlow)
 		}
 	}
-	return v, nil
 
+	return cashFlows, nil
 }
 
-func readAllCSV(p string) ([][]string, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	records, err := r.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-	return records, nil
-}
-
-func columnCSV(row []string, s string) int {
-	for i, v := range row {
-		if v == s {
+func rowNum(label string, table [][]string) int {
+	for i, row := range table {
+		if strings.Contains(row[0], label) {
 			return i
 		}
 	}
 	return -1
 }
 
-func csvValue(csv [][]string, row, col int) (float64, error) {
-	v := csv[row][col]
-
-	f, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return 0, err
-	}
-	return f, nil
-}
-
-func symbols(
+func (c *Command) valuation(
+	ctx context.Context,
 	dir string,
-	sizeLimit int64,
-) (map[string]struct{}, error) {
-	symbols := make(map[string]struct{})
+) (*valuation, error) {
+	val := &valuation{
+		PriceToSales:    make(map[string]float64),
+		PriceToEarnings: make(map[string]float64),
+		PriceToBook:     make(map[string]float64),
+	}
+	valFile := filepath.Join(dir, "valuation.csv")
 
-	err := filepath.Walk(
-		dir,
-		func(path string, info os.FileInfo, err error) error {
-			if !strings.HasSuffix(path, ".prices.csv") {
-				return nil
-			}
-			if info.Size() < sizeLimit {
-				return nil
-			}
-
-			symbol := strings.Split(
-				filepath.Base(path),
-				".",
-			)[0]
-			symbols[symbol] = struct{}{}
-			return nil
-		},
-	)
+	exists, err := exists(valFile)
 	if err != nil {
 		return nil, err
 	}
-	return symbols, nil
+
+	if !exists {
+		return val, err
+	}
+
+	f, err := os.Open(valFile)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	records, err := readCSV(f)
+	if err != nil {
+		return nil, err
+	}
+
+	psMap, err := valueMap("Price/Sales", records)
+	if err != nil {
+		return nil, err
+	}
+	peMap, err := valueMap("Price/Earnings", records)
+	if err != nil {
+		return nil, err
+	}
+	pbMap, err := valueMap("Price/Book", records)
+	if err != nil {
+		return nil, err
+	}
+
+	val.PriceToSales = psMap
+	val.PriceToEarnings = peMap
+	val.PriceToBook = pbMap
+	return val, nil
+}
+
+func valueMap(
+	label string,
+	records [][]string,
+) (map[string]float64, error) {
+	m := make(map[string]float64)
+	rowNum := rowNum(label, records)
+	if rowNum == -1 {
+		return nil, fmt.Errorf("label not found: %v", label)
+	}
+	for i := 1; i < len(records[0]); i++ {
+		period := records[0][i]
+		valStr := records[rowNum][i]
+		var val float64
+		var err error
+
+		if valStr != "-" && valStr != "—" {
+			valStr = strings.ReplaceAll(valStr, ",", "")
+			val, err = strconv.ParseFloat(valStr, 64)
+			if err != nil {
+				return nil, err
+			}
+		}
+		m[period] = val
+	}
+	return m, nil
+}
+
+type financials struct {
+	Symbol    string
+	CashFlows []*cashFlow
+	Valuation *valuation
+}
+
+func (f *financials) HasFreeCashFlow() bool {
+	neg := 0
+	for _, cf := range f.CashFlows {
+		if cf.FreeCashFlow() <= 0 {
+			neg += 1
+		}
+	}
+	return neg <= 0
+}
+
+type cashFlow struct {
+	Period string
+	OpCash float64
+	CapEx  float64
+}
+
+func (cf *cashFlow) FreeCashFlow() float64 {
+	return cf.OpCash + cf.CapEx
+}
+
+type valuation struct {
+	PriceToSales    map[string]float64
+	PriceToEarnings map[string]float64
+	PriceToBook     map[string]float64
+}
+
+const baseDir = "c:\\Users\\Admin\\Go\\src\\divyield\\statements"
+
+func morningstarURL(
+	u string,
+	tail string,
+) (string, string) {
+	parts := strings.Split(u, "/")
+	symbol := strings.ToUpper(parts[5])
+	u = strings.Join(parts[0:6], "/")
+	u += "/" + tail
+	return u, symbol
+}
+
+func morningstarURLValuation(u string) (string, string) {
+	return morningstarURL(u, "valuation")
+}
+
+func morningstarURLFinancials(u string) (string, string) {
+	return morningstarURL(u, "financials")
+}
+
+func exists(f string) (bool, error) {
+	exists := true
+	_, err := os.Stat(f)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return false, err
+		}
+		exists = false
+	}
+	return exists, nil
+}
+
+func (c *Command) pullValuation(ctx context.Context) error {
+	u, symbol := morningstarURLValuation(c.args[0])
+	dir := filepath.Join(baseDir, symbol)
+	valFile := filepath.Join(dir, "valuation.csv")
+
+	err := os.MkdirAll(dir, 0777)
+	if err != nil {
+		return err
+	}
+
+	exists, err := exists(valFile)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		fmt.Printf("%v: OK\n", symbol)
+		return nil
+	}
+
+	out, err := c.opts.financialsService.PullValuation(
+		ctx,
+		&divyield.FinancialsPullValuationInput{
+			URL: u,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("%v: %v", symbol, err)
+	}
+
+	f, err := os.Create(valFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return writeCSV(f, out.Valuation)
+}
+
+func writeCSV(o io.Writer, records [][]string) error {
+	w := csv.NewWriter(o)
+	w.Comma = ';'
+	w.WriteAll(records)
+	err := w.Error()
+	if err != nil {
+		return fmt.Errorf("write csv: %v", err)
+	}
+	return nil
+}
+
+func readCSV(in io.Reader) ([][]string, error) {
+	r := csv.NewReader(in)
+	r.Comma = ';'
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("read csv: %v", err)
+	}
+	return records, nil
 }
 
 func (c *Command) pull(ctx context.Context) error {

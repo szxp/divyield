@@ -2,18 +2,16 @@ package yahoo
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
 	"time"
-    "fmt"
-    "os"
-    "io/ioutil"
-    "path/filepath"
 
+	//"github.com/chromedp/cdproto/browser"
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/chromedp/cdproto/browser"
-//	"github.com/chromedp/cdproto/network"
 	"szakszon.com/divyield"
 )
 
@@ -167,21 +165,10 @@ func (s *financialsService) parseCashFlow(
 	}, nil
 }
 
-func (s *financialsService) BalanceSheets(
+func (s *financialsService) PullValuation(
 	ctx context.Context,
-	in *divyield.FinancialsBalanceSheetsInput,
-) (*divyield.FinancialsBalanceSheetsOutput, error) {
-	err := s.downloadStatements(in.URL)
-	if err != nil {
-		return nil, err
-	}
-
-	return &divyield.FinancialsBalanceSheetsOutput{}, nil
-}
-
-func (s *financialsService) downloadStatements(
-    u string,
-) (error) {
+	in *divyield.FinancialsPullValuationInput,
+) (*divyield.FinancialsPullValuationOutput, error) {
 	opts := append(
 		chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
@@ -190,7 +177,7 @@ func (s *financialsService) downloadStatements(
 		context.Background(),
 		opts...,
 	)
-	ctx, cancel := chromedp.NewContext(
+	ctx, cancel = chromedp.NewContext(
 		actx,
 		chromedp.WithLogf(log.Printf),
 		//chromedp.WithDebugf(log.Printf),
@@ -198,68 +185,119 @@ func (s *financialsService) downloadStatements(
 	)
 	defer cancel()
 
+	var valuation [][]string
+	actions := make([]chromedp.Action, 0)
+	actions = append(
+		actions,
+		chromedp.Navigate(in.URL),
+		runWithTimeOut(&ctx, 5, chromedp.Tasks{
+			chromedp.WaitVisible(
+				"//span[contains(text(),'Price/Earnings')]",
+				chromedp.BySearch,
+			),
+		}),
 
+		chromedp.Evaluate(libJS, &[]byte{}),
+		chromedp.Evaluate(extractValuation, &valuation),
+	)
 
-    parts := strings.Split(u, "/")
-    symbol := strings.ToUpper(parts[len(parts) - 2])
+	err := chromedp.Run(ctx, actions...)
+	if err != nil {
+		return nil, err
+	}
 
-    baseDir := filepath.Join(
-        "c:\\Users\\Admin\\Go\\src\\divyield\\statements",
-        symbol,
-    )
-    fmt.Println("Dir: ", baseDir)
-    isDir := filepath.Join(baseDir, "is")
-    bsDir := filepath.Join(baseDir, "bs")
-    cfDir := filepath.Join(baseDir, "cf")
+	return &divyield.FinancialsPullValuationOutput{
+		Valuation: valuation,
+	}, nil
 
-    for _, d := range []string{isDir, bsDir, cfDir} {
-        err := os.MkdirAll(d, 0777)
-        if err != nil {
-            return err
-        }
-    }
+}
 
-    /*
+func (s *financialsService) Statements(
+	ctx context.Context,
+	in *divyield.FinancialsStatementsInput,
+) (*divyield.FinancialsStatementsOutput, error) {
+	opts := append(
+		chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
+	)
+	actx, cancel := chromedp.NewExecAllocator(
+		context.Background(),
+		opts...,
+	)
+	ctx, cancel = chromedp.NewContext(
+		actx,
+		chromedp.WithLogf(log.Printf),
+		//chromedp.WithDebugf(log.Printf),
+		chromedp.WithErrorf(log.Printf),
+	)
+	defer cancel()
+
+    var isRequestID string
+    var bsRequestID string
+    var cfRequestID string
+	statementsCh := make(chan string, 3)
+
 	chromedp.ListenTarget(ctx, func(v interface{}) {
-		switch ev := v.(type) {
+        switch ev := v.(type) {
 		case *network.EventRequestWillBeSent:
-            export := strings.Contains(
-                ev.Request.URL, 
-                "operation=export",
-            )
-
-            get := ev.Request.Method == "GET"
-            
-            if get && export {
-			    fmt.Printf(
-                    "EventRequestWillBeSent: %v: %v\n",
-                    ev.RequestID, 
-                    ev.Request.URL,
-                )
+			if ev.Type == "XHR" && strings.Contains(
+                ev.Request.URL,
+                "incomeStatement",
+            ) {
+                isRequestID = ev.RequestID.String()
             }
 
-//		case *network.EventLoadingFinished:
-//                fmt.Printf(
-//                    "EventLoadingFinished: %v\n",
-//                    ev.RequestID,
-//                )
+			if ev.Type == "XHR" && strings.Contains(
+				ev.Request.URL,
+				"balanceSheet",
+			) {
+                bsRequestID = ev.RequestID.String()
             }
-		}
+
+			if ev.Type == "XHR" && strings.Contains(
+				ev.Request.URL,
+				"cashFlow",
+			){
+                cfRequestID = ev.RequestID.String()
+            }
+
+		case *network.EventLoadingFinished:
+			is := isRequestID == ev.RequestID.String()
+			bs := bsRequestID == ev.RequestID.String()
+			cf := cfRequestID == ev.RequestID.String()
+
+			if !is && !bs && !cf {
+				return
+			}
+
+			go func() {
+				c := chromedp.FromContext(ctx)
+				rbp := network.GetResponseBody(ev.RequestID)
+				body, err := rbp.Do(
+					cdp.WithExecutor(ctx, c.Target),
+				)
+				if err != nil {
+					fmt.Println(err)
+				}
+				if err == nil {
+					statementsCh <- string(body)
+				}
+			}()
+        }
 	})
-    */
 
 	actions := make([]chromedp.Action, 0)
 
 	actions = append(
 		actions,
-		chromedp.Navigate(u),
+        network.Enable(),
+		chromedp.Navigate(in.URL),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
 				"//span[contains(text(),'Normalized Diluted EPS')]",
 				chromedp.BySearch,
 			),
 		}),
-
 
 		chromedp.Evaluate(libJS, &[]byte{}),
 		chromedp.Evaluate(clickIncStatLink, &[]byte{}),
@@ -269,77 +307,86 @@ func (s *financialsService) downloadStatements(
 				chromedp.BySearch,
 			),
 		}),
-        browser.SetDownloadBehavior(
-            browser.SetDownloadBehaviorBehaviorAllowAndName).
-			WithDownloadPath(isDir),
-		chromedp.Evaluate(clickExport, &[]byte{}),
-		chromedp.Sleep(2 * time.Second),
+		/*
+			browser.SetDownloadBehavior(
+				browser.SetDownloadBehaviorBehaviorAllowAndName).
+				WithDownloadPath(isDir),
+			chromedp.Evaluate(clickExport, &[]byte{}),
+			chromedp.Sleep(2*time.Second),
+		*/
 
-        chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
+		chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
 				"//div[contains(text(),'Total Assets')]",
 				chromedp.BySearch,
 			),
 		}),
-        browser.SetDownloadBehavior(
-            browser.SetDownloadBehaviorBehaviorAllowAndName).
-			WithDownloadPath(bsDir),
-		chromedp.Evaluate(clickExport, &[]byte{}),
-		chromedp.Sleep(2 * time.Second),
+		/*
+			browser.SetDownloadBehavior(
+				browser.SetDownloadBehaviorBehaviorAllowAndName).
+				WithDownloadPath(bsDir),
+			chromedp.Evaluate(clickExport, &[]byte{}),
+			chromedp.Sleep(2*time.Second),
+		*/
 
-        chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
+		chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
 				"//div[contains(text(),'Cash Flow from Operating Activities')]",
 				chromedp.BySearch,
 			),
 		}),
-        browser.SetDownloadBehavior(
-            browser.SetDownloadBehaviorBehaviorAllowAndName).
-			WithDownloadPath(cfDir),
-		chromedp.Evaluate(clickExport, &[]byte{}),
-		chromedp.Sleep(2 * time.Second),
+
+		/*
+			browser.SetDownloadBehavior(
+				browser.SetDownloadBehaviorBehaviorAllowAndName).
+				WithDownloadPath(cfDir),
+			chromedp.Evaluate(clickExport, &[]byte{}),
+		*/
+		//chromedp.Sleep(5*time.Second),
 	)
 
 	err := chromedp.Run(ctx, actions...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-    i := 0
-    for {
-        for _, d := range []string{isDir, bsDir, cfDir} {
-            files, err := ioutil.ReadDir(d)
-            if err != nil {
-                return err
-            }
+	var i int
+	var is string
+	var bs string
+	var cf string
+	for {
+		var s string
 
-            for _, f := range files {
-                if filepath.Ext(f.Name()) == "" {
-                    oldpath := filepath.Join(d, f.Name())
-                    newpath := filepath.Join(
-                        filepath.Dir(oldpath),
-                        "table.xls",
-                    )
-                    err = os.Rename(oldpath, newpath)
-                    if err != nil {
-                        return err
-                    }
-                    fmt.Println(oldpath, "->", newpath)
-                    i += 1
-                }
-            }
-        }
+		select {
+		case s = <-statementsCh:
+		case <-time.After(5 * time.Second):
+			return nil, fmt.Errorf("timeout")
+		}
 
-        if i == 3 {
-            break
-        }
+		if strings.Contains(s, ":\"income-statement\"") {
+			is = s
+			i += 1
+		} else if strings.Contains(s, ":\"balance-sheet\"") {
+			bs = s
+			i += 1
+		} else if strings.Contains(s, ":\"cash-flow\"") {
+			cf = s
+			i += 1
+		} else {
+			return nil, fmt.Errorf("unexpected statement: %v", s)
+		}
+		if i == 3 {
+			break
+		}
+	}
 
-        time.Sleep(500 * time.Millisecond)
-    }
-
-	return nil
+	return &divyield.FinancialsStatementsOutput{
+		IncomeStatement: is,
+		BalanceSheet:    bs,
+		CashFlow:        cf,
+	}, nil
 }
 
 func runWithTimeOut(
@@ -357,54 +404,42 @@ func runWithTimeOut(
 	}
 }
 
-func (s *financialsService) parseBalanceSheet(
-	rows [][]string,
-	i int,
-) (*divyield.FinancialsBalanceSheet, error) {
-	sheet := &divyield.FinancialsBalanceSheet{
-		Entries: make([]*divyield.FinancialsBalanceSheetEntry, 0),
-	}
-
-	for _, row := range rows {
-		if row[0] == "Breakdown" {
-			period, err := time.Parse("1/2/2006", row[i])
-			if err != nil {
-				return nil, err
-			}
-			sheet.Period = period
-		} else {
-			v, err := parseNumber(row[i])
-			if err != nil {
-				return nil, err
-			}
-
-			e := &divyield.FinancialsBalanceSheetEntry{
-				Key:   strings.ReplaceAll(row[0], ",", ""),
-				Value: v,
-			}
-			sheet.Entries = append(sheet.Entries, e)
-		}
-	}
-	return sheet, nil
-}
-
-func parseNumber(s string) (float64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "-" {
-		return 0.0, nil
-	}
-
-	s = strings.ReplaceAll(s, ",", "")
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0.0, err
-	}
-
-	v = v * 1000.0 // Numbers in thousands on Yahoo
-	return v, nil
-}
-
 const libJS = `
+function valuation() {
+    var i, k;
+    var tr;
+    var trs = [];
+    var cells;
+    var cell;
+    var res = [];
+    var row;
+    var thread;
+
+    thead = document.querySelector('.report-table .thead');
+    trs.push(thead);
+    rows = document.querySelectorAll('.report-table .report-table-row');
+    for (i=0; i<rows.length; i++) {
+        trs.push(rows[i]);
+    }
+
+    for (i=0; i<trs.length; i++) {
+        tr = trs[i];
+        if (tr.classList.contains('chart-row')) {
+            continue;
+        }
+
+        cells = tr.querySelectorAll('td');
+        row = [];
+        for (k=0; k<cells.length; k++) {
+            cell = cells[k];
+            row.push(cell.innerText.trim());
+        }
+        res.push(row);
+    }
+    return res;
+}
+
+
 function exportExcel() {
   document.querySelector('.sal-financials-details__export').click();
 }
@@ -429,6 +464,7 @@ function clickRadio(label) {
   }
 }
 `
+const extractValuation = `valuation();`
 
 const clickIncStatLink = `clickA('Income Statement');`
 
