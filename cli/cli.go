@@ -420,8 +420,12 @@ func (c *Command) writeCashFlow(
 }
 
 func (c *Command) pullStatements(ctx context.Context) error {
-	u, symbol := morningstarURLFinancials(c.args[0])
-	dir := filepath.Join(baseDir, symbol)
+    if len(c.args) == 0 {
+        return nil
+    }
+
+	u, symbol, exch := morningstarURLFinancials(c.args[0])
+	dir := filepath.Join(baseDir, exch, symbol)
 	isFile := filepath.Join(dir, "is.json")
 	bsFile := filepath.Join(dir, "bs.json")
 	cfFile := filepath.Join(dir, "cf.json")
@@ -478,7 +482,10 @@ func (c *Command) bargain(ctx context.Context) error {
 
 	financials := make([]*financials, 0)
 	for _, symbol := range symbols {
-		dir := filepath.Join(baseDir, symbol)
+        if symbol == "-" {
+            continue
+        }
+		dir := filepath.Join(baseDir, "XPAR", symbol)
 
 		fin, err := c.financials(ctx, dir)
 		if err != nil {
@@ -756,19 +763,20 @@ const baseDir = "c:\\Users\\Admin\\Go\\src\\divyield\\statements"
 func morningstarURL(
 	u string,
 	tail string,
-) (string, string) {
+) (string, string, string) {
 	parts := strings.Split(u, "/")
+	exch := strings.ToUpper(parts[4])
 	symbol := strings.ToUpper(parts[5])
 	u = strings.Join(parts[0:6], "/")
 	u += "/" + tail
-	return u, symbol
+	return u, symbol, exch
 }
 
-func morningstarURLValuation(u string) (string, string) {
+func morningstarURLValuation(u string) (string, string, string) {
 	return morningstarURL(u, "valuation")
 }
 
-func morningstarURLFinancials(u string) (string, string) {
+func morningstarURLFinancials(u string) (string, string, string) {
 	return morningstarURL(u, "financials")
 }
 
@@ -785,22 +793,37 @@ func exists(f string) (bool, error) {
 }
 
 func (c *Command) pullValuation(ctx context.Context) error {
-	u, symbol := morningstarURLValuation(c.args[0])
-	dir := filepath.Join(baseDir, symbol)
+    if len(c.args) == 0 {
+        return nil
+    }
+
+    u, symbol, exch := morningstarURLValuation(c.args[0])
+	dir := filepath.Join(baseDir, exch, symbol)
+
+	missingFile := filepath.Join(dir, "missing")
+	exist, err := exists(missingFile)
+	if err != nil {
+		return err
+	}
+    if exist {
+		//fmt.Printf("%v: Missing\n", symbol)
+        return nil
+    }
+
 	valFile := filepath.Join(dir, "valuation.csv")
 
-	err := os.MkdirAll(dir, 0777)
+	err = os.MkdirAll(dir, 0777)
 	if err != nil {
 		return err
 	}
 
-	exists, err := exists(valFile)
+	exist, err = exists(valFile)
 	if err != nil {
 		return err
 	}
 
-	if exists {
-		fmt.Printf("%v: OK\n", symbol)
+	if exist {
+		//fmt.Printf("%v: OK\n", symbol)
 		return nil
 	}
 
@@ -811,6 +834,9 @@ func (c *Command) pullValuation(ctx context.Context) error {
 		},
 	)
 	if err != nil {
+        if strings.Contains(err.Error(), "deadline exceeded") {
+	        ioutil.WriteFile(missingFile, []byte(""), 0644)
+        }
 		return fmt.Errorf("%v: %v", symbol, err)
 	}
 
