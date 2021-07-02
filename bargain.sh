@@ -10,12 +10,12 @@ trap "trap_ctrlc" 2
 
 go build cmd/divyield/main.go
 
-symbols="$(cat urls.csv | cut -f1)"
 
-exch="$(find statements -maxdepth 1 -type d -printf '%f ')"
+exch="$(ls statements | sed 's#/##')"
 
 for i in $exch; do
     echo $i
+    symbols="$(ls statements/$i | sed 's#/##')"
     ./main.exe bargain -directory="statements/$i" $symbols
     echo
 done

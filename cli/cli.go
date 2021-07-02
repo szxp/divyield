@@ -425,6 +425,14 @@ func (c *Command) pullStatements(ctx context.Context) error {
 		return fmt.Errorf("dir must be specified")
 	}
 
+	exist, err := exists(baseDir)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return fmt.Errorf("dir not found: %v", baseDir)
+	}
+
 	if len(c.args) == 0 {
 		return nil
 	}
@@ -435,21 +443,20 @@ func (c *Command) pullStatements(ctx context.Context) error {
 	bsFile := filepath.Join(dir, "bs.json")
 	cfFile := filepath.Join(dir, "cf.json")
 
-	err := os.MkdirAll(dir, 0644)
+	err = os.MkdirAll(dir, 0644)
 	if err != nil {
 		return err
 	}
 
 	missingFile := filepath.Join(dir, "missing")
-	exist, err := exists(missingFile)
+	exist, err = exists(missingFile)
 	if err != nil {
 		return err
 	}
-
 	if exist {
-		//fmt.Printf("%v: Missing\n", symbol)
 		return nil
 	}
+
 	exists, err := exists(isFile)
 	if err != nil {
 		return err
@@ -498,6 +505,14 @@ func (c *Command) bargain(ctx context.Context) error {
 		return fmt.Errorf("dir must be specified")
 	}
 
+	exist, err := exists(baseDir)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return fmt.Errorf("dir not found: %v", baseDir)
+	}
+
 	symbols := c.args
 	for i, s := range symbols {
 		symbols[i] = strings.ToUpper(s)
@@ -509,6 +524,15 @@ func (c *Command) bargain(ctx context.Context) error {
 			continue
 		}
 		dir := filepath.Join(baseDir, symbol)
+
+		missingFile := filepath.Join(dir, "missing")
+		exist, err = exists(missingFile)
+		if err != nil {
+			return err
+		}
+		if exist {
+			continue
+		}
 
 		fin, err := c.financials(ctx, dir)
 		if err != nil {
@@ -535,15 +559,47 @@ func (c *Command) bargain(ctx context.Context) error {
 		pe := fin.Valuation.PriceToEarnings["Current"]
 		pb := fin.Valuation.PriceToBook["Current"]
 
+		fcfTTM := fin.CashFlow.FreeCashFlow("TTM")
+		fcf2020 := fin.CashFlow.FreeCashFlow("2020")
+		fcf2019 := fin.CashFlow.FreeCashFlow("2019")
+		fcf2018 := fin.CashFlow.FreeCashFlow("2018")
+		fcf2017 := fin.CashFlow.FreeCashFlow("2017")
+		fcf2016 := fin.CashFlow.FreeCashFlow("2016")
+
+        marginTTM := fin.IncomeStatement.EBITDAMargin("TTM")
+        margin2020 := fin.IncomeStatement.EBITDAMargin("2020")
+        margin2019 := fin.IncomeStatement.EBITDAMargin("2019")
+        margin2018 := fin.IncomeStatement.EBITDAMargin("2018")
+        margin2017 := fin.IncomeStatement.EBITDAMargin("2017")
+        margin2016 := fin.IncomeStatement.EBITDAMargin("2016")
+
 		if (0 < pe) &&
 			(pe <= 7.5) &&
-			(pb <= 1) {
+			(pb <= 1) &&
+			fcfTTM > 0 &&
+            fcf2020 >= 0 &&
+            fcf2019 >= 0 &&
+            fcf2018 >= 0 &&
+            fcf2017 >= 0 &&
+            fcf2016 >= 0 &&
+			marginTTM > 0 &&
+            margin2020 >= 0 &&
+            margin2019 >= 0 &&
+            margin2018 >= 0 &&
+            margin2017 >= 0 &&
+            margin2016 >= 0 {
 
 			fmt.Printf(
-				"%v\t%.2f\t%.2f\n",
+				"%v\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n",
 				fin.Symbol,
-				fin.Valuation.PriceToEarnings["Current"],
-				fin.Valuation.PriceToBook["Current"],
+				pe,
+				pb,
+                marginTTM,
+                margin2020,
+                margin2019,
+                margin2018,
+                margin2017,
+                margin2016,
 			)
 		}
 	}
@@ -575,10 +631,6 @@ func (c *Command) financials(
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Printf("%v\n", incomeStatement.TotalRevenue("2020"))
-	fmt.Printf("%v\n", balanceSheet.TotalAssets("2020"))
-	fmt.Printf("%v\n", cashFlow.FreeCashFlow("2020"))
 
 	valuation, err := c.valuation(ctx, dir)
 	if err != nil {
@@ -709,7 +761,7 @@ type financials struct {
 type statement struct {
 	ColumnDefs []string             `json:"columnDefs"`
 	Rows       []*statementSubLevel `json:"rows"`
-	Footer     *statementFooter      `json:"footer"`
+	Footer     *statementFooter     `json:"footer"`
 }
 
 type statementSubLevel struct {
@@ -725,12 +777,90 @@ type statementFooter struct {
 	FiscalYearEndDate string `json:"fiscalYearEndDate"`
 }
 
-func (s *statement) TotalRevenue(period string) float64 {
-	return s.value(
-		s.periodIndex(period),
-		"Total Revenue",
+func (s *statement) Revenue(period string) float64 {
+    intRev := s.value(
+        s.periodIndex(period),
+        "Interest Income, Revenue",
 		s.Rows[0],
-	)
+    )
+    nonIntRev := s.value(
+        s.periodIndex(period),
+        "Non-Interest Income",
+		s.Rows[0],
+    )
+    bank := intRev > 0
+
+    totRev := s.value(
+        s.periodIndex(period),
+        "Total Revenue",
+		s.Rows[0],
+    )
+
+    if bank {
+        return intRev + nonIntRev
+    }
+    return totRev
+}
+
+func (s *statement) EBITDA(period string) float64 {
+    intRev := s.value(
+        s.periodIndex(period),
+        "Interest Income, Revenue",
+		s.Rows[0],
+    )
+
+    bank := intRev > 0
+    rev := s.Revenue(period)
+
+    var cogs float64
+    if bank {
+        cogs += s.value(
+            s.periodIndex(period),
+            "Interest Expense, Cost of Revenue",
+		    s.Rows[0],
+        )
+    } else {
+        cogs += s.value(
+            s.periodIndex(period),
+            "Cost of Revenue",
+		    s.Rows[0],
+        )
+    }
+
+    var opIncExp float64
+    if bank {
+        opIncExp += s.value(
+            s.periodIndex(period),
+            "Non-Interest Expenses",
+		    s.Rows[0],
+        )
+    } else {
+        opIncExp += s.value(
+            s.periodIndex(period),
+            "Operating Income/Expenses",
+		    s.Rows[0],
+        )
+    }
+
+    depExp := s.value(
+        s.periodIndex(period),
+        "Depreciation, Amortization and Depletion",
+		s.Rows[0],
+    )
+
+//    fmt.Println(period)
+//    fmt.Println("rev", rev)
+//    fmt.Println("cogs", cogs)
+//    fmt.Println("opIncExp", opIncExp)
+//    fmt.Println("depExp", depExp)
+    return rev + cogs + opIncExp + (-1 * depExp)
+}
+
+func (s *statement) EBITDAMargin(period string) float64 {
+    rev := s.Revenue(period)
+    ebitda := s.EBITDA(period)
+    margin := (ebitda / rev) * 100
+    return margin
 }
 
 func (s *statement) TotalAssets(period string) float64 {
@@ -777,6 +907,10 @@ func (s *statement) value(
 	label string,
 	level *statementSubLevel,
 ) float64 {
+    if periodIndex == -1 {
+        return 0
+    }
+
 	levels := make([]*statementSubLevel, 0)
 	levels = append(levels, level)
 
@@ -839,6 +973,14 @@ func (c *Command) pullValuation(ctx context.Context) error {
 		return fmt.Errorf("dir must be specified")
 	}
 
+	exist, err := exists(baseDir)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return fmt.Errorf("dir not found: %v", baseDir)
+	}
+
 	if len(c.args) == 0 {
 		return nil
 	}
@@ -847,7 +989,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 	dir := filepath.Join(baseDir, exch, symbol)
 
 	missingFile := filepath.Join(dir, "missing")
-	exist, err := exists(missingFile)
+	exist, err = exists(missingFile)
 	if err != nil {
 		return err
 	}
