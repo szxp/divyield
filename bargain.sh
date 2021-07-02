@@ -12,4 +12,10 @@ go build cmd/divyield/main.go
 
 symbols="$(cat urls.csv | cut -f1)"
 
-./main.exe bargain $symbols
+exch="$(find statements -maxdepth 1 -type d -printf '%f ')"
+
+for i in $exch; do
+    echo $i
+    ./main.exe bargain -directory="statements/$i" $symbols
+    echo
+done

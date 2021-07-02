@@ -15,5 +15,6 @@ go build cmd/divyield/main.go
 urls="$(cat urls.csv | cut -f2)"
 
 for i in $urls; do
-    ./main.exe pull-valuation "$i"
+    echo $i
+    ./main.exe pull-valuation -directory="statements" "$i"
 done

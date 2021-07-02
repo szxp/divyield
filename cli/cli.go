@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,7 +23,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/extrame/xls"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"szakszon.com/divyield"
@@ -420,9 +420,14 @@ func (c *Command) writeCashFlow(
 }
 
 func (c *Command) pullStatements(ctx context.Context) error {
-    if len(c.args) == 0 {
-        return nil
-    }
+	baseDir := c.opts.dir
+	if baseDir == "" {
+		return fmt.Errorf("dir must be specified")
+	}
+
+	if len(c.args) == 0 {
+		return nil
+	}
 
 	u, symbol, exch := morningstarURLFinancials(c.args[0])
 	dir := filepath.Join(baseDir, exch, symbol)
@@ -435,6 +440,16 @@ func (c *Command) pullStatements(ctx context.Context) error {
 		return err
 	}
 
+	missingFile := filepath.Join(dir, "missing")
+	exist, err := exists(missingFile)
+	if err != nil {
+		return err
+	}
+
+	if exist {
+		//fmt.Printf("%v: Missing\n", symbol)
+		return nil
+	}
 	exists, err := exists(isFile)
 	if err != nil {
 		return err
@@ -452,6 +467,9 @@ func (c *Command) pullStatements(ctx context.Context) error {
 		},
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "deadline exceeded") {
+			ioutil.WriteFile(missingFile, []byte(""), 0644)
+		}
 		return fmt.Errorf("%v: %v", symbol, err)
 	}
 
@@ -475,6 +493,11 @@ func (c *Command) pullStatements(ctx context.Context) error {
 }
 
 func (c *Command) bargain(ctx context.Context) error {
+	baseDir := c.opts.dir
+	if baseDir == "" {
+		return fmt.Errorf("dir must be specified")
+	}
+
 	symbols := c.args
 	for i, s := range symbols {
 		symbols[i] = strings.ToUpper(s)
@@ -482,10 +505,10 @@ func (c *Command) bargain(ctx context.Context) error {
 
 	financials := make([]*financials, 0)
 	for _, symbol := range symbols {
-        if symbol == "-" {
-            continue
-        }
-		dir := filepath.Join(baseDir, "XPAR", symbol)
+		if symbol == "-" {
+			continue
+		}
+		dir := filepath.Join(baseDir, symbol)
 
 		fin, err := c.financials(ctx, dir)
 		if err != nil {
@@ -512,7 +535,9 @@ func (c *Command) bargain(ctx context.Context) error {
 		pe := fin.Valuation.PriceToEarnings["Current"]
 		pb := fin.Valuation.PriceToBook["Current"]
 
-		if (0 < pe) && (pe <= 10) && (0 < pb) && (pb <= 1) {
+		if (0 < pe) &&
+			(pe <= 7.5) &&
+			(pb <= 1) {
 
 			fmt.Printf(
 				"%v\t%.2f\t%.2f\n",
@@ -530,11 +555,30 @@ func (c *Command) financials(
 	ctx context.Context,
 	dir string,
 ) (*financials, error) {
+	file := filepath.Join(dir, "is.json")
+	var incomeStatement statement
+	err := c.decodeStatement(file, &incomeStatement)
+	if err != nil {
+		return nil, err
+	}
 
-	//	cashFlows, err := c.cashFlows(ctx, dir)
-	//	if err != nil {
-	//		return nil, err
-	//	}
+	file = filepath.Join(dir, "bs.json")
+	var balanceSheet statement
+	err = c.decodeStatement(file, &balanceSheet)
+	if err != nil {
+		return nil, err
+	}
+
+	file = filepath.Join(dir, "cf.json")
+	var cashFlow statement
+	err = c.decodeStatement(file, &cashFlow)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("%v\n", incomeStatement.TotalRevenue("2020"))
+	fmt.Printf("%v\n", balanceSheet.TotalAssets("2020"))
+	fmt.Printf("%v\n", cashFlow.FreeCashFlow("2020"))
 
 	valuation, err := c.valuation(ctx, dir)
 	if err != nil {
@@ -542,102 +586,30 @@ func (c *Command) financials(
 	}
 
 	financials := &financials{
-		//		CashFlows: cashFlows,
-		Valuation: valuation,
+		IncomeStatement: &incomeStatement,
+		BalanceSheet:    &balanceSheet,
+		CashFlow:        &cashFlow,
+		Valuation:       valuation,
 	}
 
 	return financials, nil
 }
 
-func (c *Command) cashFlows(
-	ctx context.Context,
-	dir string,
-) ([]*cashFlow, error) {
-	cashFlows := make([]*cashFlow, 0)
-
-	cf := filepath.Join(dir, "cf", "table.xls")
-	xf, err := xls.Open(cf, "utf-8")
+func (c *Command) decodeStatement(
+	file string,
+	statement interface{},
+) error {
+	f, err := os.Open(file)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	table := xf.ReadAllCells(10000000)
-	//fmt.Println(table)
-
-	opCashRowNum := rowNum(
-		"Cash Flow from Operating Activities, Indirect",
-		table,
-	)
-
-	purPPPERowNum := rowNum(
-		"Purchase of Property, Plant and Equipment",
-		table,
-	)
-
-	capExRowNum := rowNum(
-		"Capital Expenditure",
-		table,
-	)
-
-	if capExRowNum == -1 && purPPPERowNum == -1 {
-		return nil, fmt.Errorf("cap ex not found: %v", cf)
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	err = dec.Decode(statement)
+	if err != nil && err != io.EOF {
+		return err
 	}
-
-	//	fmt.Println("Op cash:", opCashRowNum)
-	//	fmt.Println("Cap Ex", capExRowNum)
-	//	fmt.Println("Pur PPPE:", purPPPERowNum)
-
-	for i := 1; i < len(table[0]); i++ {
-		period := table[0][i]
-		if period != "" {
-
-			var opCash float64
-			opCashStr := table[opCashRowNum][i]
-			if opCashStr != "" {
-				opCashStr = strings.ReplaceAll(opCashStr, ",", "")
-				v, err := strconv.ParseFloat(opCashStr, 64)
-				if err != nil {
-					return nil, err
-				}
-				opCash = v
-			}
-
-			var capEx float64
-			if capExRowNum > -1 {
-				capExStr := table[capExRowNum][i]
-				if capExStr != "" {
-					capExStr = strings.ReplaceAll(capExStr, ",", "")
-					v, err := strconv.ParseFloat(capExStr, 64)
-					if err != nil {
-						return nil, err
-					}
-					capEx += v
-				}
-			}
-
-			if purPPPERowNum > -1 {
-				purPPPEStr := table[purPPPERowNum][i]
-				if purPPPEStr != "" {
-					purPPPEStr = strings.ReplaceAll(purPPPEStr, ",", "")
-					v, err := strconv.ParseFloat(purPPPEStr, 64)
-					if err != nil {
-						return nil, err
-					}
-					capEx += v
-				}
-			}
-
-			cashFlow := &cashFlow{
-				Period: period,
-				OpCash: opCash,
-				CapEx:  capEx,
-			}
-
-			cashFlows = append(cashFlows, cashFlow)
-		}
-	}
-
-	return cashFlows, nil
+	return nil
 }
 
 func rowNum(label string, table [][]string) int {
@@ -727,29 +699,100 @@ func valueMap(
 }
 
 type financials struct {
-	Symbol    string
-	CashFlows []*cashFlow
-	Valuation *valuation
+	Symbol          string
+	IncomeStatement *statement
+	BalanceSheet    *statement
+	CashFlow        *statement
+	Valuation       *valuation
 }
 
-func (f *financials) HasFreeCashFlow() bool {
-	neg := 0
-	for _, cf := range f.CashFlows {
-		if cf.FreeCashFlow() <= 0 {
-			neg += 1
+type statement struct {
+	ColumnDefs []string             `json:"columnDefs"`
+	Rows       []*statementSubLevel `json:"rows"`
+	Footer     *statementFooter      `json:"footer"`
+}
+
+type statementSubLevel struct {
+	Label     string               `json:"label"`
+	SubLevels []*statementSubLevel `json:"subLevel"`
+	Datum     []interface{}        `json:"datum"`
+}
+
+type statementFooter struct {
+	Currency          string `json:"currency"`
+	CurrencySymbol    string `json:"currencySymbol"`
+	OrderOfMagnitude  string `json:"orderOfMagnitude"`
+	FiscalYearEndDate string `json:"fiscalYearEndDate"`
+}
+
+func (s *statement) TotalRevenue(period string) float64 {
+	return s.value(
+		s.periodIndex(period),
+		"Total Revenue",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) TotalAssets(period string) float64 {
+	return s.value(
+		s.periodIndex(period),
+		"Total Assets",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) FreeCashFlow(period string) float64 {
+	opCash := s.value(
+		s.periodIndex(period),
+		"Cash Flow from Operating Activities",
+		s.Rows[0],
+	)
+
+	purPPPPE := s.value(
+		s.periodIndex(period),
+		"Purchase of Property, Plant and Equipment",
+		s.Rows[0],
+	)
+
+	capEx := s.value(
+		s.periodIndex(period),
+		"Capital Expenditure",
+		s.Rows[0],
+	)
+
+	return opCash + purPPPPE + capEx
+}
+
+func (s *statement) periodIndex(period string) int {
+	for i, v := range s.ColumnDefs {
+		if v == period {
+			return i
 		}
 	}
-	return neg <= 0
+	return -1
 }
 
-type cashFlow struct {
-	Period string
-	OpCash float64
-	CapEx  float64
-}
+func (s *statement) value(
+	periodIndex int,
+	label string,
+	level *statementSubLevel,
+) float64 {
+	levels := make([]*statementSubLevel, 0)
+	levels = append(levels, level)
 
-func (cf *cashFlow) FreeCashFlow() float64 {
-	return cf.OpCash + cf.CapEx
+	for len(levels) > 0 {
+		next := levels[0]
+		levels = levels[1:]
+
+		if strings.HasPrefix(next.Label, label) {
+			v := next.Datum[periodIndex]
+			num, _ := v.(float64)
+			return num
+		}
+
+		levels = append(levels, next.SubLevels...)
+	}
+	return 0
 }
 
 type valuation struct {
@@ -757,8 +800,6 @@ type valuation struct {
 	PriceToEarnings map[string]float64
 	PriceToBook     map[string]float64
 }
-
-const baseDir = "c:\\Users\\Admin\\Go\\src\\divyield\\statements"
 
 func morningstarURL(
 	u string,
@@ -793,11 +834,16 @@ func exists(f string) (bool, error) {
 }
 
 func (c *Command) pullValuation(ctx context.Context) error {
-    if len(c.args) == 0 {
-        return nil
-    }
+	baseDir := c.opts.dir
+	if baseDir == "" {
+		return fmt.Errorf("dir must be specified")
+	}
 
-    u, symbol, exch := morningstarURLValuation(c.args[0])
+	if len(c.args) == 0 {
+		return nil
+	}
+
+	u, symbol, exch := morningstarURLValuation(c.args[0])
 	dir := filepath.Join(baseDir, exch, symbol)
 
 	missingFile := filepath.Join(dir, "missing")
@@ -805,10 +851,10 @@ func (c *Command) pullValuation(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-    if exist {
+	if exist {
 		//fmt.Printf("%v: Missing\n", symbol)
-        return nil
-    }
+		return nil
+	}
 
 	valFile := filepath.Join(dir, "valuation.csv")
 
@@ -834,9 +880,9 @@ func (c *Command) pullValuation(ctx context.Context) error {
 		},
 	)
 	if err != nil {
-        if strings.Contains(err.Error(), "deadline exceeded") {
-	        ioutil.WriteFile(missingFile, []byte(""), 0644)
-        }
+		if strings.Contains(err.Error(), "deadline exceeded") {
+			ioutil.WriteFile(missingFile, []byte(""), 0644)
+		}
 		return fmt.Errorf("%v: %v", symbol, err)
 	}
 

@@ -232,34 +232,34 @@ func (s *financialsService) Statements(
 	)
 	defer cancel()
 
-    var isRequestID string
-    var bsRequestID string
-    var cfRequestID string
+	var isRequestID string
+	var bsRequestID string
+	var cfRequestID string
 	statementsCh := make(chan string, 3)
 
 	chromedp.ListenTarget(ctx, func(v interface{}) {
-        switch ev := v.(type) {
+		switch ev := v.(type) {
 		case *network.EventRequestWillBeSent:
 			if ev.Type == "XHR" && strings.Contains(
-                ev.Request.URL,
-                "incomeStatement",
-            ) {
-                isRequestID = ev.RequestID.String()
-            }
+				ev.Request.URL,
+				"incomeStatement",
+			) {
+				isRequestID = ev.RequestID.String()
+			}
 
 			if ev.Type == "XHR" && strings.Contains(
 				ev.Request.URL,
 				"balanceSheet",
 			) {
-                bsRequestID = ev.RequestID.String()
-            }
+				bsRequestID = ev.RequestID.String()
+			}
 
 			if ev.Type == "XHR" && strings.Contains(
 				ev.Request.URL,
 				"cashFlow",
-			){
-                cfRequestID = ev.RequestID.String()
-            }
+			) {
+				cfRequestID = ev.RequestID.String()
+			}
 
 		case *network.EventLoadingFinished:
 			is := isRequestID == ev.RequestID.String()
@@ -283,14 +283,14 @@ func (s *financialsService) Statements(
 					statementsCh <- string(body)
 				}
 			}()
-        }
+		}
 	})
 
 	actions := make([]chromedp.Action, 0)
 
 	actions = append(
 		actions,
-        network.Enable(),
+		network.Enable(),
 		chromedp.Navigate(in.URL),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
