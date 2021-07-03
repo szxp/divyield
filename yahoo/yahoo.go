@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	//"github.com/chromedp/cdproto/browser"
@@ -168,48 +169,206 @@ func (s *financialsService) parseCashFlow(
 func (s *financialsService) PullValuation(
 	ctx context.Context,
 	in *divyield.FinancialsPullValuationInput,
-) (*divyield.FinancialsPullValuationOutput, error) {
-	opts := append(
-		chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", false),
-	)
-	actx, cancel := chromedp.NewExecAllocator(
-		context.Background(),
-		opts...,
-	)
-	ctx, cancel = chromedp.NewContext(
-		actx,
-		chromedp.WithLogf(log.Printf),
-		//chromedp.WithDebugf(log.Printf),
-		chromedp.WithErrorf(log.Printf),
-	)
-	defer cancel()
+) chan *divyield.FinancialsPullValuationOutput {
+	resCh := make(chan *divyield.FinancialsPullValuationOutput)
+	jobCh := make(chan string)
+	var wg sync.WaitGroup
 
-	var valuation [][]string
-	actions := make([]chromedp.Action, 0)
-	actions = append(
-		actions,
-		chromedp.Navigate(in.URL),
-		runWithTimeOut(&ctx, 5, chromedp.Tasks{
-			chromedp.WaitVisible(
-				"//span[contains(text(),'Price/Earnings')]",
-				chromedp.BySearch,
-			),
-		}),
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-		chromedp.Evaluate(libJS, &[]byte{}),
-		chromedp.Evaluate(extractValuation, &valuation),
-	)
+		opts := append(
+			chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", false),
+		)
+		actx, cancel := chromedp.NewExecAllocator(
+			context.Background(),
+			opts...,
+		)
+		ctx, cancel = chromedp.NewContext(
+			actx,
+			chromedp.WithLogf(log.Printf),
+			//chromedp.WithDebugf(log.Printf),
+			chromedp.WithErrorf(log.Printf),
+		)
+		defer cancel()
 
-	err := chromedp.Run(ctx, actions...)
-	if err != nil {
-		return nil, err
-	}
+		var isRequestID string
+		var bsRequestID string
+		var cfRequestID string
+		statementsCh := make(chan string, 3)
 
-	return &divyield.FinancialsPullValuationOutput{
-		Valuation: valuation,
-	}, nil
+		chromedp.ListenTarget(ctx, func(v interface{}) {
+			switch ev := v.(type) {
+			case *network.EventRequestWillBeSent:
+				if ev.Type == "XHR" && strings.Contains(
+					ev.Request.URL,
+					"incomeStatement",
+				) {
+					isRequestID = ev.RequestID.String()
+				}
 
+				if ev.Type == "XHR" && strings.Contains(
+					ev.Request.URL,
+					"balanceSheet",
+				) {
+					bsRequestID = ev.RequestID.String()
+				}
+
+				if ev.Type == "XHR" && strings.Contains(
+					ev.Request.URL,
+					"cashFlow",
+				) {
+					cfRequestID = ev.RequestID.String()
+				}
+
+			case *network.EventLoadingFinished:
+				is := isRequestID == ev.RequestID.String()
+				bs := bsRequestID == ev.RequestID.String()
+				cf := cfRequestID == ev.RequestID.String()
+
+				if !is && !bs && !cf {
+					return
+				}
+
+				go func() {
+					c := chromedp.FromContext(ctx)
+					rbp := network.GetResponseBody(ev.RequestID)
+					body, err := rbp.Do(
+						cdp.WithExecutor(ctx, c.Target),
+					)
+					if err != nil {
+						fmt.Println(err)
+					}
+					if err == nil {
+						statementsCh <- string(body)
+					}
+				}()
+			}
+		})
+
+		for u := range jobCh {
+		    isRequestID = ""
+		    bsRequestID = ""
+		    cfRequestID = ""
+
+			var valuation [][]string
+			actions := make([]chromedp.Action, 0)
+			actions = append(
+				actions,
+				chromedp.Navigate(changeTail(u, "valuation")),
+				runWithTimeOut(&ctx, 5, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//span[contains(text(),'Price/Earnings')]",
+						chromedp.BySearch,
+					),
+				}),
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(extractValuation, &valuation),
+				chromedp.Navigate(changeTail(u, "financials")),
+				runWithTimeOut(&ctx, 5, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//span[contains(text(),'Normalized Diluted EPS')]",
+						chromedp.BySearch,
+					),
+				}),
+
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(clickIncStatLink, &[]byte{}),
+				runWithTimeOut(&ctx, 5, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//div[contains(text(),'Total Revenue')]",
+						chromedp.BySearch,
+					),
+				}),
+
+				chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
+				runWithTimeOut(&ctx, 5, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//div[contains(text(),'Total Assets')]",
+						chromedp.BySearch,
+					),
+				}),
+
+				chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
+				runWithTimeOut(&ctx, 5, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//div[contains(text(),'Cash Flow from Operating Activities')]",
+						chromedp.BySearch,
+					),
+				}),
+			)
+
+			res := &divyield.FinancialsPullValuationOutput{
+				URL: u,
+			}
+
+			err := chromedp.Run(ctx, actions...)
+			if err != nil {
+				res.Err = err
+				resCh <- res
+				continue
+			}
+
+			var i int
+			var is, bs, cf, s string
+			for {
+				select {
+				case s = <-statementsCh:
+				case <-time.After(5 * time.Second):
+					res.Err = fmt.Errorf("statements timeout")
+					resCh <- res
+					continue
+				}
+
+				if strings.Contains(s, ":\"income-statement\"") {
+					is = s
+					i += 1
+				} else if strings.Contains(s, ":\"balance-sheet\"") {
+					bs = s
+					i += 1
+				} else if strings.Contains(s, ":\"cash-flow\"") {
+					cf = s
+					i += 1
+				} else {
+					res.Err = fmt.Errorf("unexpected statement: %v", s)
+                    resCh <- res
+                    continue
+				}
+				if i == 3 {
+					break
+				}
+			}
+
+			res.Valuation = valuation
+			res.IncomeStatement = is
+			res.BalanceSheet = bs
+			res.CashFlow = cf
+			resCh <- res
+		}
+	}()
+
+	go func() {
+		for _, u := range in.URLs {
+			jobCh <- u
+		}
+		close(jobCh)
+		wg.Wait()
+		close(resCh)
+	}()
+
+	return resCh
+}
+
+func changeTail(
+	u string,
+	tail string,
+) string {
+	parts := strings.Split(u, "/")
+	parts = parts[0 : len(parts)-1]
+	parts = append(parts, tail)
+	return strings.Join(parts, "/")
 }
 
 func (s *financialsService) Statements(
@@ -307,13 +466,6 @@ func (s *financialsService) Statements(
 				chromedp.BySearch,
 			),
 		}),
-		/*
-			browser.SetDownloadBehavior(
-				browser.SetDownloadBehaviorBehaviorAllowAndName).
-				WithDownloadPath(isDir),
-			chromedp.Evaluate(clickExport, &[]byte{}),
-			chromedp.Sleep(2*time.Second),
-		*/
 
 		chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
@@ -322,13 +474,6 @@ func (s *financialsService) Statements(
 				chromedp.BySearch,
 			),
 		}),
-		/*
-			browser.SetDownloadBehavior(
-				browser.SetDownloadBehaviorBehaviorAllowAndName).
-				WithDownloadPath(bsDir),
-			chromedp.Evaluate(clickExport, &[]byte{}),
-			chromedp.Sleep(2*time.Second),
-		*/
 
 		chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
@@ -337,14 +482,6 @@ func (s *financialsService) Statements(
 				chromedp.BySearch,
 			),
 		}),
-
-		/*
-			browser.SetDownloadBehavior(
-				browser.SetDownloadBehaviorBehaviorAllowAndName).
-				WithDownloadPath(cfDir),
-			chromedp.Evaluate(clickExport, &[]byte{}),
-		*/
-		//chromedp.Sleep(5*time.Second),
 	)
 
 	err := chromedp.Run(ctx, actions...)

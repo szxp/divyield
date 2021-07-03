@@ -538,9 +538,10 @@ func (c *Command) bargain(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("%v: %v", symbol, err)
 		}
-		fin.Symbol = symbol
-
-		financials = append(financials, fin)
+		if fin != nil {
+			fin.Symbol = symbol
+			financials = append(financials, fin)
+		}
 	}
 
 	sort.SliceStable(
@@ -566,40 +567,40 @@ func (c *Command) bargain(ctx context.Context) error {
 		fcf2017 := fin.CashFlow.FreeCashFlow("2017")
 		fcf2016 := fin.CashFlow.FreeCashFlow("2016")
 
-        marginTTM := fin.IncomeStatement.EBITDAMargin("TTM")
-        margin2020 := fin.IncomeStatement.EBITDAMargin("2020")
-        margin2019 := fin.IncomeStatement.EBITDAMargin("2019")
-        margin2018 := fin.IncomeStatement.EBITDAMargin("2018")
-        margin2017 := fin.IncomeStatement.EBITDAMargin("2017")
-        margin2016 := fin.IncomeStatement.EBITDAMargin("2016")
+		marginTTM := fin.IncomeStatement.EBITDAMargin("TTM")
+		margin2020 := fin.IncomeStatement.EBITDAMargin("2020")
+		margin2019 := fin.IncomeStatement.EBITDAMargin("2019")
+		margin2018 := fin.IncomeStatement.EBITDAMargin("2018")
+		margin2017 := fin.IncomeStatement.EBITDAMargin("2017")
+		margin2016 := fin.IncomeStatement.EBITDAMargin("2016")
 
 		if (0 < pe) &&
 			(pe <= 7.5) &&
 			(pb <= 1) &&
 			fcfTTM > 0 &&
-            fcf2020 >= 0 &&
-            fcf2019 >= 0 &&
-            fcf2018 >= 0 &&
-            fcf2017 >= 0 &&
-            fcf2016 >= 0 &&
+			fcf2020 >= 0 &&
+			fcf2019 >= 0 &&
+			fcf2018 >= 0 &&
+			fcf2017 >= 0 &&
+			fcf2016 >= 0 &&
 			marginTTM > 0 &&
-            margin2020 >= 0 &&
-            margin2019 >= 0 &&
-            margin2018 >= 0 &&
-            margin2017 >= 0 &&
-            margin2016 >= 0 {
+			margin2020 >= 0 &&
+			margin2019 >= 0 &&
+			margin2018 >= 0 &&
+			margin2017 >= 0 &&
+			margin2016 >= 0 {
 
 			fmt.Printf(
 				"%v\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n",
 				fin.Symbol,
 				pe,
 				pb,
-                marginTTM,
-                margin2020,
-                margin2019,
-                margin2018,
-                margin2017,
-                margin2016,
+				marginTTM,
+				margin2020,
+				margin2019,
+				margin2018,
+				margin2017,
+				margin2016,
 			)
 		}
 	}
@@ -612,13 +613,27 @@ func (c *Command) financials(
 	dir string,
 ) (*financials, error) {
 	file := filepath.Join(dir, "is.json")
+	exist, err := exists(file)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
 	var incomeStatement statement
-	err := c.decodeStatement(file, &incomeStatement)
+	err = c.decodeStatement(file, &incomeStatement)
 	if err != nil {
 		return nil, err
 	}
 
 	file = filepath.Join(dir, "bs.json")
+	exist, err = exists(file)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
 	var balanceSheet statement
 	err = c.decodeStatement(file, &balanceSheet)
 	if err != nil {
@@ -626,6 +641,13 @@ func (c *Command) financials(
 	}
 
 	file = filepath.Join(dir, "cf.json")
+	exist, err = exists(file)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
 	var cashFlow statement
 	err = c.decodeStatement(file, &cashFlow)
 	if err != nil {
@@ -778,89 +800,89 @@ type statementFooter struct {
 }
 
 func (s *statement) Revenue(period string) float64 {
-    intRev := s.value(
-        s.periodIndex(period),
-        "Interest Income, Revenue",
+	intRev := s.value(
+		s.periodIndex(period),
+		"Interest Income, Revenue",
 		s.Rows[0],
-    )
-    nonIntRev := s.value(
-        s.periodIndex(period),
-        "Non-Interest Income",
+	)
+	nonIntRev := s.value(
+		s.periodIndex(period),
+		"Non-Interest Income",
 		s.Rows[0],
-    )
-    bank := intRev > 0
+	)
+	bank := intRev > 0
 
-    totRev := s.value(
-        s.periodIndex(period),
-        "Total Revenue",
+	totRev := s.value(
+		s.periodIndex(period),
+		"Total Revenue",
 		s.Rows[0],
-    )
+	)
 
-    if bank {
-        return intRev + nonIntRev
-    }
-    return totRev
+	if bank {
+		return intRev + nonIntRev
+	}
+	return totRev
 }
 
 func (s *statement) EBITDA(period string) float64 {
-    intRev := s.value(
-        s.periodIndex(period),
-        "Interest Income, Revenue",
+	intRev := s.value(
+		s.periodIndex(period),
+		"Interest Income, Revenue",
 		s.Rows[0],
-    )
+	)
 
-    bank := intRev > 0
-    rev := s.Revenue(period)
+	bank := intRev > 0
+	rev := s.Revenue(period)
 
-    var cogs float64
-    if bank {
-        cogs += s.value(
-            s.periodIndex(period),
-            "Interest Expense, Cost of Revenue",
-		    s.Rows[0],
-        )
-    } else {
-        cogs += s.value(
-            s.periodIndex(period),
-            "Cost of Revenue",
-		    s.Rows[0],
-        )
-    }
+	var cogs float64
+	if bank {
+		cogs += s.value(
+			s.periodIndex(period),
+			"Interest Expense, Cost of Revenue",
+			s.Rows[0],
+		)
+	} else {
+		cogs += s.value(
+			s.periodIndex(period),
+			"Cost of Revenue",
+			s.Rows[0],
+		)
+	}
 
-    var opIncExp float64
-    if bank {
-        opIncExp += s.value(
-            s.periodIndex(period),
-            "Non-Interest Expenses",
-		    s.Rows[0],
-        )
-    } else {
-        opIncExp += s.value(
-            s.periodIndex(period),
-            "Operating Income/Expenses",
-		    s.Rows[0],
-        )
-    }
+	var opIncExp float64
+	if bank {
+		opIncExp += s.value(
+			s.periodIndex(period),
+			"Non-Interest Expenses",
+			s.Rows[0],
+		)
+	} else {
+		opIncExp += s.value(
+			s.periodIndex(period),
+			"Operating Income/Expenses",
+			s.Rows[0],
+		)
+	}
 
-    depExp := s.value(
-        s.periodIndex(period),
-        "Depreciation, Amortization and Depletion",
+	depExp := s.value(
+		s.periodIndex(period),
+		"Depreciation, Amortization and Depletion",
 		s.Rows[0],
-    )
+	)
 
-//    fmt.Println(period)
-//    fmt.Println("rev", rev)
-//    fmt.Println("cogs", cogs)
-//    fmt.Println("opIncExp", opIncExp)
-//    fmt.Println("depExp", depExp)
-    return rev + cogs + opIncExp + (-1 * depExp)
+	//    fmt.Println(period)
+	//    fmt.Println("rev", rev)
+	//    fmt.Println("cogs", cogs)
+	//    fmt.Println("opIncExp", opIncExp)
+	//    fmt.Println("depExp", depExp)
+	return rev + cogs + opIncExp + (-1 * depExp)
 }
 
 func (s *statement) EBITDAMargin(period string) float64 {
-    rev := s.Revenue(period)
-    ebitda := s.EBITDA(period)
-    margin := (ebitda / rev) * 100
-    return margin
+	rev := s.Revenue(period)
+	ebitda := s.EBITDA(period)
+	margin := (ebitda / rev) * 100
+	return margin
 }
 
 func (s *statement) TotalAssets(period string) float64 {
@@ -907,9 +929,9 @@ func (s *statement) value(
 	label string,
 	level *statementSubLevel,
 ) float64 {
-    if periodIndex == -1 {
-        return 0
-    }
+	if periodIndex == -1 {
+		return 0
+	}
 
 	levels := make([]*statementSubLevel, 0)
 	levels = append(levels, level)
@@ -985,56 +1007,87 @@ func (c *Command) pullValuation(ctx context.Context) error {
 		return nil
 	}
 
-	u, symbol, exch := morningstarURLValuation(c.args[0])
-	dir := filepath.Join(baseDir, exch, symbol)
-
-	missingFile := filepath.Join(dir, "missing")
-	exist, err = exists(missingFile)
-	if err != nil {
-		return err
-	}
-	if exist {
-		//fmt.Printf("%v: Missing\n", symbol)
-		return nil
-	}
-
-	valFile := filepath.Join(dir, "valuation.csv")
-
-	err = os.MkdirAll(dir, 0777)
-	if err != nil {
-		return err
+	urls := make([]string, 0, len(c.args))
+	for _, u := range c.args {
+		_, symbol, exch := morningstarURLValuation(u)
+		dir := filepath.Join(baseDir, exch, symbol)
+		exist, err = exists(dir)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			urls = append(urls, u)
+		}
 	}
 
-	exist, err = exists(valFile)
-	if err != nil {
-		return err
-	}
-
-	if exist {
-		//fmt.Printf("%v: OK\n", symbol)
-		return nil
-	}
-
-	out, err := c.opts.financialsService.PullValuation(
+	resCh := c.opts.financialsService.PullValuation(
 		ctx,
 		&divyield.FinancialsPullValuationInput{
-			URL: u,
+			URLs: urls,
 		},
 	)
-	if err != nil {
-		if strings.Contains(err.Error(), "deadline exceeded") {
-			ioutil.WriteFile(missingFile, []byte(""), 0644)
-		}
-		return fmt.Errorf("%v: %v", symbol, err)
-	}
 
-	f, err := os.Create(valFile)
+	for res := range resCh {
+		_, symbol, exch := morningstarURLValuation(res.URL)
+		err := os.MkdirAll(
+			filepath.Join(baseDir, exch, symbol),
+			0777,
+		)
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			continue
+		}
+
+		err = res.Err
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			if strings.Contains(
+				err.Error(),
+				"deadline exceeded",
+			) {
+				err := ioutil.WriteFile(
+					missingFile(baseDir, res.URL),
+					[]byte(""),
+					0644,
+				)
+				if err != nil {
+					fmt.Printf("%v: %v\n", symbol, err)
+				}
+			}
+			continue
+		}
+
+		valFile := valuationFile(baseDir, res.URL)
+		err = writeFile(valFile, res.Valuation)
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			continue
+		}
+	}
+	return nil
+}
+
+func writeFile(p string, records [][]string) error {
+	err := os.MkdirAll(filepath.Dir(p), 0777)
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(p)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	return writeCSV(f, records)
+}
 
-	return writeCSV(f, out.Valuation)
+func missingFile(baseDir, u string) string {
+	_, symbol, exch := morningstarURLValuation(u)
+	return filepath.Join(baseDir, exch, symbol, "missing")
+}
+
+func valuationFile(baseDir, u string) string {
+	_, symbol, exch := morningstarURLValuation(u)
+	return filepath.Join(baseDir, exch, symbol, "valuation.csv")
 }
 
 func writeCSV(o io.Writer, records [][]string) error {

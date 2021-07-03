@@ -16,5 +16,6 @@ urls="$(cat urls.csv | cut -f2)"
 
 for i in $urls; do
     echo $i
-    ./main.exe pull-valuation -directory="statements" "$i"
+    ./main.exe pull-valuation  -directory="statements" "$i"
+    ./main.exe pull-statements -directory="statements" "$i"
 done
