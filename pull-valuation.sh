@@ -10,12 +10,6 @@ function trap_ctrlc () {
  
 trap "trap_ctrlc" 2
 
-go build cmd/divyield/main.go
+go build cmd/divyield/main.go && \
+    ./main.exe pull-valuation  -directory="statements" urls.csv
 
-urls="$(cat urls.csv | cut -f2)"
-
-for i in $urls; do
-    echo $i
-    ./main.exe pull-valuation  -directory="statements" "$i"
-    ./main.exe pull-statements -directory="statements" "$i"
-done

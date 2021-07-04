@@ -575,7 +575,7 @@ func (c *Command) bargain(ctx context.Context) error {
 		margin2016 := fin.IncomeStatement.EBITDAMargin("2016")
 
 		if (0 < pe) &&
-			(pe <= 7.5) &&
+			(pe <= 10) &&
 			(pb <= 1) &&
 			fcfTTM > 0 &&
 			fcf2020 >= 0 &&
@@ -894,6 +894,10 @@ func (s *statement) TotalAssets(period string) float64 {
 }
 
 func (s *statement) FreeCashFlow(period string) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
+
 	opCash := s.value(
 		s.periodIndex(period),
 		"Cash Flow from Operating Activities",
@@ -1003,29 +1007,68 @@ func (c *Command) pullValuation(ctx context.Context) error {
 		return fmt.Errorf("dir not found: %v", baseDir)
 	}
 
-	if len(c.args) == 0 {
-		return nil
+	urlsFile := c.args[0]
+	uf, err := os.Open(urlsFile)
+	if err != nil {
+		return err
 	}
+	defer uf.Close()
 
-	urls := make([]string, 0, len(c.args))
-	for _, u := range c.args {
-		_, symbol, exch := morningstarURLValuation(u)
-		dir := filepath.Join(baseDir, exch, symbol)
-		exist, err = exists(dir)
-		if err != nil {
-			return err
-		}
-		if !exist {
-			urls = append(urls, u)
-		}
-	}
-
-	resCh := c.opts.financialsService.PullValuation(
+	jobCh, resCh := c.opts.financialsService.PullValuation(
 		ctx,
-		&divyield.FinancialsPullValuationInput{
-			URLs: urls,
-		},
+		&divyield.FinancialsPullValuationInput{},
 	)
+
+	go func() {
+		scanner := bufio.NewScanner(uf)
+	SCANNER:
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				break SCANNER
+			default:
+				// noop
+			}
+
+			line := scanner.Text()
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			parts := strings.Split(line, "\t")
+			u := parts[1]
+
+			_, symbol, exch := morningstarURLValuation(u)
+
+            m := filepath.Join(baseDir, exch, symbol, "missing")
+			exist, err = exists(m)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			if exist {
+				continue
+			}
+
+            dir := filepath.Join(baseDir, exch, symbol, "is.json")
+			exist, err = exists(dir)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			if exist {
+				continue
+			}
+
+		    fmt.Printf("%v: %v\n", symbol, u)
+			jobCh <- u
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Println(err)
+		}
+		close(jobCh)
+	}()
 
 	for res := range resCh {
 		_, symbol, exch := morningstarURLValuation(res.URL)
@@ -1063,6 +1106,36 @@ func (c *Command) pullValuation(ctx context.Context) error {
 			fmt.Printf("%v: %v\n", symbol, err)
 			continue
 		}
+
+		err = ioutil.WriteFile(
+			incomeStatementFile(baseDir, res.URL),
+			[]byte(res.IncomeStatement),
+			0644,
+		)
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			continue
+		}
+
+		err = ioutil.WriteFile(
+			balanceSheetFile(baseDir, res.URL),
+			[]byte(res.BalanceSheet),
+			0644,
+		)
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			continue
+		}
+
+		err = ioutil.WriteFile(
+			cashFlowFile(baseDir, res.URL),
+			[]byte(res.CashFlow),
+			0644,
+		)
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			continue
+		}
 	}
 	return nil
 }
@@ -1088,6 +1161,21 @@ func missingFile(baseDir, u string) string {
 func valuationFile(baseDir, u string) string {
 	_, symbol, exch := morningstarURLValuation(u)
 	return filepath.Join(baseDir, exch, symbol, "valuation.csv")
+}
+
+func incomeStatementFile(baseDir, u string) string {
+	_, symbol, exch := morningstarURLValuation(u)
+	return filepath.Join(baseDir, exch, symbol, "is.json")
+}
+
+func balanceSheetFile(baseDir, u string) string {
+	_, symbol, exch := morningstarURLValuation(u)
+	return filepath.Join(baseDir, exch, symbol, "bs.json")
+}
+
+func cashFlowFile(baseDir, u string) string {
+	_, symbol, exch := morningstarURLValuation(u)
+	return filepath.Join(baseDir, exch, symbol, "cf.json")
 }
 
 func writeCSV(o io.Writer, records [][]string) error {

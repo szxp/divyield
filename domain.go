@@ -442,7 +442,7 @@ type FinancialsService interface {
 	PullValuation(
 		ctx context.Context,
 		in *FinancialsPullValuationInput,
-	) chan *FinancialsPullValuationOutput
+	) (chan string, chan *FinancialsPullValuationOutput)
 }
 
 type FinancialsCashFlowInput struct {
@@ -477,14 +477,14 @@ type FinancialsStatementsOutput struct {
 }
 
 type FinancialsPullValuationInput struct {
-	URLs []string
+	//URLs []string
 }
 
 type FinancialsPullValuationOutput struct {
-	URL       string
-	Valuation [][]string
+	URL             string
+	Valuation       [][]string
 	IncomeStatement string
 	BalanceSheet    string
 	CashFlow        string
-	Err       error
+	Err             error
 }

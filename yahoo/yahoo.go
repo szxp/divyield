@@ -6,7 +6,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	//"github.com/chromedp/cdproto/browser"
@@ -169,15 +168,11 @@ func (s *financialsService) parseCashFlow(
 func (s *financialsService) PullValuation(
 	ctx context.Context,
 	in *divyield.FinancialsPullValuationInput,
-) chan *divyield.FinancialsPullValuationOutput {
+) (chan string, chan *divyield.FinancialsPullValuationOutput) {
 	resCh := make(chan *divyield.FinancialsPullValuationOutput)
 	jobCh := make(chan string)
-	var wg sync.WaitGroup
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
 		opts := append(
 			chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.Flag("headless", false),
@@ -186,7 +181,7 @@ func (s *financialsService) PullValuation(
 			context.Background(),
 			opts...,
 		)
-		ctx, cancel = chromedp.NewContext(
+		ctx, cancel := chromedp.NewContext(
 			actx,
 			chromedp.WithLogf(log.Printf),
 			//chromedp.WithDebugf(log.Printf),
@@ -249,9 +244,9 @@ func (s *financialsService) PullValuation(
 		})
 
 		for u := range jobCh {
-		    isRequestID = ""
-		    bsRequestID = ""
-		    cfRequestID = ""
+			isRequestID = ""
+			bsRequestID = ""
+			cfRequestID = ""
 
 			var valuation [][]string
 			actions := make([]chromedp.Action, 0)
@@ -333,8 +328,8 @@ func (s *financialsService) PullValuation(
 					i += 1
 				} else {
 					res.Err = fmt.Errorf("unexpected statement: %v", s)
-                    resCh <- res
-                    continue
+					resCh <- res
+					continue
 				}
 				if i == 3 {
 					break
@@ -347,18 +342,10 @@ func (s *financialsService) PullValuation(
 			res.CashFlow = cf
 			resCh <- res
 		}
-	}()
-
-	go func() {
-		for _, u := range in.URLs {
-			jobCh <- u
-		}
-		close(jobCh)
-		wg.Wait()
 		close(resCh)
 	}()
 
-	return resCh
+	return jobCh, resCh
 }
 
 func changeTail(
