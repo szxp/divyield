@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+    "regexp"
 
 	//"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp"
@@ -168,8 +169,13 @@ func (s *financialsService) parseCashFlow(
 func (s *financialsService) PullValuation(
 	ctx context.Context,
 	in *divyield.FinancialsPullValuationInput,
-) (chan string, chan *divyield.FinancialsPullValuationOutput) {
-	resCh := make(chan *divyield.FinancialsPullValuationOutput)
+) (
+    chan string,
+    chan *divyield.FinancialsPullValuationOutput,
+) {
+	resCh := make(
+        chan *divyield.FinancialsPullValuationOutput,
+    )
 	jobCh := make(chan string)
 
 	go func() {
@@ -189,65 +195,56 @@ func (s *financialsService) PullValuation(
 		)
 		defer cancel()
 
-		var isRequestID string
-		var bsRequestID string
-		var cfRequestID string
-		statementsCh := make(chan string, 3)
+		responses := make(map[string]*response)
+		statementsCh := make(chan *response)
 
 		chromedp.ListenTarget(ctx, func(v interface{}) {
 			switch ev := v.(type) {
 			case *network.EventRequestWillBeSent:
-				if ev.Type == "XHR" && strings.Contains(
-					ev.Request.URL,
-					"incomeStatement",
-				) {
-					isRequestID = ev.RequestID.String()
+                reqID := ev.RequestID.String()
+				resp := &response{
+					URL: ev.Request.URL,
 				}
 
-				if ev.Type == "XHR" && strings.Contains(
-					ev.Request.URL,
-					"balanceSheet",
-				) {
-					bsRequestID = ev.RequestID.String()
-				}
-
-				if ev.Type == "XHR" && strings.Contains(
-					ev.Request.URL,
-					"cashFlow",
-				) {
-					cfRequestID = ev.RequestID.String()
+				if ev.Type == "XHR" &&
+					(resp.IsIS() ||
+						resp.IsBS() ||
+						resp.IsCF()) {
+				    //fmt.Println("reqID", reqID)
+					responses[reqID] = resp
 				}
 
 			case *network.EventLoadingFinished:
-				is := isRequestID == ev.RequestID.String()
-				bs := bsRequestID == ev.RequestID.String()
-				cf := cfRequestID == ev.RequestID.String()
-
-				if !is && !bs && !cf {
-					return
+				for reqID, resp := range responses {
+					if reqID == ev.RequestID.String() {
+						//fmt.Println("del reqID", reqID)
+						delete(responses, reqID)
+						go func() {
+							c := chromedp.FromContext(ctx)
+							rbp := network.GetResponseBody(
+								ev.RequestID,
+							)
+							body, err := rbp.Do(
+								cdp.WithExecutor(
+									ctx,
+									c.Target,
+								),
+							)
+							if err != nil {
+								fmt.Println(err)
+							} else {
+								resp.Body = string(body)
+								statementsCh <- resp
+							}
+						}()
+						break
+					}
 				}
-
-				go func() {
-					c := chromedp.FromContext(ctx)
-					rbp := network.GetResponseBody(ev.RequestID)
-					body, err := rbp.Do(
-						cdp.WithExecutor(ctx, c.Target),
-					)
-					if err != nil {
-						fmt.Println(err)
-					}
-					if err == nil {
-						statementsCh <- string(body)
-					}
-				}()
 			}
 		})
 
 		for u := range jobCh {
-			isRequestID = ""
-			bsRequestID = ""
-			cfRequestID = ""
-
+			var compID string
 			var valuation [][]string
 			actions := make([]chromedp.Action, 0)
 			actions = append(
@@ -260,6 +257,7 @@ func (s *financialsService) PullValuation(
 					),
 				}),
 				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(extractCompID, &compID),
 				chromedp.Evaluate(extractValuation, &valuation),
 				chromedp.Navigate(changeTail(u, "financials")),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
@@ -306,32 +304,48 @@ func (s *financialsService) PullValuation(
 				continue
 			}
 
-			var i int
-			var is, bs, cf, s string
+            if compID == "" {
+				res.Err = fmt.Errorf("CompID not found")
+				resCh <- res
+				continue
+            }
+			//fmt.Println("compID", compID)
+
+            var resp *response
+			var is, bs, cf string
 			for {
 				select {
-				case s = <-statementsCh:
+                case resp = <-statementsCh:
 				case <-time.After(5 * time.Second):
-					res.Err = fmt.Errorf("statements timeout")
+					res.Err = fmt.Errorf("Response timeout")
 					resCh <- res
 					continue
 				}
 
-				if strings.Contains(s, ":\"income-statement\"") {
-					is = s
-					i += 1
-				} else if strings.Contains(s, ":\"balance-sheet\"") {
-					bs = s
-					i += 1
-				} else if strings.Contains(s, ":\"cash-flow\"") {
-					cf = s
-					i += 1
+				if resp.CompID() != compID {
+					fmt.Printf(
+						"Ignore unexpected compID: %v\n",
+						resp.CompID(),
+					)
+					continue
+                }
+
+				if resp.IsIS() {
+					is = resp.Body
+				} else if resp.IsBS() {
+					bs = resp.Body
+				} else if resp.IsCF() {
+					cf = resp.Body
 				} else {
-					res.Err = fmt.Errorf("unexpected statement: %v", s)
+					res.Err = fmt.Errorf(
+						"Unexpected statement: %v",
+						resp.Body,
+					)
 					resCh <- res
 					continue
 				}
-				if i == 3 {
+
+				if is != "" && bs != "" && cf != "" {
 					break
 				}
 			}
@@ -346,6 +360,29 @@ func (s *financialsService) PullValuation(
 	}()
 
 	return jobCh, resCh
+}
+
+type response struct {
+	URL  string
+	Body string
+}
+
+func (r *response) CompID() string {
+	re := regexp.MustCompile(`/newfinancials/([^/]+)/`)
+	matches := re.FindStringSubmatch(r.URL)
+	return matches[1]
+}
+
+func (r *response) IsIS() bool {
+	return strings.Contains(r.URL, "incomeStatement")
+}
+
+func (r *response) IsBS() bool {
+	return strings.Contains(r.URL, "balanceSheet")
+}
+
+func (r *response) IsCF() bool {
+	return strings.Contains(r.URL, "cashFlow")
 }
 
 func changeTail(
@@ -529,6 +566,24 @@ func runWithTimeOut(
 }
 
 const libJS = `
+function compID() {
+    var scripts = document.querySelectorAll('script');
+    var i;
+    var match;
+    var s;
+    var re = /byId:{"([^"]+)"/;
+    for (i=0; i<scripts.length; i++) {
+        s = scripts[i].innerText;
+        if (s.includes('byId:{')) {
+            match = s.match(re);
+            console.log(match);
+            return match[1];
+        }
+    }
+    return "";
+}
+
+
 function valuation() {
     var i, k;
     var tr;
@@ -588,6 +643,8 @@ function clickRadio(label) {
   }
 }
 `
+const extractCompID = `compID();`
+
 const extractValuation = `valuation();`
 
 const clickIncStatLink = `clickA('Income Statement');`

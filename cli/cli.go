@@ -567,29 +567,55 @@ func (c *Command) bargain(ctx context.Context) error {
 		fcf2017 := fin.CashFlow.FreeCashFlow("2017")
 		fcf2016 := fin.CashFlow.FreeCashFlow("2016")
 
-		marginTTM := fin.IncomeStatement.EBITDAMargin("TTM")
-		margin2020 := fin.IncomeStatement.EBITDAMargin("2020")
-		margin2019 := fin.IncomeStatement.EBITDAMargin("2019")
-		margin2018 := fin.IncomeStatement.EBITDAMargin("2018")
-		margin2017 := fin.IncomeStatement.EBITDAMargin("2017")
-		margin2016 := fin.IncomeStatement.EBITDAMargin("2016")
+		fcf := fcfTTM +
+			fcf2020 +
+			fcf2019 +
+			fcf2018 +
+			fcf2017 +
+			fcf2016
+
+        niTTM := fin.IncomeStatement.NetIncome("TTM")
+		ni2020 := fin.IncomeStatement.NetIncome("2020")
+		ni2019 := fin.IncomeStatement.NetIncome("2019")
+		ni2018 := fin.IncomeStatement.NetIncome("2018")
+		ni2017 := fin.IncomeStatement.NetIncome("2017")
+		ni2016 := fin.IncomeStatement.NetIncome("2016")
+
+
+		marginTTM := fin.IncomeStatement.EBITMargin("TTM")
+		margin2020 := fin.IncomeStatement.EBITMargin("2020")
+		margin2019 := fin.IncomeStatement.EBITMargin("2019")
+		margin2018 := fin.IncomeStatement.EBITMargin("2018")
+		margin2017 := fin.IncomeStatement.EBITMargin("2017")
+		margin2016 := fin.IncomeStatement.EBITMargin("2016")
+
+		totEqu2020 := fin.BalanceSheet.TotalEquity("2020")
+		totEqu2019 := fin.BalanceSheet.TotalEquity("2019")
+		totEqu2018 := fin.BalanceSheet.TotalEquity("2018")
+		totEqu2017 := fin.BalanceSheet.TotalEquity("2017")
+		totEqu2016 := fin.BalanceSheet.TotalEquity("2016")
 
 		if (0 < pe) &&
-			(pe <= 10) &&
+			(pe <= 7.5) &&
 			(pb <= 1) &&
-			fcfTTM > 0 &&
-			fcf2020 >= 0 &&
-			fcf2019 >= 0 &&
-			fcf2018 >= 0 &&
-			fcf2017 >= 0 &&
-			fcf2016 >= 0 &&
+			fcf > 0 &&
+			niTTM > 0 &&
+			ni2020 >= 0 &&
+			ni2019 >= 0 &&
+			ni2018 >= 0 &&
+			ni2017 >= 0 &&
+			ni2016 >= 0 &&
 			marginTTM > 0 &&
 			margin2020 >= 0 &&
 			margin2019 >= 0 &&
 			margin2018 >= 0 &&
 			margin2017 >= 0 &&
-			margin2016 >= 0 {
-
+			margin2016 >= 0 &&
+		    totEqu2020 >= 0 &&
+		    totEqu2019 >= 0 &&
+		    totEqu2018 >= 0 &&
+		    totEqu2017 >= 0 &&
+		    totEqu2016 >= 0 {
 			fmt.Printf(
 				"%v\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n",
 				fin.Symbol,
@@ -824,79 +850,60 @@ func (s *statement) Revenue(period string) float64 {
 	return totRev
 }
 
-func (s *statement) EBITDA(period string) float64 {
-	intRev := s.value(
+func (s *statement) NetIncome(period string) float64 {
+	return s.value(
 		s.periodIndex(period),
-		"Interest Income, Revenue",
+		"Net Income Available to Common Stockholders",
 		s.Rows[0],
 	)
-
-	bank := intRev > 0
-	rev := s.Revenue(period)
-
-	var cogs float64
-	if bank {
-		cogs += s.value(
-			s.periodIndex(period),
-			"Interest Expense, Cost of Revenue",
-			s.Rows[0],
-		)
-	} else {
-		cogs += s.value(
-			s.periodIndex(period),
-			"Cost of Revenue",
-			s.Rows[0],
-		)
-	}
-
-	var opIncExp float64
-	if bank {
-		opIncExp += s.value(
-			s.periodIndex(period),
-			"Non-Interest Expenses",
-			s.Rows[0],
-		)
-	} else {
-		opIncExp += s.value(
-			s.periodIndex(period),
-			"Operating Income/Expenses",
-			s.Rows[0],
-		)
-	}
-
-	depExp := s.value(
-		s.periodIndex(period),
-		"Depreciation, Amortization and Depletion",
-		s.Rows[0],
-	)
-
-	//    fmt.Println(period)
-	//    fmt.Println("rev", rev)
-	//    fmt.Println("cogs", cogs)
-	//    fmt.Println("opIncExp", opIncExp)
-	//    fmt.Println("depExp", depExp)
-	return rev + cogs + opIncExp + (-1 * depExp)
 }
 
-func (s *statement) EBITDAMargin(period string) float64 {
+func (s *statement) EBIT(period string) float64 {
+	netInc := s.NetIncome(period)
+
+	intExp := s.value(
+		s.periodIndex(period),
+		"Interest Expense Net of Capitalized Interest",
+		s.Rows[0],
+	)
+
+	taxExp := s.value(
+		s.periodIndex(period),
+		"Provision for Income Tax",
+		s.Rows[0],
+	)
+
+//	fmt.Println(period)
+//	fmt.Println("net inc", netInc)
+//	fmt.Println("int", intExp)
+//	fmt.Println("tax", taxExp)
+
+	return netInc + (-1 * intExp) + (-1 * taxExp)
+}
+
+func (s *statement) EBITMargin(period string) float64 {
 	rev := s.Revenue(period)
-	ebitda := s.EBITDA(period)
-	margin := (ebitda / rev) * 100
+	ebit := s.EBIT(period)
+	margin := (ebit / rev) * 100
+//	fmt.Println("rev", rev)
+//	fmt.Println("ebit", ebit)
+//	fmt.Println("margin", margin)
+//	fmt.Println()
 	return margin
 }
 
-func (s *statement) TotalAssets(period string) float64 {
-	return s.value(
+func (s *statement) TotalEquity(period string) float64 {
+    return s.value(
 		s.periodIndex(period),
-		"Total Assets",
+		"Total Equity",
 		s.Rows[0],
 	)
 }
 
 func (s *statement) FreeCashFlow(period string) float64 {
-    if len(s.Rows) == 0 {
-        return 0
-    }
+	if len(s.Rows) == 0 {
+		return 0
+	}
 
 	opCash := s.value(
 		s.periodIndex(period),
@@ -1041,7 +1048,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 
 			_, symbol, exch := morningstarURLValuation(u)
 
-            m := filepath.Join(baseDir, exch, symbol, "missing")
+			m := filepath.Join(baseDir, exch, symbol, "missing")
 			exist, err = exists(m)
 			if err != nil {
 				fmt.Println(err)
@@ -1051,7 +1058,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 				continue
 			}
 
-            dir := filepath.Join(baseDir, exch, symbol, "is.json")
+			dir := filepath.Join(baseDir, exch, symbol, "is.json")
 			exist, err = exists(dir)
 			if err != nil {
 				fmt.Println(err)
@@ -1061,8 +1068,8 @@ func (c *Command) pullValuation(ctx context.Context) error {
 				continue
 			}
 
-		    fmt.Printf("%v: %v\n", symbol, u)
 			jobCh <- u
+			fmt.Printf("%v: %v\n", symbol, u)
 		}
 		if err := scanner.Err(); err != nil {
 			fmt.Println(err)
