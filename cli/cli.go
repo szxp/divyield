@@ -574,6 +574,13 @@ func (c *Command) bargain(ctx context.Context) error {
 			fcf2017 +
 			fcf2016
 
+        revTTM := fin.IncomeStatement.Revenue("TTM")
+		rev2020 := fin.IncomeStatement.Revenue("2020")
+		rev2019 := fin.IncomeStatement.Revenue("2019")
+		rev2018 := fin.IncomeStatement.Revenue("2018")
+		rev2017 := fin.IncomeStatement.Revenue("2017")
+		rev2016 := fin.IncomeStatement.Revenue("2016")
+
         niTTM := fin.IncomeStatement.NetIncome("TTM")
 		ni2020 := fin.IncomeStatement.NetIncome("2020")
 		ni2019 := fin.IncomeStatement.NetIncome("2019")
@@ -598,7 +605,17 @@ func (c *Command) bargain(ctx context.Context) error {
 		if (0 < pe) &&
 			(pe <= 7.5) &&
 			(pb <= 1) &&
-			fcf > 0 &&
+			revTTM > 0 &&
+			rev2020 >= 0 &&
+			rev2019 >= 0 &&
+			rev2018 >= 0 &&
+			rev2017 >= 0 &&
+			rev2016 >= 0 &&
+			rev2020 >= rev2019 &&
+			rev2019 >= rev2018 &&
+			rev2018 >= rev2017 &&
+			rev2017 >= rev2016 &&
+		    fcf > 0 &&
 			niTTM > 0 &&
 			ni2020 >= 0 &&
 			ni2019 >= 0 &&
