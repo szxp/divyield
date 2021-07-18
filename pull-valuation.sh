@@ -11,5 +11,5 @@ function trap_ctrlc () {
 trap "trap_ctrlc" 2
 
 go build cmd/divyield/main.go && \
-    ./main.exe pull-valuation  -directory="statements" urls.csv
+    ./main.exe pull-valuation -directory="statements" banks-eu.csv
 

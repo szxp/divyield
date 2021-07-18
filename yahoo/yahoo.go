@@ -206,10 +206,8 @@ func (s *financialsService) PullValuation(
 					URL: ev.Request.URL,
 				}
 
-				if ev.Type == "XHR" &&
-					(resp.IsIS() ||
-						resp.IsBS() ||
-						resp.IsCF()) {
+				if (resp.IsIS() || resp.IsBS() || resp.IsCF()) &&
+                    ev.Request.Method == "GET" {
 				    //fmt.Println("reqID", reqID)
 					responses[reqID] = resp
 				}
@@ -249,7 +247,7 @@ func (s *financialsService) PullValuation(
 			actions := make([]chromedp.Action, 0)
 			actions = append(
 				actions,
-				chromedp.Navigate(changeTail(u, "valuation")),
+				chromedp.Navigate(u + "/valuation"),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//span[contains(text(),'Price/Earnings')]",
@@ -258,8 +256,9 @@ func (s *financialsService) PullValuation(
 				}),
 				chromedp.Evaluate(libJS, &[]byte{}),
 				chromedp.Evaluate(extractCompID, &compID),
-				chromedp.Evaluate(extractValuation, &valuation),
-				chromedp.Navigate(changeTail(u, "financials")),
+				//chromedp.Evaluate(extractValuation, &valuation),
+
+				chromedp.Navigate(u + "/financials"),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//span[contains(text(),'Normalized Diluted EPS')]",
@@ -267,30 +266,39 @@ func (s *financialsService) PullValuation(
 					),
 				}),
 
-				chromedp.Evaluate(libJS, &[]byte{}),
-				chromedp.Evaluate(clickIncStatLink, &[]byte{}),
+		        chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(clickDetailsViewLink, &[]byte{}),
+				chromedp.Sleep(1 * time.Second),
+                /*
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//div[contains(text(),'Total Revenue')]",
 						chromedp.BySearch,
 					),
 				}),
+                */
 
 				chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
+				chromedp.Sleep(1 * time.Second),
+                /*
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//div[contains(text(),'Total Assets')]",
 						chromedp.BySearch,
 					),
 				}),
+                */
 
 				chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
+				chromedp.Sleep(1 * time.Second),
+                /*
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//div[contains(text(),'Cash Flow from Operating Activities')]",
 						chromedp.BySearch,
 					),
 				}),
+                */
 			)
 
 			res := &divyield.FinancialsPullValuationOutput{
@@ -316,7 +324,7 @@ func (s *financialsService) PullValuation(
 			for {
 				select {
                 case resp = <-statementsCh:
-				case <-time.After(5 * time.Second):
+				case <-time.After(10 * time.Second):
 					res.Err = fmt.Errorf("Response timeout")
 					resCh <- res
 					continue
@@ -374,15 +382,15 @@ func (r *response) CompID() string {
 }
 
 func (r *response) IsIS() bool {
-	return strings.Contains(r.URL, "incomeStatement")
+	return strings.Contains(r.URL, "incomeStatement/detail")
 }
 
 func (r *response) IsBS() bool {
-	return strings.Contains(r.URL, "balanceSheet")
+	return strings.Contains(r.URL, "balanceSheet/detail")
 }
 
 func (r *response) IsCF() bool {
-	return strings.Contains(r.URL, "cashFlow")
+	return strings.Contains(r.URL, "cashFlow/detail")
 }
 
 func changeTail(
@@ -483,7 +491,7 @@ func (s *financialsService) Statements(
 		}),
 
 		chromedp.Evaluate(libJS, &[]byte{}),
-		chromedp.Evaluate(clickIncStatLink, &[]byte{}),
+		chromedp.Evaluate(clickDetailsViewLink, &[]byte{}),
 		runWithTimeOut(&ctx, 5, chromedp.Tasks{
 			chromedp.WaitVisible(
 				"//div[contains(text(),'Total Revenue')]",
@@ -648,6 +656,8 @@ const extractCompID = `compID();`
 const extractValuation = `valuation();`
 
 const clickIncStatLink = `clickA('Income Statement');`
+
+const clickDetailsViewLink = `clickA('Details View');`
 
 const clickIncStaRadio = `clickRadio('Income Statement');`
 

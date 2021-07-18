@@ -513,33 +513,81 @@ func (c *Command) bargain(ctx context.Context) error {
 		return fmt.Errorf("dir not found: %v", baseDir)
 	}
 
-	symbols := c.args
-	for i, s := range symbols {
-		symbols[i] = strings.ToUpper(s)
+	urlsFile := c.args[0]
+	uf, err := os.Open(urlsFile)
+	if err != nil {
+		return err
 	}
+	defer uf.Close()
+
+    const (
+        lastTTM = "TTM"
+        last1 = "2020"
+        last2 = "2019"
+        last3 = "2018"
+        last4 = "2017"
+        last5 = "2016"
+    )
 
 	financials := make([]*financials, 0)
-	for _, symbol := range symbols {
-		if symbol == "-" {
+    scanner := bufio.NewScanner(uf)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			// noop
+		}
+
+        u := scanner.Text()
+		u = strings.TrimSpace(u)
+		if u == "" {
 			continue
 		}
-		dir := filepath.Join(baseDir, symbol)
 
+		_, symbol, exch := morningstarURLValuation(u)
+
+		dir := filepath.Join(baseDir, exch, symbol)
+
+        /*
 		missingFile := filepath.Join(dir, "missing")
 		exist, err = exists(missingFile)
 		if err != nil {
 			return err
 		}
 		if exist {
+            fmt.Println("missing")
 			continue
 		}
+        */
 
 		fin, err := c.financials(ctx, dir)
 		if err != nil {
 			return fmt.Errorf("%v: %v", symbol, err)
 		}
 		if fin != nil {
+			fin.Exchange = exch
 			fin.Symbol = symbol
+
+		    fin.ReturnOnEquity1 = fin.ReturnOnEquity(last1)
+		    fin.ReturnOnEquity2 = fin.ReturnOnEquity(last2)
+		    fin.ReturnOnEquity3 = fin.ReturnOnEquity(last3)
+		    fin.ReturnOnEquity4 = fin.ReturnOnEquity(last4)
+		    fin.ReturnOnEquity5 = fin.ReturnOnEquity(last5)
+
+		    fin.DebtToEquity1 = fin.BalanceSheet.DebtToEquity(last1)
+		    fin.DebtToEquity2 = fin.BalanceSheet.DebtToEquity(last2)
+		    fin.DebtToEquity3 = fin.BalanceSheet.DebtToEquity(last3)
+		    fin.DebtToEquity4 = fin.BalanceSheet.DebtToEquity(last4)
+		    fin.DebtToEquity5 = fin.BalanceSheet.DebtToEquity(last5)
+
+		    fin.OpEffTTM = fin.IncomeStatement.OperatingEfficiencyRatio(lastTTM)
+		    fin.OpEff1 = fin.IncomeStatement.OperatingEfficiencyRatio(last1)
+		    fin.OpEff2 = fin.IncomeStatement.OperatingEfficiencyRatio(last2)
+		    fin.OpEff3 = fin.IncomeStatement.OperatingEfficiencyRatio(last3)
+		    fin.OpEff4 = fin.IncomeStatement.OperatingEfficiencyRatio(last4)
+		    fin.OpEff5 = fin.IncomeStatement.OperatingEfficiencyRatio(last5)
+
 			financials = append(financials, fin)
 		}
 	}
@@ -547,25 +595,46 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
+			v0 := financials[i].ReturnOnEquity1
+			v1 := financials[j].ReturnOnEquity1
+			return v0 > v1
+
+            /*
 			pe0 := financials[i].Valuation.
 				PriceToEarnings["Current"]
 			pe1 := financials[j].Valuation.
 				PriceToEarnings["Current"]
 
 			return pe0 < pe1
+            */
 		},
 	)
 
 	for _, fin := range financials {
-		pe := fin.Valuation.PriceToEarnings["Current"]
-		pb := fin.Valuation.PriceToBook["Current"]
+		//pe := fin.Valuation.PriceToEarnings["Current"]
+		//pb := fin.Valuation.PriceToBook["Current"]
 
-		fcfTTM := fin.CashFlow.FreeCashFlow("TTM")
-		fcf2020 := fin.CashFlow.FreeCashFlow("2020")
-		fcf2019 := fin.CashFlow.FreeCashFlow("2019")
-		fcf2018 := fin.CashFlow.FreeCashFlow("2018")
-		fcf2017 := fin.CashFlow.FreeCashFlow("2017")
-		fcf2016 := fin.CashFlow.FreeCashFlow("2016")
+        /*
+        gmTTM := fin.IncomeStatement.GrossMargin(lastTTM)
+		gm2020 := fin.IncomeStatement.GrossMargin(last1)
+		gm2019 := fin.IncomeStatement.GrossMargin(last2)
+		gm2018 := fin.IncomeStatement.GrossMargin(last3)
+		gm2017 := fin.IncomeStatement.GrossMargin(last4)
+		gm2016 := fin.IncomeStatement.GrossMargin(last5)
+
+        gm2020Diff := gm2020-gm2019
+        gmTTMDiff :=  gmTTM-gm2020
+*/
+        //fmt.Println(gmTTM, gm2020, gm2019, gm2018, gm2017, gm2016)
+        //fmt.Println(gm2020Diff, gm2019Diff, gm2018Diff, gm2017Diff)
+
+        /*
+		fcfTTM := fin.CashFlow.FreeCashFlow(lastTTM)
+		fcf2020 := fin.CashFlow.FreeCashFlow(last1)
+		fcf2019 := fin.CashFlow.FreeCashFlow(last2)
+		fcf2018 := fin.CashFlow.FreeCashFlow(last3)
+		fcf2017 := fin.CashFlow.FreeCashFlow(last4)
+		fcf2016 := fin.CashFlow.FreeCashFlow(last5)
 
 		fcf := fcfTTM +
 			fcf2020 +
@@ -574,35 +643,38 @@ func (c *Command) bargain(ctx context.Context) error {
 			fcf2017 +
 			fcf2016
 
-        revTTM := fin.IncomeStatement.Revenue("TTM")
-		rev2020 := fin.IncomeStatement.Revenue("2020")
-		rev2019 := fin.IncomeStatement.Revenue("2019")
-		rev2018 := fin.IncomeStatement.Revenue("2018")
-		rev2017 := fin.IncomeStatement.Revenue("2017")
-		rev2016 := fin.IncomeStatement.Revenue("2016")
+        revTTM := fin.IncomeStatement.Revenue(lastTTM)
+		rev2020 := fin.IncomeStatement.Revenue(last1)
+		rev2019 := fin.IncomeStatement.Revenue(last2)
+		rev2018 := fin.IncomeStatement.Revenue(last3)
+		rev2017 := fin.IncomeStatement.Revenue(last4)
+		rev2016 := fin.IncomeStatement.Revenue(last5)
 
-        niTTM := fin.IncomeStatement.NetIncome("TTM")
-		ni2020 := fin.IncomeStatement.NetIncome("2020")
-		ni2019 := fin.IncomeStatement.NetIncome("2019")
-		ni2018 := fin.IncomeStatement.NetIncome("2018")
-		ni2017 := fin.IncomeStatement.NetIncome("2017")
-		ni2016 := fin.IncomeStatement.NetIncome("2016")
+        niTTM := fin.IncomeStatement.NetIncome(lastTTM)
+		ni2020 := fin.IncomeStatement.NetIncome(last1)
+		ni2019 := fin.IncomeStatement.NetIncome(last2)
+		ni2018 := fin.IncomeStatement.NetIncome(last3)
+		ni2017 := fin.IncomeStatement.NetIncome(last4)
+		ni2016 := fin.IncomeStatement.NetIncome(last5)
 
 
-		marginTTM := fin.IncomeStatement.EBITMargin("TTM")
-		margin2020 := fin.IncomeStatement.EBITMargin("2020")
-		margin2019 := fin.IncomeStatement.EBITMargin("2019")
-		margin2018 := fin.IncomeStatement.EBITMargin("2018")
-		margin2017 := fin.IncomeStatement.EBITMargin("2017")
-		margin2016 := fin.IncomeStatement.EBITMargin("2016")
+		marginTTM := fin.IncomeStatement.EBITMargin(lastTTM)
+		margin2020 := fin.IncomeStatement.EBITMargin(last1)
+		margin2019 := fin.IncomeStatement.EBITMargin(last2)
+		margin2018 := fin.IncomeStatement.EBITMargin(last3)
+		margin2017 := fin.IncomeStatement.EBITMargin(last4)
+		margin2016 := fin.IncomeStatement.EBITMargin(last5)
 
-		totEqu2020 := fin.BalanceSheet.TotalEquity("2020")
-		totEqu2019 := fin.BalanceSheet.TotalEquity("2019")
-		totEqu2018 := fin.BalanceSheet.TotalEquity("2018")
-		totEqu2017 := fin.BalanceSheet.TotalEquity("2017")
-		totEqu2016 := fin.BalanceSheet.TotalEquity("2016")
+		totEqu2020 := fin.BalanceSheet.TotalEquity(last1)
+		totEqu2019 := fin.BalanceSheet.TotalEquity(last2)
+		totEqu2018 := fin.BalanceSheet.TotalEquity(last3)
+		totEqu2017 := fin.BalanceSheet.TotalEquity(last4)
+		totEqu2016 := fin.BalanceSheet.TotalEquity(last5)
+*/
 
-		if (0 < pe) &&
+
+        /*
+            (0 < pe) &&
 			(pe <= 7.5) &&
 			(pb <= 1) &&
 			revTTM > 0 &&
@@ -632,20 +704,35 @@ func (c *Command) bargain(ctx context.Context) error {
 		    totEqu2019 >= 0 &&
 		    totEqu2018 >= 0 &&
 		    totEqu2017 >= 0 &&
-		    totEqu2016 >= 0 {
+		    totEqu2016 >= 0
+*/
 			fmt.Printf(
-				"%v\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n",
-				fin.Symbol,
-				pe,
-				pb,
-				marginTTM,
-				margin2020,
-				margin2019,
-				margin2018,
-				margin2017,
-				margin2016,
+				"%-10v\t"+
+                "%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t" +
+                "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t" +
+                "%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\n",
+				fin.Exchange+"/"+fin.Symbol,
+
+                fin.ReturnOnEquity1,
+                fin.ReturnOnEquity2,
+                fin.ReturnOnEquity3,
+                fin.ReturnOnEquity4,
+                fin.ReturnOnEquity5,
+
+                fin.DebtToEquity1,
+                fin.DebtToEquity2,
+                fin.DebtToEquity3,
+                fin.DebtToEquity4,
+                fin.DebtToEquity5,
+
+                fin.OperatingEfficiencyAverage(),
+                fin.OpEffTTM,
+                fin.OpEff1,
+                fin.OpEff2,
+                fin.OpEff3,
+                fin.OpEff4,
+                fin.OpEff5,
 			)
-		}
 	}
 
 	return nil
@@ -697,16 +784,17 @@ func (c *Command) financials(
 		return nil, err
 	}
 
-	valuation, err := c.valuation(ctx, dir)
-	if err != nil {
-		return nil, err
-	}
+//	valuation, err := c.valuation(ctx, dir)
+//	if err != nil {
+//		return nil, err
+//	}
 
 	financials := &financials{
 		IncomeStatement: &incomeStatement,
 		BalanceSheet:    &balanceSheet,
 		CashFlow:        &cashFlow,
-		Valuation:       valuation,
+		//Valuation:       valuation,
+		Valuation:       &valuation{},
 	}
 
 	return financials, nil
@@ -816,11 +904,77 @@ func valueMap(
 }
 
 type financials struct {
+	Exchange        string
 	Symbol          string
 	IncomeStatement *statement
 	BalanceSheet    *statement
 	CashFlow        *statement
 	Valuation       *valuation
+
+    ReturnOnEquity1 float64
+    ReturnOnEquity2 float64
+    ReturnOnEquity3 float64
+    ReturnOnEquity4 float64
+    ReturnOnEquity5 float64
+
+    DebtToEquity1 float64
+    DebtToEquity2 float64
+    DebtToEquity3 float64
+    DebtToEquity4 float64
+    DebtToEquity5 float64
+
+    OpEffTTM float64
+	OpEff1 float64
+	OpEff2 float64
+	OpEff3 float64
+	OpEff4 float64
+	OpEff5 float64
+	OpEffAvg  float64
+}
+
+func (f *financials) OperatingEfficiencyAverage() float64 {
+    var sum float64
+    var count float64
+    values := []float64{
+        f.OpEffTTM,
+	    f.OpEff1,
+	    f.OpEff2,
+	    f.OpEff3,
+	    f.OpEff4,
+	    f.OpEff5,
+    }
+
+    for _, v := range values {
+        if !math.IsInf(v, 1) && !math.IsInf(v, -1) && !math.IsNaN(v) {
+            sum += v
+            count += 1
+        }
+    }
+
+    if count == 0 {
+        return 0
+    }
+    return sum / count
+}
+
+func (f *financials) ReturnOnEquity(
+    period string,
+) float64 {
+    inc := f.IncomeStatement.NetIncome(period)
+    equ := f.BalanceSheet.TotalEquity(period)
+    return (inc / equ) * 100
+}
+
+func (f *financials) OperatingIncomeToEquity(
+    period string,
+) float64 {
+    opInc := f.IncomeStatement.OperatingIncome(period)
+    eq := f.BalanceSheet.TotalEquity(period)
+    //fmt.Println(opInc, eq, (opInc/eq)*100)
+    if eq <= 0 {
+        return 0
+    }
+    return (opInc / eq) * 100
 }
 
 type statement struct {
@@ -828,6 +982,18 @@ type statement struct {
 	Rows       []*statementSubLevel `json:"rows"`
 	Footer     *statementFooter     `json:"footer"`
 }
+
+func (s *statement) OrderOfMagnitude() float64 {
+    switch s.Footer.OrderOfMagnitude {
+    case "Billion":
+        return 1000000000
+    case "Million":
+        return 1000000
+    default:
+        panic("unexpected order of magnitude: " + s.Footer.OrderOfMagnitude)
+    }
+}
+
 
 type statementSubLevel struct {
 	Label     string               `json:"label"`
@@ -843,28 +1009,119 @@ type statementFooter struct {
 }
 
 func (s *statement) Revenue(period string) float64 {
-	intRev := s.value(
-		s.periodIndex(period),
-		"Interest Income, Revenue",
-		s.Rows[0],
-	)
-	nonIntRev := s.value(
-		s.periodIndex(period),
-		"Non-Interest Income",
-		s.Rows[0],
-	)
-	bank := intRev > 0
-
-	totRev := s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Total Revenue",
 		s.Rows[0],
 	)
+}
 
-	if bank {
-		return intRev + nonIntRev
-	}
-	return totRev
+func (s *statement) CostOfRevenue(period string) float64 {
+	return s.value(
+		s.periodIndex(period),
+		"Cost of Revenue",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) NetInterestIncome(
+    period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+		"Net Interest Income",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) NonInterestIncome(
+    period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+		"Non-Interest Income",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) NonInterestExpenses(
+    period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+        "Non-Interest Expenses",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) OperatingEfficiencyRatio(
+    period string,
+) float64 {
+    exp := s.NonInterestExpenses(period)
+    netIntInc := s.NetInterestIncome(period)
+    nonIntInc := s.NonInterestIncome(period)
+    //fmt.Println(period, netIntInc, nonIntInc, exp)
+    return (math.Abs(exp) / (netIntInc + nonIntInc)) * 100
+}
+
+
+func (s *statement) GrossIncome(
+    period string,
+) float64 {
+    netIntInc := s.value(
+		s.periodIndex(period),
+		"Net Interest Income",
+		s.Rows[0],
+	)
+
+    if netIntInc > 0 { // banks
+        return netIntInc
+    }
+
+    return s.value(
+		s.periodIndex(period),
+		"Gross Profit",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) OperatingIncome(
+    period string,
+) float64 {
+    groInc := s.GrossIncome(period)
+
+    nonIntInc := s.value(
+		s.periodIndex(period),
+        "Non-Interest Income",
+		s.Rows[0],
+	)
+
+    nonIntExp := s.value(
+		s.periodIndex(period),
+        "Non-Interest Expenses",
+		s.Rows[0],
+	)
+
+    if nonIntInc > 0 { // banks
+        return groInc + nonIntInc + nonIntExp
+    }
+
+    return s.value(
+		s.periodIndex(period),
+		"Total Operating Profit/Loss",
+		s.Rows[0],
+	)
+}
+
+
+
+func (s *statement) GrossMargin(period string) float64 {
+    rev := s.Revenue(period)
+    cogs := s.CostOfRevenue(period)
+    if rev <= 0 {
+        return 0
+    }
+    return ((rev + cogs) / rev) * 100
 }
 
 func (s *statement) NetIncome(period string) float64 {
@@ -909,10 +1166,24 @@ func (s *statement) EBITMargin(period string) float64 {
 	return margin
 }
 
+func (s *statement) DebtToEquity(period string) float64 {
+    debt := s.TotalLiabilities(period)
+    equ := s.TotalEquity(period)
+    return debt / equ
+}
+
 func (s *statement) TotalEquity(period string) float64 {
     return s.value(
 		s.periodIndex(period),
 		"Total Equity",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) TotalLiabilities(period string) float64 {
+    return s.value(
+		s.periodIndex(period),
+		"Total Liabilities",
 		s.Rows[0],
 	)
 }
@@ -968,10 +1239,10 @@ func (s *statement) value(
 		next := levels[0]
 		levels = levels[1:]
 
-		if strings.HasPrefix(next.Label, label) {
+		if next.Label == label {
 			v := next.Datum[periodIndex]
 			num, _ := v.(float64)
-			return num
+			return num * s.OrderOfMagnitude()
 		}
 
 		levels = append(levels, next.SubLevels...)
@@ -1054,17 +1325,15 @@ func (c *Command) pullValuation(ctx context.Context) error {
 				// noop
 			}
 
-			line := scanner.Text()
-			line = strings.TrimSpace(line)
-			if line == "" {
+			u := scanner.Text()
+			u = strings.TrimSpace(u)
+			if u == "" {
 				continue
 			}
 
-			parts := strings.Split(line, "\t")
-			u := parts[1]
+			_, symbol, _ := morningstarURLValuation(u)
 
-			_, symbol, exch := morningstarURLValuation(u)
-
+            /*
 			m := filepath.Join(baseDir, exch, symbol, "missing")
 			exist, err = exists(m)
 			if err != nil {
@@ -1074,7 +1343,9 @@ func (c *Command) pullValuation(ctx context.Context) error {
 			if exist {
 				continue
 			}
+            */
 
+            /*
 			dir := filepath.Join(baseDir, exch, symbol, "is.json")
 			exist, err = exists(dir)
 			if err != nil {
@@ -1084,6 +1355,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 			if exist {
 				continue
 			}
+            */
 
 			jobCh <- u
 			fmt.Printf("%v: %v\n", symbol, u)
