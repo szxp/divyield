@@ -569,24 +569,46 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.Exchange = exch
 			fin.Symbol = symbol
 
-		    fin.ReturnOnEquity1 = fin.ReturnOnEquity(last1)
-		    fin.ReturnOnEquity2 = fin.ReturnOnEquity(last2)
-		    fin.ReturnOnEquity3 = fin.ReturnOnEquity(last3)
-		    fin.ReturnOnEquity4 = fin.ReturnOnEquity(last4)
-		    fin.ReturnOnEquity5 = fin.ReturnOnEquity(last5)
+		    fin.ReturnOnEquity1 = fin.
+                ReturnOnEquity(last1)
+		    fin.ReturnOnEquity2 = fin.
+                ReturnOnEquity(last2)
+		    fin.ReturnOnEquity3 = fin.
+                ReturnOnEquity(last3)
+		    fin.ReturnOnEquity4 = fin.
+                ReturnOnEquity(last4)
+		    fin.ReturnOnEquity5 = fin.
+                ReturnOnEquity(last5)
 
-		    fin.DebtToEquity1 = fin.BalanceSheet.DebtToEquity(last1)
-		    fin.DebtToEquity2 = fin.BalanceSheet.DebtToEquity(last2)
-		    fin.DebtToEquity3 = fin.BalanceSheet.DebtToEquity(last3)
-		    fin.DebtToEquity4 = fin.BalanceSheet.DebtToEquity(last4)
-		    fin.DebtToEquity5 = fin.BalanceSheet.DebtToEquity(last5)
+		    fin.DebtToEquity1 = fin.
+                BalanceSheet.DebtToEquity(last1)
+		    fin.DebtToEquity2 = fin.
+                BalanceSheet.DebtToEquity(last2)
+		    fin.DebtToEquity3 = fin.
+                BalanceSheet.DebtToEquity(last3)
+		    fin.DebtToEquity4 = fin.
+                BalanceSheet.DebtToEquity(last4)
+		    fin.DebtToEquity5 = fin.
+                BalanceSheet.DebtToEquity(last5)
 
-		    fin.OpEffTTM = fin.IncomeStatement.OperatingEfficiencyRatio(lastTTM)
-		    fin.OpEff1 = fin.IncomeStatement.OperatingEfficiencyRatio(last1)
-		    fin.OpEff2 = fin.IncomeStatement.OperatingEfficiencyRatio(last2)
-		    fin.OpEff3 = fin.IncomeStatement.OperatingEfficiencyRatio(last3)
-		    fin.OpEff4 = fin.IncomeStatement.OperatingEfficiencyRatio(last4)
-		    fin.OpEff5 = fin.IncomeStatement.OperatingEfficiencyRatio(last5)
+		    fin.OperatingEfficiencyTTM = fin.
+                IncomeStatement.
+                OperatingEfficiency(lastTTM)
+		    fin.OperatingEfficiency1 = fin.
+                IncomeStatement.
+                OperatingEfficiency(last1)
+		    fin.OperatingEfficiency2 = fin.
+                IncomeStatement.
+                OperatingEfficiency(last2)
+		    fin.OperatingEfficiency3 = fin.
+                IncomeStatement.
+                OperatingEfficiency(last3)
+		    fin.OperatingEfficiency4 = fin.
+                IncomeStatement.
+                OperatingEfficiency(last4)
+		    fin.OperatingEfficiency5 = fin.
+                IncomeStatement.
+                OperatingEfficiency(last5)
 
 			financials = append(financials, fin)
 		}
@@ -595,148 +617,190 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
-			v0 := financials[i].ReturnOnEquity1
-			v1 := financials[j].ReturnOnEquity1
-			return v0 > v1
-
-            /*
 			pe0 := financials[i].Valuation.
 				PriceToEarnings["Current"]
 			pe1 := financials[j].Valuation.
 				PriceToEarnings["Current"]
-
 			return pe0 < pe1
-            */
 		},
 	)
 
-	for _, fin := range financials {
-		//pe := fin.Valuation.PriceToEarnings["Current"]
-		//pb := fin.Valuation.PriceToBook["Current"]
-
-        /*
-        gmTTM := fin.IncomeStatement.GrossMargin(lastTTM)
-		gm2020 := fin.IncomeStatement.GrossMargin(last1)
-		gm2019 := fin.IncomeStatement.GrossMargin(last2)
-		gm2018 := fin.IncomeStatement.GrossMargin(last3)
-		gm2017 := fin.IncomeStatement.GrossMargin(last4)
-		gm2016 := fin.IncomeStatement.GrossMargin(last5)
-
-        gm2020Diff := gm2020-gm2019
-        gmTTMDiff :=  gmTTM-gm2020
-*/
-        //fmt.Println(gmTTM, gm2020, gm2019, gm2018, gm2017, gm2016)
-        //fmt.Println(gm2020Diff, gm2019Diff, gm2018Diff, gm2017Diff)
-
-        /*
-		fcfTTM := fin.CashFlow.FreeCashFlow(lastTTM)
-		fcf2020 := fin.CashFlow.FreeCashFlow(last1)
-		fcf2019 := fin.CashFlow.FreeCashFlow(last2)
-		fcf2018 := fin.CashFlow.FreeCashFlow(last3)
-		fcf2017 := fin.CashFlow.FreeCashFlow(last4)
-		fcf2016 := fin.CashFlow.FreeCashFlow(last5)
-
-		fcf := fcfTTM +
-			fcf2020 +
-			fcf2019 +
-			fcf2018 +
-			fcf2017 +
-			fcf2016
-
-        revTTM := fin.IncomeStatement.Revenue(lastTTM)
-		rev2020 := fin.IncomeStatement.Revenue(last1)
-		rev2019 := fin.IncomeStatement.Revenue(last2)
-		rev2018 := fin.IncomeStatement.Revenue(last3)
-		rev2017 := fin.IncomeStatement.Revenue(last4)
-		rev2016 := fin.IncomeStatement.Revenue(last5)
-
-        niTTM := fin.IncomeStatement.NetIncome(lastTTM)
-		ni2020 := fin.IncomeStatement.NetIncome(last1)
-		ni2019 := fin.IncomeStatement.NetIncome(last2)
-		ni2018 := fin.IncomeStatement.NetIncome(last3)
-		ni2017 := fin.IncomeStatement.NetIncome(last4)
-		ni2016 := fin.IncomeStatement.NetIncome(last5)
-
-
-		marginTTM := fin.IncomeStatement.EBITMargin(lastTTM)
-		margin2020 := fin.IncomeStatement.EBITMargin(last1)
-		margin2019 := fin.IncomeStatement.EBITMargin(last2)
-		margin2018 := fin.IncomeStatement.EBITMargin(last3)
-		margin2017 := fin.IncomeStatement.EBITMargin(last4)
-		margin2016 := fin.IncomeStatement.EBITMargin(last5)
-
-		totEqu2020 := fin.BalanceSheet.TotalEquity(last1)
-		totEqu2019 := fin.BalanceSheet.TotalEquity(last2)
-		totEqu2018 := fin.BalanceSheet.TotalEquity(last3)
-		totEqu2017 := fin.BalanceSheet.TotalEquity(last4)
-		totEqu2016 := fin.BalanceSheet.TotalEquity(last5)
-*/
-
-
-        /*
-            (0 < pe) &&
-			(pe <= 7.5) &&
-			(pb <= 1) &&
-			revTTM > 0 &&
-			rev2020 >= 0 &&
-			rev2019 >= 0 &&
-			rev2018 >= 0 &&
-			rev2017 >= 0 &&
-			rev2016 >= 0 &&
-			rev2020 >= rev2019 &&
-			rev2019 >= rev2018 &&
-			rev2018 >= rev2017 &&
-			rev2017 >= rev2016 &&
-		    fcf > 0 &&
-			niTTM > 0 &&
-			ni2020 >= 0 &&
-			ni2019 >= 0 &&
-			ni2018 >= 0 &&
-			ni2017 >= 0 &&
-			ni2016 >= 0 &&
-			marginTTM > 0 &&
-			margin2020 >= 0 &&
-			margin2019 >= 0 &&
-			margin2018 >= 0 &&
-			margin2017 >= 0 &&
-			margin2016 >= 0 &&
-		    totEqu2020 >= 0 &&
-		    totEqu2019 >= 0 &&
-		    totEqu2018 >= 0 &&
-		    totEqu2017 >= 0 &&
-		    totEqu2016 >= 0
-*/
-			fmt.Printf(
-				"%-10v\t"+
-                "%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t" +
-                "%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t" +
-                "%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\t%.2f%%\n",
-				fin.Exchange+"/"+fin.Symbol,
-
-                fin.ReturnOnEquity1,
-                fin.ReturnOnEquity2,
-                fin.ReturnOnEquity3,
-                fin.ReturnOnEquity4,
-                fin.ReturnOnEquity5,
-
-                fin.DebtToEquity1,
-                fin.DebtToEquity2,
-                fin.DebtToEquity3,
-                fin.DebtToEquity4,
-                fin.DebtToEquity5,
-
-                fin.OperatingEfficiencyAverage(),
-                fin.OpEffTTM,
-                fin.OpEff1,
-                fin.OpEff2,
-                fin.OpEff3,
-                fin.OpEff4,
-                fin.OpEff5,
-			)
-	}
-
+    c.printFinancials(financials)
 	return nil
 }
+
+
+func (c *Command) printFinancials(
+	financials []*financials,
+) {
+	buf := &bytes.Buffer{}
+	w := tabwriter.NewWriter(
+		buf, 0, 0, 2, ' ', tabwriter.AlignRight)
+
+	p := message.NewPrinter(language.English)
+
+	b := &bytes.Buffer{}
+	b.WriteString(fmt.Sprintf("%-10v", "Symbol"))
+	b.WriteByte('\t')
+	b.WriteString("P/E")
+	b.WriteByte('\t')
+	b.WriteString("P/B")
+	b.WriteByte('\t')
+	b.WriteString("ROE1%")
+	b.WriteByte('\t')
+	b.WriteString("ROE2%")
+	b.WriteByte('\t')
+	b.WriteString("ROE3%")
+	b.WriteByte('\t')
+	b.WriteString("ROE4%")
+	b.WriteByte('\t')
+	b.WriteString("ROE5%")
+	b.WriteByte('\t')
+	b.WriteString("Debt/Equity1")
+	b.WriteByte('\t')
+	b.WriteString("Debt/Equity2")
+	b.WriteByte('\t')
+	b.WriteString("Debt/Equity3")
+	b.WriteByte('\t')
+	b.WriteString("Debt/Equity4")
+	b.WriteByte('\t')
+	b.WriteString("Debt/Equity5")
+	b.WriteByte('\t')
+	b.WriteString("OpEffTTM%")
+	b.WriteByte('\t')
+	b.WriteString("OpEff1%")
+	b.WriteByte('\t')
+	b.WriteString("OpEff2%")
+	b.WriteByte('\t')
+	b.WriteString("OpEff3%")
+	b.WriteByte('\t')
+	b.WriteString("OpEff4%")
+	b.WriteByte('\t')
+	b.WriteString("OpEff5%")
+	b.WriteByte('\t')
+	fmt.Fprintln(w, b.String())
+
+	for _, v := range financials {
+		b.Reset()
+		b.WriteString(fmt.Sprintf(
+            "%-10v",
+            v.Exchange+"/"+v.Symbol,
+        ))
+		b.WriteByte('\t')
+
+        pe := v.Valuation.PriceToEarnings["Current"]
+		b.WriteString(p.Sprintf("%.2f", pe))
+		b.WriteByte('\t')
+
+        pb := v.Valuation.PriceToBook["Current"]
+		b.WriteString(p.Sprintf("%.2f", pb))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.ReturnOnEquity1,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.ReturnOnEquity2,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.ReturnOnEquity3,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.ReturnOnEquity4,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.ReturnOnEquity5,
+        ))
+		b.WriteByte('\t')
+
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.DebtToEquity1,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.DebtToEquity2,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.DebtToEquity3,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.DebtToEquity4,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.DebtToEquity5,
+        ))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf(
+            "%.2f",
+            v.OperatingEfficiencyTTM,
+        ))
+		b.WriteByte('\t')
+
+        b.WriteString(p.Sprintf(
+            "%.2f",
+            v.OperatingEfficiency1,
+        ))
+		b.WriteByte('\t')
+
+        b.WriteString(p.Sprintf(
+            "%.2f",
+            v.OperatingEfficiency2,
+        ))
+		b.WriteByte('\t')
+
+        b.WriteString(p.Sprintf(
+            "%.2f",
+            v.OperatingEfficiency3,
+        ))
+		b.WriteByte('\t')
+
+        b.WriteString(p.Sprintf(
+            "%.2f",
+            v.OperatingEfficiency4,
+        ))
+		b.WriteByte('\t')
+
+        b.WriteString(p.Sprintf(
+            "%.2f",
+            v.OperatingEfficiency5,
+        ))
+		b.WriteByte('\t')
+
+
+		fmt.Fprintln(w, b.String())
+	}
+
+	w.Flush()
+	c.writef("%s", buf.String())
+}
+
 
 func (c *Command) financials(
 	ctx context.Context,
@@ -923,38 +987,12 @@ type financials struct {
     DebtToEquity4 float64
     DebtToEquity5 float64
 
-    OpEffTTM float64
-	OpEff1 float64
-	OpEff2 float64
-	OpEff3 float64
-	OpEff4 float64
-	OpEff5 float64
-	OpEffAvg  float64
-}
-
-func (f *financials) OperatingEfficiencyAverage() float64 {
-    var sum float64
-    var count float64
-    values := []float64{
-        f.OpEffTTM,
-	    f.OpEff1,
-	    f.OpEff2,
-	    f.OpEff3,
-	    f.OpEff4,
-	    f.OpEff5,
-    }
-
-    for _, v := range values {
-        if !math.IsInf(v, 1) && !math.IsInf(v, -1) && !math.IsNaN(v) {
-            sum += v
-            count += 1
-        }
-    }
-
-    if count == 0 {
-        return 0
-    }
-    return sum / count
+    OperatingEfficiencyTTM float64
+	OperatingEfficiency1 float64
+	OperatingEfficiency2 float64
+	OperatingEfficiency3 float64
+	OperatingEfficiency4 float64
+	OperatingEfficiency5 float64
 }
 
 func (f *financials) ReturnOnEquity(
@@ -1054,7 +1092,7 @@ func (s *statement) NonInterestExpenses(
 	)
 }
 
-func (s *statement) OperatingEfficiencyRatio(
+func (s *statement) OperatingEfficiency(
     period string,
 ) float64 {
     exp := s.NonInterestExpenses(period)
@@ -1167,12 +1205,14 @@ func (s *statement) EBITMargin(period string) float64 {
 }
 
 func (s *statement) DebtToEquity(period string) float64 {
-    debt := s.TotalLiabilities(period)
+    debt := s.TotalLiabilitiesNoDeposits(period)
     equ := s.TotalEquity(period)
     return debt / equ
 }
 
-func (s *statement) TotalEquity(period string) float64 {
+func (s *statement) TotalEquity(
+    period string,
+) float64 {
     return s.value(
 		s.periodIndex(period),
 		"Total Equity",
@@ -1180,13 +1220,30 @@ func (s *statement) TotalEquity(period string) float64 {
 	)
 }
 
-func (s *statement) TotalLiabilities(period string) float64 {
-    return s.value(
+func (s *statement) TotalLiabilitiesNoDeposits(
+    period string,
+) float64 {
+    totLia := s.value(
 		s.periodIndex(period),
 		"Total Liabilities",
 		s.Rows[0],
 	)
+
+    totDep := s.TotalDeposits(period)
+    return totLia - totDep
 }
+
+func (s *statement) TotalDeposits(
+    period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+		"Total Deposits",
+		s.Rows[0],
+	)
+}
+
+
 
 func (s *statement) FreeCashFlow(period string) float64 {
 	if len(s.Rows) == 0 {
