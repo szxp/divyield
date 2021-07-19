@@ -570,15 +570,15 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.Symbol = symbol
 
 		    fin.ReturnOnEquity1 = fin.
-                ReturnOnEquity(last1)
+                OperatingIncomeOnEquity(last1)
 		    fin.ReturnOnEquity2 = fin.
-                ReturnOnEquity(last2)
+                OperatingIncomeOnEquity(last2)
 		    fin.ReturnOnEquity3 = fin.
-                ReturnOnEquity(last3)
+                OperatingIncomeOnEquity(last3)
 		    fin.ReturnOnEquity4 = fin.
-                ReturnOnEquity(last4)
+                OperatingIncomeOnEquity(last4)
 		    fin.ReturnOnEquity5 = fin.
-                ReturnOnEquity(last5)
+                OperatingIncomeOnEquity(last5)
 
 		    fin.DebtToEquity1 = fin.
                 BalanceSheet.DebtToEquity(last1)
@@ -995,24 +995,13 @@ type financials struct {
 	OperatingEfficiency5 float64
 }
 
-func (f *financials) ReturnOnEquity(
-    period string,
-) float64 {
-    inc := f.IncomeStatement.NetIncome(period)
-    equ := f.BalanceSheet.TotalEquity(period)
-    return (inc / equ) * 100
-}
-
-func (f *financials) OperatingIncomeToEquity(
+func (f *financials) OperatingIncomeOnEquity(
     period string,
 ) float64 {
     opInc := f.IncomeStatement.OperatingIncome(period)
-    eq := f.BalanceSheet.TotalEquity(period)
-    //fmt.Println(opInc, eq, (opInc/eq)*100)
-    if eq <= 0 {
-        return 0
-    }
-    return (opInc / eq) * 100
+    equ := f.BalanceSheet.TotalEquity(period)
+    //fmt.Println(opInc, equ, (opInc/equ)*100)
+    return (opInc / equ) * 100
 }
 
 type statement struct {
@@ -1046,18 +1035,36 @@ type statementFooter struct {
 	FiscalYearEndDate string `json:"fiscalYearEndDate"`
 }
 
-func (s *statement) Revenue(period string) float64 {
-	return s.value(
+func (s *statement) GrossIncome(
+    period string,
+) float64 {
+    netIntInc := s.NetInterestIncome(period)
+    if netIntInc > 0 { // banks
+        nonIntInc := s.NonInterestIncome(period)
+        return netIntInc + nonIntInc
+    }
+
+    // other companies
+    return s.value(
 		s.periodIndex(period),
-		"Total Revenue",
+		"Gross Profit",
 		s.Rows[0],
 	)
 }
 
-func (s *statement) CostOfRevenue(period string) float64 {
-	return s.value(
+func (s *statement) OperatingIncome(
+    period string,
+) float64 {
+    nonIntExp := s.NonInterestExpenses(period)
+    if nonIntExp < 0 { // banks
+        groInc := s.GrossIncome(period)
+        return groInc + nonIntExp
+    }
+
+    // other companies
+    return s.value(
 		s.periodIndex(period),
-		"Cost of Revenue",
+		"Total Operating Profit/Loss",
 		s.Rows[0],
 	)
 }
@@ -1102,106 +1109,12 @@ func (s *statement) OperatingEfficiency(
     return (math.Abs(exp) / (netIntInc + nonIntInc)) * 100
 }
 
-
-func (s *statement) GrossIncome(
-    period string,
-) float64 {
-    netIntInc := s.value(
-		s.periodIndex(period),
-		"Net Interest Income",
-		s.Rows[0],
-	)
-
-    if netIntInc > 0 { // banks
-        return netIntInc
-    }
-
-    return s.value(
-		s.periodIndex(period),
-		"Gross Profit",
-		s.Rows[0],
-	)
-}
-
-func (s *statement) OperatingIncome(
-    period string,
-) float64 {
-    groInc := s.GrossIncome(period)
-
-    nonIntInc := s.value(
-		s.periodIndex(period),
-        "Non-Interest Income",
-		s.Rows[0],
-	)
-
-    nonIntExp := s.value(
-		s.periodIndex(period),
-        "Non-Interest Expenses",
-		s.Rows[0],
-	)
-
-    if nonIntInc > 0 { // banks
-        return groInc + nonIntInc + nonIntExp
-    }
-
-    return s.value(
-		s.periodIndex(period),
-		"Total Operating Profit/Loss",
-		s.Rows[0],
-	)
-}
-
-
-
-func (s *statement) GrossMargin(period string) float64 {
-    rev := s.Revenue(period)
-    cogs := s.CostOfRevenue(period)
-    if rev <= 0 {
-        return 0
-    }
-    return ((rev + cogs) / rev) * 100
-}
-
 func (s *statement) NetIncome(period string) float64 {
 	return s.value(
 		s.periodIndex(period),
 		"Net Income Available to Common Stockholders",
 		s.Rows[0],
 	)
-}
-
-func (s *statement) EBIT(period string) float64 {
-	netInc := s.NetIncome(period)
-
-	intExp := s.value(
-		s.periodIndex(period),
-		"Interest Expense Net of Capitalized Interest",
-		s.Rows[0],
-	)
-
-	taxExp := s.value(
-		s.periodIndex(period),
-		"Provision for Income Tax",
-		s.Rows[0],
-	)
-
-//	fmt.Println(period)
-//	fmt.Println("net inc", netInc)
-//	fmt.Println("int", intExp)
-//	fmt.Println("tax", taxExp)
-
-	return netInc + (-1 * intExp) + (-1 * taxExp)
-}
-
-func (s *statement) EBITMargin(period string) float64 {
-	rev := s.Revenue(period)
-	ebit := s.EBIT(period)
-	margin := (ebit / rev) * 100
-//	fmt.Println("rev", rev)
-//	fmt.Println("ebit", ebit)
-//	fmt.Println("margin", margin)
-//	fmt.Println()
-	return margin
 }
 
 func (s *statement) DebtToEquity(period string) float64 {
@@ -1242,8 +1155,6 @@ func (s *statement) TotalDeposits(
 		s.Rows[0],
 	)
 }
-
-
 
 func (s *statement) FreeCashFlow(period string) float64 {
 	if len(s.Rows) == 0 {
