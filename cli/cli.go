@@ -61,8 +61,6 @@ func (c *Command) Execute(ctx context.Context) error {
 		return c.bargain(ctx)
 	case "pull-valuation":
 		return c.pullValuation(ctx)
-	case "pull-statements":
-		return c.pullStatements(ctx)
 	case "profile":
 		return c.profile(ctx)
 	case "symbols":
@@ -1284,8 +1282,11 @@ func (c *Command) pullValuation(ctx context.Context) error {
 			continue
 		}
 
-		valFile := valuationFile(baseDir, res.URL)
-		err = writeFile(valFile, res.Valuation)
+        err = ioutil.WriteFile(
+			valuationFile(baseDir, res.URL),
+			[]byte(res.Valuation),
+			0644,
+		)
 		if err != nil {
 			fmt.Printf("%v: %v\n", symbol, err)
 			continue
@@ -1344,7 +1345,7 @@ func missingFile(baseDir, u string) string {
 
 func valuationFile(baseDir, u string) string {
 	_, symbol, exch := morningstarURLValuation(u)
-	return filepath.Join(baseDir, exch, symbol, "valuation.csv")
+	return filepath.Join(baseDir, exch, symbol, "valuation.json")
 }
 
 func incomeStatementFile(baseDir, u string) string {

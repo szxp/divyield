@@ -206,7 +206,7 @@ func (s *financialsService) PullValuation(
 					URL: ev.Request.URL,
 				}
 
-				if (resp.IsIS() || resp.IsBS() || resp.IsCF()) &&
+				if (resp.IsIS() || resp.IsBS() || resp.IsCF() || resp.IsValuation()) &&
                     ev.Request.Method == "GET" {
 				    //fmt.Println("reqID", reqID)
 					responses[reqID] = resp
@@ -243,21 +243,18 @@ func (s *financialsService) PullValuation(
 
 		for u := range jobCh {
 			var compID string
-			var valuation [][]string
 			actions := make([]chromedp.Action, 0)
 			actions = append(
 				actions,
 				chromedp.Navigate(u + "/valuation"),
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(extractCompID, &compID),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//span[contains(text(),'Price/Earnings')]",
 						chromedp.BySearch,
 					),
 				}),
-				chromedp.Evaluate(libJS, &[]byte{}),
-				chromedp.Evaluate(extractCompID, &compID),
-				//chromedp.Evaluate(extractValuation, &valuation),
-
 				chromedp.Navigate(u + "/financials"),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
@@ -268,7 +265,7 @@ func (s *financialsService) PullValuation(
 
 		        chromedp.Evaluate(libJS, &[]byte{}),
 				chromedp.Evaluate(clickDetailsViewLink, &[]byte{}),
-				chromedp.Sleep(1 * time.Second),
+				chromedp.Sleep(2 * time.Second),
                 /*
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
@@ -279,7 +276,7 @@ func (s *financialsService) PullValuation(
                 */
 
 				chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
-				chromedp.Sleep(1 * time.Second),
+				chromedp.Sleep(2 * time.Second),
                 /*
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
@@ -290,7 +287,7 @@ func (s *financialsService) PullValuation(
                 */
 
 				chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
-				chromedp.Sleep(1 * time.Second),
+				chromedp.Sleep(2 * time.Second),
                 /*
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
@@ -320,7 +317,7 @@ func (s *financialsService) PullValuation(
 			//fmt.Println("compID", compID)
 
             var resp *response
-			var is, bs, cf string
+			var is, bs, cf, val string
 			for {
 				select {
                 case resp = <-statementsCh:
@@ -344,6 +341,8 @@ func (s *financialsService) PullValuation(
 					bs = resp.Body
 				} else if resp.IsCF() {
 					cf = resp.Body
+				} else if resp.IsValuation() {
+					val = resp.Body
 				} else {
 					res.Err = fmt.Errorf(
 						"Unexpected statement: %v",
@@ -353,12 +352,15 @@ func (s *financialsService) PullValuation(
 					continue
 				}
 
-				if is != "" && bs != "" && cf != "" {
+				if is != "" &&
+                    bs != "" &&
+                    cf != "" &&
+                    val != "" {
 					break
 				}
 			}
 
-			res.Valuation = valuation
+			res.Valuation = val
 			res.IncomeStatement = is
 			res.BalanceSheet = bs
 			res.CashFlow = cf
@@ -376,6 +378,12 @@ type response struct {
 }
 
 func (r *response) CompID() string {
+    if r.IsValuation() {
+	    re := regexp.MustCompile(`/valuation/[^/]+/([^/]+)\?`)
+	    matches := re.FindStringSubmatch(r.URL)
+	    return matches[1]
+    }
+
 	re := regexp.MustCompile(`/newfinancials/([^/]+)/`)
 	matches := re.FindStringSubmatch(r.URL)
 	return matches[1]
@@ -391,6 +399,10 @@ func (r *response) IsBS() bool {
 
 func (r *response) IsCF() bool {
 	return strings.Contains(r.URL, "cashFlow/detail")
+}
+
+func (r *response) IsValuation() bool {
+	return strings.Contains(r.URL, "/valuation/")
 }
 
 func changeTail(
