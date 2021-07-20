@@ -536,9 +536,9 @@ func (c *Command) bargain(ctx context.Context) error {
 		financials,
 		func(i, j int) bool {
 			pe0 := financials[i].Valuation.
-				PriceToEarnings["Current"]
+				PriceToEarnings("Current")
 			pe1 := financials[j].Valuation.
-				PriceToEarnings["Current"]
+				PriceToEarnings("Current")
 			return pe0 < pe1
 		},
 	)
@@ -606,11 +606,11 @@ func (c *Command) printFinancials(
         ))
 		b.WriteByte('\t')
 
-        pe := v.Valuation.PriceToEarnings["Current"]
+        pe := v.Valuation.PriceToEarnings("Current")
 		b.WriteString(p.Sprintf("%.2f", pe))
 		b.WriteByte('\t')
 
-        pb := v.Valuation.PriceToBook["Current"]
+        pb := v.Valuation.PriceToBook("Current")
 		b.WriteString(p.Sprintf("%.2f", pb))
 		b.WriteByte('\t')
 
@@ -733,7 +733,7 @@ func (c *Command) financials(
 		return nil, nil
 	}
 	var incomeStatement statement
-	err = c.decodeStatement(file, &incomeStatement)
+	err = c.decodeJSON(file, &incomeStatement)
 	if err != nil {
 		return nil, err
 	}
@@ -747,7 +747,7 @@ func (c *Command) financials(
 		return nil, nil
 	}
 	var balanceSheet statement
-	err = c.decodeStatement(file, &balanceSheet)
+	err = c.decodeJSON(file, &balanceSheet)
 	if err != nil {
 		return nil, err
 	}
@@ -761,28 +761,36 @@ func (c *Command) financials(
 		return nil, nil
 	}
 	var cashFlow statement
-	err = c.decodeStatement(file, &cashFlow)
+	err = c.decodeJSON(file, &cashFlow)
 	if err != nil {
 		return nil, err
 	}
 
-//	valuation, err := c.valuation(ctx, dir)
-//	if err != nil {
-//		return nil, err
-//	}
+    file = filepath.Join(dir, "valuation.json")
+	exist, err = exists(file)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
+	var valuation valuation
+	err = c.decodeJSON(file, &valuation)
+	if err != nil {
+		return nil, err
+	}
 
 	financials := &financials{
 		IncomeStatement: &incomeStatement,
 		BalanceSheet:    &balanceSheet,
 		CashFlow:        &cashFlow,
-		//Valuation:       valuation,
-		Valuation:       &valuation{},
+		Valuation:       &valuation,
 	}
 
 	return financials, nil
 }
 
-func (c *Command) decodeStatement(
+func (c *Command) decodeJSON(
 	file string,
 	statement interface{},
 ) error {
@@ -797,92 +805,6 @@ func (c *Command) decodeStatement(
 		return err
 	}
 	return nil
-}
-
-func rowNum(label string, table [][]string) int {
-	for i, row := range table {
-		if strings.Contains(row[0], label) {
-			return i
-		}
-	}
-	return -1
-}
-
-func (c *Command) valuation(
-	ctx context.Context,
-	dir string,
-) (*valuation, error) {
-	val := &valuation{
-		PriceToSales:    make(map[string]float64),
-		PriceToEarnings: make(map[string]float64),
-		PriceToBook:     make(map[string]float64),
-	}
-	valFile := filepath.Join(dir, "valuation.csv")
-
-	exists, err := exists(valFile)
-	if err != nil {
-		return nil, err
-	}
-
-	if !exists {
-		return val, err
-	}
-
-	f, err := os.Open(valFile)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	records, err := readCSV(f)
-	if err != nil {
-		return nil, err
-	}
-
-	psMap, err := valueMap("Price/Sales", records)
-	if err != nil {
-		return nil, err
-	}
-	peMap, err := valueMap("Price/Earnings", records)
-	if err != nil {
-		return nil, err
-	}
-	pbMap, err := valueMap("Price/Book", records)
-	if err != nil {
-		return nil, err
-	}
-
-	val.PriceToSales = psMap
-	val.PriceToEarnings = peMap
-	val.PriceToBook = pbMap
-	return val, nil
-}
-
-func valueMap(
-	label string,
-	records [][]string,
-) (map[string]float64, error) {
-	m := make(map[string]float64)
-	rowNum := rowNum(label, records)
-	if rowNum == -1 {
-		return nil, fmt.Errorf("label not found: %v", label)
-	}
-	for i := 1; i < len(records[0]); i++ {
-		period := records[0][i]
-		valStr := records[rowNum][i]
-		var val float64
-		var err error
-
-		if valStr != "-" && valStr != "—" {
-			valStr = strings.ReplaceAll(valStr, ",", "")
-			val, err = strconv.ParseFloat(valStr, 64)
-			if err != nil {
-				return nil, err
-			}
-		}
-		m[period] = val
-	}
-	return m, nil
 }
 
 type financials struct {
@@ -1137,9 +1059,70 @@ func (s *statement) value(
 }
 
 type valuation struct {
-	PriceToSales    map[string]float64
-	PriceToEarnings map[string]float64
-	PriceToBook     map[string]float64
+	Collapsed  *valuationCollapsed `json:"Collapsed"`
+}
+
+type valuationCollapsed struct {
+	ColumnDefs []string        `json:"columnDefs"`
+	Rows       []*valuationRow `json:"rows"`
+}
+
+type valuationRow struct {
+	Label string        `json:"label"`
+	Datum []interface{} `json:"datum"`
+}
+
+func (s *valuation) periodIndex(period string) int {
+	for i, v := range s.Collapsed.ColumnDefs {
+		if v == period {
+			return i-1
+		}
+	}
+	return -1
+}
+
+func (s *valuation) value(
+	periodIndex int,
+	label string,
+) float64 {
+	if periodIndex == -1 {
+		return 0
+	}
+
+    for _, row := range s.Collapsed.Rows {
+		if row.Label == label {
+			d := row.Datum[periodIndex]
+			str, _ := d.(string)
+            if str == "" {
+                return 0
+            }
+            num, err := strconv.ParseFloat(str, 64)
+            if err != nil {
+                panic("parse float: " + err.Error())
+            }
+            return num
+		}
+	}
+	return 0
+}
+
+
+func (s *valuation) PriceToEarnings(
+	period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+		"Price/Earnings",
+	)
+}
+
+func (s *valuation) PriceToBook(
+	period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+		"Price/Book",
+	)
 }
 
 func morningstarURL(
