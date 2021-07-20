@@ -318,13 +318,12 @@ func (s *financialsService) PullValuation(
 
             var resp *response
 			var is, bs, cf, val string
-			for {
+            LOOP: for {
 				select {
                 case resp = <-statementsCh:
 				case <-time.After(10 * time.Second):
-					res.Err = fmt.Errorf("Response timeout")
-					resCh <- res
-					continue
+					err = fmt.Errorf("Response timeout")
+					break LOOP
 				}
 
 				if resp.CompID() != compID {
@@ -344,12 +343,11 @@ func (s *financialsService) PullValuation(
 				} else if resp.IsValuation() {
 					val = resp.Body
 				} else {
-					res.Err = fmt.Errorf(
+					err = fmt.Errorf(
 						"Unexpected statement: %v",
 						resp.Body,
 					)
-					resCh <- res
-					continue
+					break
 				}
 
 				if is != "" &&
@@ -359,6 +357,12 @@ func (s *financialsService) PullValuation(
 					break
 				}
 			}
+
+            if err != nil {
+                res.Err = err
+			    resCh <- res
+                continue
+            }
 
 			res.Valuation = val
 			res.IncomeStatement = is
