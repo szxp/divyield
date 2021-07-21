@@ -487,6 +487,8 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.Exchange = exch
 			fin.Symbol = symbol
 
+            fin.CashToMCap = fin.CashToMarketCap(last1)
+
 		    fin.ReturnOnEquity1 = fin.
                 OperatingIncomeOnEquity(last1)
 		    fin.ReturnOnEquity2 = fin.
@@ -535,11 +537,17 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
+			v0 := financials[i].CashToMCap
+			v1 := financials[j].CashToMCap
+			return v0 > v1
+
+            /*
 			pe0 := financials[i].Valuation.
 				PriceToEarnings("Current")
 			pe1 := financials[j].Valuation.
 				PriceToEarnings("Current")
 			return pe0 < pe1
+            */
 		},
 	)
 
@@ -563,6 +571,8 @@ func (c *Command) printFinancials(
 	b.WriteString("P/E")
 	b.WriteByte('\t')
 	b.WriteString("P/B")
+	b.WriteByte('\t')
+	b.WriteString("Cash/MCap")
 	b.WriteByte('\t')
 	b.WriteString("ROE1%")
 	b.WriteByte('\t')
@@ -614,7 +624,10 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", pb))
 		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf(
+		b.WriteString(p.Sprintf("%.2f", v.CashToMCap))
+		b.WriteByte('\t')
+
+        b.WriteString(p.Sprintf(
             "%.2f",
             v.ReturnOnEquity1,
         ))
@@ -780,11 +793,26 @@ func (c *Command) financials(
 		return nil, err
 	}
 
+    file = filepath.Join(dir, "rt.json")
+	exist, err = exists(file)
+	if err != nil {
+		return nil, err
+	}
+	if !exist {
+		return nil, nil
+	}
+	var realtime realtime
+	err = c.decodeJSON(file, &realtime)
+	if err != nil {
+		return nil, err
+	}
+
 	financials := &financials{
 		IncomeStatement: &incomeStatement,
 		BalanceSheet:    &balanceSheet,
 		CashFlow:        &cashFlow,
 		Valuation:       &valuation,
+		Realtime:        &realtime,
 	}
 
 	return financials, nil
@@ -814,6 +842,9 @@ type financials struct {
 	BalanceSheet    *statement
 	CashFlow        *statement
 	Valuation       *valuation
+	Realtime        *realtime
+
+    CashToMCap float64
 
     ReturnOnEquity1 float64
     ReturnOnEquity2 float64
@@ -834,6 +865,17 @@ type financials struct {
 	OperatingEfficiency4 float64
 	OperatingEfficiency5 float64
 }
+
+func (f *financials) CashToMarketCap(
+    period string,
+) float64 {
+    cash := f.BalanceSheet.CashAndCashEquivalents(period)
+    if f.Realtime.MarketCap <= 0 {
+        return 0
+    }
+    return cash / f.Realtime.MarketCap
+}
+
 
 func (f *financials) OperatingIncomeOnEquity(
     period string,
@@ -996,6 +1038,16 @@ func (s *statement) TotalDeposits(
 	)
 }
 
+func (s *statement) CashAndCashEquivalents(
+    period string,
+) float64 {
+    return s.value(
+		s.periodIndex(period),
+        "Cash and Cash Equivalents",
+		s.Rows[0],
+	)
+}
+
 func (s *statement) FreeCashFlow(period string) float64 {
 	if len(s.Rows) == 0 {
 		return 0
@@ -1056,6 +1108,10 @@ func (s *statement) value(
 		levels = append(levels, next.SubLevels...)
 	}
 	return 0
+}
+
+type realtime struct {
+	MarketCap float64 `json:"marketCap"`
 }
 
 type valuation struct {
@@ -1266,6 +1322,16 @@ func (c *Command) pullValuation(ctx context.Context) error {
 		}
 
         err = ioutil.WriteFile(
+			realtimeFile(baseDir, res.URL),
+			[]byte(res.Realtime),
+			0644,
+		)
+		if err != nil {
+			fmt.Printf("%v: %v\n", symbol, err)
+			continue
+		}
+
+        err = ioutil.WriteFile(
 			valuationFile(baseDir, res.URL),
 			[]byte(res.Valuation),
 			0644,
@@ -1324,6 +1390,11 @@ func writeFile(p string, records [][]string) error {
 func missingFile(baseDir, u string) string {
 	_, symbol, exch := morningstarURLValuation(u)
 	return filepath.Join(baseDir, exch, symbol, "missing")
+}
+
+func realtimeFile(baseDir, u string) string {
+	_, symbol, exch := morningstarURLValuation(u)
+	return filepath.Join(baseDir, exch, symbol, "rt.json")
 }
 
 func valuationFile(baseDir, u string) string {

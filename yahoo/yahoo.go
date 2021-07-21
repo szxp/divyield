@@ -196,7 +196,7 @@ func (s *financialsService) PullValuation(
 		defer cancel()
 
 		responses := make(map[string]*response)
-		statementsCh := make(chan *response)
+		statementsCh := make(chan *response, 20)
 
 		chromedp.ListenTarget(ctx, func(v interface{}) {
 			switch ev := v.(type) {
@@ -206,9 +206,10 @@ func (s *financialsService) PullValuation(
 					URL: ev.Request.URL,
 				}
 
-				if (resp.IsIS() || resp.IsBS() || resp.IsCF() || resp.IsValuation()) &&
+
+				if (resp.IsIS() || resp.IsBS() || resp.IsCF() || resp.IsValuation() || resp.IsRealtime()) &&
                     ev.Request.Method == "GET" {
-				    //fmt.Println("reqID", reqID)
+				    //fmt.Println("reqID", reqID, ev.Request.URL)
 					responses[reqID] = resp
 				}
 
@@ -246,15 +247,26 @@ func (s *financialsService) PullValuation(
 			actions := make([]chromedp.Action, 0)
 			actions = append(
 				actions,
-				chromedp.Navigate(u + "/valuation"),
+				chromedp.Navigate(u + "/quote"),
 				chromedp.Evaluate(libJS, &[]byte{}),
 				chromedp.Evaluate(extractCompID, &compID),
+				runWithTimeOut(&ctx, 15, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//div[contains(text(),'Market Cap')]",
+						chromedp.BySearch,
+					),
+				}),
+				chromedp.Sleep(2 * time.Second),
+
+                chromedp.Navigate(u + "/valuation"),
+				chromedp.Evaluate(libJS, &[]byte{}),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//span[contains(text(),'Price/Earnings')]",
 						chromedp.BySearch,
 					),
 				}),
+
 				chromedp.Navigate(u + "/financials"),
 				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
@@ -317,7 +329,7 @@ func (s *financialsService) PullValuation(
 			//fmt.Println("compID", compID)
 
             var resp *response
-			var is, bs, cf, val string
+			var is, bs, cf, val, rt string
             LOOP: for {
 				select {
                 case resp = <-statementsCh:
@@ -342,6 +354,8 @@ func (s *financialsService) PullValuation(
 					cf = resp.Body
 				} else if resp.IsValuation() {
 					val = resp.Body
+				} else if resp.IsRealtime() {
+					rt = resp.Body
 				} else {
 					err = fmt.Errorf(
 						"Unexpected statement: %v",
@@ -353,7 +367,8 @@ func (s *financialsService) PullValuation(
 				if is != "" &&
                     bs != "" &&
                     cf != "" &&
-                    val != "" {
+                    val != "" &&
+                    rt != "" {
 					break
 				}
 			}
@@ -364,6 +379,7 @@ func (s *financialsService) PullValuation(
                 continue
             }
 
+			res.Realtime = rt
 			res.Valuation = val
 			res.IncomeStatement = is
 			res.BalanceSheet = bs
@@ -384,6 +400,12 @@ type response struct {
 func (r *response) CompID() string {
     if r.IsValuation() {
 	    re := regexp.MustCompile(`/valuation/[^/]+/([^/]+)\?`)
+	    matches := re.FindStringSubmatch(r.URL)
+	    return matches[1]
+    }
+
+    if r.IsRealtime() {
+	    re := regexp.MustCompile(`/realTime/[^/]+/([^/]+)/`)
 	    matches := re.FindStringSubmatch(r.URL)
 	    return matches[1]
     }
@@ -409,6 +431,9 @@ func (r *response) IsValuation() bool {
 	return strings.Contains(r.URL, "/valuation/")
 }
 
+func (r *response) IsRealtime() bool {
+	return strings.Contains(r.URL, "/realTime/")
+}
 func changeTail(
 	u string,
 	tail string,
