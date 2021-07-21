@@ -866,10 +866,11 @@ type financials struct {
 	OperatingEfficiency5 float64
 }
 
-func (f *financials) CashToMarketCap(
+func (f *financials) NetCashToMarketCap(
     period string,
 ) float64 {
     cash := f.BalanceSheet.CashAndCashEquivalents(period)
+    
     if f.Realtime.MarketCap <= 0 {
         return 0
     }
@@ -1018,14 +1019,19 @@ func (s *statement) TotalEquity(
 func (s *statement) TotalLiabilitiesNoDeposits(
     period string,
 ) float64 {
-    totLia := s.value(
+    totLia := s.TotalLiabilities(period)
+    totDep := s.TotalDeposits(period)
+    return totLia - totDep
+}
+
+func (s *statement) TotalLiabilities(
+    period string,
+) float64 {
+    return s.value(
 		s.periodIndex(period),
 		"Total Liabilities",
 		s.Rows[0],
 	)
-
-    totDep := s.TotalDeposits(period)
-    return totLia - totDep
 }
 
 func (s *statement) TotalDeposits(
