@@ -487,7 +487,7 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.Exchange = exch
 			fin.Symbol = symbol
 
-            fin.CashToMCap = fin.CashToMarketCap(last1)
+            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
 		    fin.ReturnOnEquity1 = fin.
                 OperatingIncomeOnEquity(last1)
@@ -537,8 +537,8 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
-			v0 := financials[i].CashToMCap
-			v1 := financials[j].CashToMCap
+			v0 := financials[i].NetCashToMCap
+			v1 := financials[j].NetCashToMCap
 			return v0 > v1
 
             /*
@@ -572,7 +572,7 @@ func (c *Command) printFinancials(
 	b.WriteByte('\t')
 	b.WriteString("P/B")
 	b.WriteByte('\t')
-	b.WriteString("Cash/MCap")
+	b.WriteString("NetCash/MCap")
 	b.WriteByte('\t')
 	b.WriteString("ROE1%")
 	b.WriteByte('\t')
@@ -624,7 +624,7 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", pb))
 		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf("%.2f", v.CashToMCap))
+		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
 		b.WriteByte('\t')
 
         b.WriteString(p.Sprintf(
@@ -844,7 +844,7 @@ type financials struct {
 	Valuation       *valuation
 	Realtime        *realtime
 
-    CashToMCap float64
+    NetCashToMCap float64
 
     ReturnOnEquity1 float64
     ReturnOnEquity2 float64
@@ -870,13 +870,13 @@ func (f *financials) NetCashToMarketCap(
     period string,
 ) float64 {
     cash := f.BalanceSheet.CashAndCashEquivalents(period)
-    
+    totLia := f.BalanceSheet.TotalLiabilities(period)
     if f.Realtime.MarketCap <= 0 {
         return 0
     }
-    return cash / f.Realtime.MarketCap
+    return (cash - math.Abs(totLia)) /
+        f.Realtime.MarketCap
 }
-
 
 func (f *financials) OperatingIncomeOnEquity(
     period string,
