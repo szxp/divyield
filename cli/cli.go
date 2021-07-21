@@ -438,17 +438,17 @@ func (c *Command) bargain(ctx context.Context) error {
 	}
 	defer uf.Close()
 
-    const (
-        lastTTM = "TTM"
-        last1 = "2020"
-        last2 = "2019"
-        last3 = "2018"
-        last4 = "2017"
-        last5 = "2016"
-    )
+	const (
+		lastTTM = "TTM"
+		last1   = "2020"
+		last2   = "2019"
+		last3   = "2018"
+		last4   = "2017"
+		last5   = "2016"
+	)
 
 	financials := make([]*financials, 0)
-    scanner := bufio.NewScanner(uf)
+	scanner := bufio.NewScanner(uf)
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
@@ -457,7 +457,7 @@ func (c *Command) bargain(ctx context.Context) error {
 			// noop
 		}
 
-        u := scanner.Text()
+		u := scanner.Text()
 		u = strings.TrimSpace(u)
 		if u == "" {
 			continue
@@ -467,17 +467,17 @@ func (c *Command) bargain(ctx context.Context) error {
 
 		dir := filepath.Join(baseDir, exch, symbol)
 
-        /*
-		missingFile := filepath.Join(dir, "missing")
-		exist, err = exists(missingFile)
-		if err != nil {
-			return err
-		}
-		if exist {
-            fmt.Println("missing")
-			continue
-		}
-        */
+		/*
+					missingFile := filepath.Join(dir, "missing")
+					exist, err = exists(missingFile)
+					if err != nil {
+						return err
+					}
+					if exist {
+			            fmt.Println("missing")
+						continue
+					}
+		*/
 
 		fin, err := c.financials(ctx, dir)
 		if err != nil {
@@ -487,48 +487,48 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.Exchange = exch
 			fin.Symbol = symbol
 
-            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
+			fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
-		    fin.ReturnOnEquity1 = fin.
-                OperatingIncomeOnEquity(last1)
-		    fin.ReturnOnEquity2 = fin.
-                OperatingIncomeOnEquity(last2)
-		    fin.ReturnOnEquity3 = fin.
-                OperatingIncomeOnEquity(last3)
-		    fin.ReturnOnEquity4 = fin.
-                OperatingIncomeOnEquity(last4)
-		    fin.ReturnOnEquity5 = fin.
-                OperatingIncomeOnEquity(last5)
+			fin.ReturnOnEquity1 = fin.
+				OperatingIncomeOnEquity(last1)
+			fin.ReturnOnEquity2 = fin.
+				OperatingIncomeOnEquity(last2)
+			fin.ReturnOnEquity3 = fin.
+				OperatingIncomeOnEquity(last3)
+			fin.ReturnOnEquity4 = fin.
+				OperatingIncomeOnEquity(last4)
+			fin.ReturnOnEquity5 = fin.
+				OperatingIncomeOnEquity(last5)
 
-		    fin.DebtToEquity1 = fin.
-                BalanceSheet.DebtToEquity(last1)
-		    fin.DebtToEquity2 = fin.
-                BalanceSheet.DebtToEquity(last2)
-		    fin.DebtToEquity3 = fin.
-                BalanceSheet.DebtToEquity(last3)
-		    fin.DebtToEquity4 = fin.
-                BalanceSheet.DebtToEquity(last4)
-		    fin.DebtToEquity5 = fin.
-                BalanceSheet.DebtToEquity(last5)
+			fin.DebtToEquity1 = fin.
+				BalanceSheet.DebtToEquity(last1)
+			fin.DebtToEquity2 = fin.
+				BalanceSheet.DebtToEquity(last2)
+			fin.DebtToEquity3 = fin.
+				BalanceSheet.DebtToEquity(last3)
+			fin.DebtToEquity4 = fin.
+				BalanceSheet.DebtToEquity(last4)
+			fin.DebtToEquity5 = fin.
+				BalanceSheet.DebtToEquity(last5)
 
-		    fin.OperatingEfficiencyTTM = fin.
-                IncomeStatement.
-                OperatingEfficiency(lastTTM)
-		    fin.OperatingEfficiency1 = fin.
-                IncomeStatement.
-                OperatingEfficiency(last1)
-		    fin.OperatingEfficiency2 = fin.
-                IncomeStatement.
-                OperatingEfficiency(last2)
-		    fin.OperatingEfficiency3 = fin.
-                IncomeStatement.
-                OperatingEfficiency(last3)
-		    fin.OperatingEfficiency4 = fin.
-                IncomeStatement.
-                OperatingEfficiency(last4)
-		    fin.OperatingEfficiency5 = fin.
-                IncomeStatement.
-                OperatingEfficiency(last5)
+			fin.OperatingEfficiencyTTM = fin.
+				IncomeStatement.
+				OperatingEfficiency(lastTTM)
+			fin.OperatingEfficiency1 = fin.
+				IncomeStatement.
+				OperatingEfficiency(last1)
+			fin.OperatingEfficiency2 = fin.
+				IncomeStatement.
+				OperatingEfficiency(last2)
+			fin.OperatingEfficiency3 = fin.
+				IncomeStatement.
+				OperatingEfficiency(last3)
+			fin.OperatingEfficiency4 = fin.
+				IncomeStatement.
+				OperatingEfficiency(last4)
+			fin.OperatingEfficiency5 = fin.
+				IncomeStatement.
+				OperatingEfficiency(last5)
 
 			financials = append(financials, fin)
 		}
@@ -541,20 +541,19 @@ func (c *Command) bargain(ctx context.Context) error {
 			v1 := financials[j].NetCashToMCap
 			return v0 > v1
 
-            /*
-			pe0 := financials[i].Valuation.
-				PriceToEarnings("Current")
-			pe1 := financials[j].Valuation.
-				PriceToEarnings("Current")
-			return pe0 < pe1
-            */
+			/*
+				pe0 := financials[i].Valuation.
+					PriceToEarnings("Current")
+				pe1 := financials[j].Valuation.
+					PriceToEarnings("Current")
+				return pe0 < pe1
+			*/
 		},
 	)
 
-    c.printFinancials(financials)
+	c.printFinancials(financials)
 	return nil
 }
-
 
 func (c *Command) printFinancials(
 	financials []*financials,
@@ -611,119 +610,117 @@ func (c *Command) printFinancials(
 	for _, v := range financials {
 		b.Reset()
 		b.WriteString(fmt.Sprintf(
-            "%-10v",
-            v.Exchange+"/"+v.Symbol,
-        ))
+			"%-10v",
+			v.Exchange+"/"+v.Symbol,
+		))
 		b.WriteByte('\t')
 
-        pe := v.Valuation.PriceToEarnings("Current")
+		pe := v.Valuation.PriceToEarnings("Current")
 		b.WriteString(p.Sprintf("%.2f", pe))
 		b.WriteByte('\t')
 
-        pb := v.Valuation.PriceToBook("Current")
+		pb := v.Valuation.PriceToBook("Current")
 		b.WriteString(p.Sprintf("%.2f", pb))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
 		b.WriteByte('\t')
 
-        b.WriteString(p.Sprintf(
-            "%.2f",
-            v.ReturnOnEquity1,
-        ))
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.ReturnOnEquity1,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.ReturnOnEquity2,
-        ))
+			"%.2f",
+			v.ReturnOnEquity2,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.ReturnOnEquity3,
-        ))
+			"%.2f",
+			v.ReturnOnEquity3,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.ReturnOnEquity4,
-        ))
+			"%.2f",
+			v.ReturnOnEquity4,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.ReturnOnEquity5,
-        ))
-		b.WriteByte('\t')
-
-
-		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.DebtToEquity1,
-        ))
+			"%.2f",
+			v.ReturnOnEquity5,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.DebtToEquity2,
-        ))
+			"%.2f",
+			v.DebtToEquity1,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.DebtToEquity3,
-        ))
+			"%.2f",
+			v.DebtToEquity2,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.DebtToEquity4,
-        ))
+			"%.2f",
+			v.DebtToEquity3,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.DebtToEquity5,
-        ))
+			"%.2f",
+			v.DebtToEquity4,
+		))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
-            "%.2f",
-            v.OperatingEfficiencyTTM,
-        ))
+			"%.2f",
+			v.DebtToEquity5,
+		))
 		b.WriteByte('\t')
 
-        b.WriteString(p.Sprintf(
-            "%.2f",
-            v.OperatingEfficiency1,
-        ))
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.OperatingEfficiencyTTM,
+		))
 		b.WriteByte('\t')
 
-        b.WriteString(p.Sprintf(
-            "%.2f",
-            v.OperatingEfficiency2,
-        ))
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.OperatingEfficiency1,
+		))
 		b.WriteByte('\t')
 
-        b.WriteString(p.Sprintf(
-            "%.2f",
-            v.OperatingEfficiency3,
-        ))
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.OperatingEfficiency2,
+		))
 		b.WriteByte('\t')
 
-        b.WriteString(p.Sprintf(
-            "%.2f",
-            v.OperatingEfficiency4,
-        ))
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.OperatingEfficiency3,
+		))
 		b.WriteByte('\t')
 
-        b.WriteString(p.Sprintf(
-            "%.2f",
-            v.OperatingEfficiency5,
-        ))
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.OperatingEfficiency4,
+		))
 		b.WriteByte('\t')
 
+		b.WriteString(p.Sprintf(
+			"%.2f",
+			v.OperatingEfficiency5,
+		))
+		b.WriteByte('\t')
 
 		fmt.Fprintln(w, b.String())
 	}
@@ -731,7 +728,6 @@ func (c *Command) printFinancials(
 	w.Flush()
 	c.writef("%s", buf.String())
 }
-
 
 func (c *Command) financials(
 	ctx context.Context,
@@ -779,7 +775,7 @@ func (c *Command) financials(
 		return nil, err
 	}
 
-    file = filepath.Join(dir, "valuation.json")
+	file = filepath.Join(dir, "valuation.json")
 	exist, err = exists(file)
 	if err != nil {
 		return nil, err
@@ -793,7 +789,7 @@ func (c *Command) financials(
 		return nil, err
 	}
 
-    file = filepath.Join(dir, "rt.json")
+	file = filepath.Join(dir, "rt.json")
 	exist, err = exists(file)
 	if err != nil {
 		return nil, err
@@ -844,47 +840,47 @@ type financials struct {
 	Valuation       *valuation
 	Realtime        *realtime
 
-    NetCashToMCap float64
+	NetCashToMCap float64
 
-    ReturnOnEquity1 float64
-    ReturnOnEquity2 float64
-    ReturnOnEquity3 float64
-    ReturnOnEquity4 float64
-    ReturnOnEquity5 float64
+	ReturnOnEquity1 float64
+	ReturnOnEquity2 float64
+	ReturnOnEquity3 float64
+	ReturnOnEquity4 float64
+	ReturnOnEquity5 float64
 
-    DebtToEquity1 float64
-    DebtToEquity2 float64
-    DebtToEquity3 float64
-    DebtToEquity4 float64
-    DebtToEquity5 float64
+	DebtToEquity1 float64
+	DebtToEquity2 float64
+	DebtToEquity3 float64
+	DebtToEquity4 float64
+	DebtToEquity5 float64
 
-    OperatingEfficiencyTTM float64
-	OperatingEfficiency1 float64
-	OperatingEfficiency2 float64
-	OperatingEfficiency3 float64
-	OperatingEfficiency4 float64
-	OperatingEfficiency5 float64
+	OperatingEfficiencyTTM float64
+	OperatingEfficiency1   float64
+	OperatingEfficiency2   float64
+	OperatingEfficiency3   float64
+	OperatingEfficiency4   float64
+	OperatingEfficiency5   float64
 }
 
 func (f *financials) NetCashToMarketCap(
-    period string,
+	period string,
 ) float64 {
-    cash := f.BalanceSheet.CashAndCashEquivalents(period)
-    totLia := f.BalanceSheet.TotalLiabilities(period)
-    if f.Realtime.MarketCap <= 0 {
-        return 0
-    }
-    return (cash - math.Abs(totLia)) /
-        f.Realtime.MarketCap
+	cash := f.BalanceSheet.CashAndCashEquivalents(period)
+	totLia := f.BalanceSheet.TotalLiabilities(period)
+	if f.Realtime.MarketCap <= 0 {
+		return 0
+	}
+	return (cash - math.Abs(totLia)) /
+		f.Realtime.MarketCap
 }
 
 func (f *financials) OperatingIncomeOnEquity(
-    period string,
+	period string,
 ) float64 {
-    opInc := f.IncomeStatement.OperatingIncome(period)
-    equ := f.BalanceSheet.TotalEquity(period)
-    //fmt.Println(opInc, equ, (opInc/equ)*100)
-    return (opInc / equ) * 100
+	opInc := f.IncomeStatement.OperatingIncome(period)
+	equ := f.BalanceSheet.TotalEquity(period)
+	//fmt.Println(opInc, equ, (opInc/equ)*100)
+	return (opInc / equ) * 100
 }
 
 type statement struct {
@@ -894,16 +890,15 @@ type statement struct {
 }
 
 func (s *statement) OrderOfMagnitude() float64 {
-    switch s.Footer.OrderOfMagnitude {
-    case "Billion":
-        return 1000000000
-    case "Million":
-        return 1000000
-    default:
-        panic("unexpected order of magnitude: " + s.Footer.OrderOfMagnitude)
-    }
+	switch s.Footer.OrderOfMagnitude {
+	case "Billion":
+		return 1000000000
+	case "Million":
+		return 1000000
+	default:
+		panic("unexpected order of magnitude: " + s.Footer.OrderOfMagnitude)
+	}
 }
-
 
 type statementSubLevel struct {
 	Label     string               `json:"label"`
@@ -919,16 +914,16 @@ type statementFooter struct {
 }
 
 func (s *statement) GrossIncome(
-    period string,
+	period string,
 ) float64 {
-    netIntInc := s.NetInterestIncome(period)
-    if netIntInc > 0 { // banks
-        nonIntInc := s.NonInterestIncome(period)
-        return netIntInc + nonIntInc
-    }
+	netIntInc := s.NetInterestIncome(period)
+	if netIntInc > 0 { // banks
+		nonIntInc := s.NonInterestIncome(period)
+		return netIntInc + nonIntInc
+	}
 
-    // other companies
-    return s.value(
+	// other companies
+	return s.value(
 		s.periodIndex(period),
 		"Gross Profit",
 		s.Rows[0],
@@ -936,16 +931,16 @@ func (s *statement) GrossIncome(
 }
 
 func (s *statement) OperatingIncome(
-    period string,
+	period string,
 ) float64 {
-    nonIntExp := s.NonInterestExpenses(period)
-    if nonIntExp < 0 { // banks
-        groInc := s.GrossIncome(period)
-        return groInc + nonIntExp
-    }
+	nonIntExp := s.NonInterestExpenses(period)
+	if nonIntExp < 0 { // banks
+		groInc := s.GrossIncome(period)
+		return groInc + nonIntExp
+	}
 
-    // other companies
-    return s.value(
+	// other companies
+	return s.value(
 		s.periodIndex(period),
 		"Total Operating Profit/Loss",
 		s.Rows[0],
@@ -953,9 +948,9 @@ func (s *statement) OperatingIncome(
 }
 
 func (s *statement) NetInterestIncome(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Net Interest Income",
 		s.Rows[0],
@@ -963,9 +958,9 @@ func (s *statement) NetInterestIncome(
 }
 
 func (s *statement) NonInterestIncome(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Non-Interest Income",
 		s.Rows[0],
@@ -973,23 +968,23 @@ func (s *statement) NonInterestIncome(
 }
 
 func (s *statement) NonInterestExpenses(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
-        "Non-Interest Expenses",
+		"Non-Interest Expenses",
 		s.Rows[0],
 	)
 }
 
 func (s *statement) OperatingEfficiency(
-    period string,
+	period string,
 ) float64 {
-    exp := s.NonInterestExpenses(period)
-    netIntInc := s.NetInterestIncome(period)
-    nonIntInc := s.NonInterestIncome(period)
-    //fmt.Println(period, netIntInc, nonIntInc, exp)
-    return (math.Abs(exp) / (netIntInc + nonIntInc)) * 100
+	exp := s.NonInterestExpenses(period)
+	netIntInc := s.NetInterestIncome(period)
+	nonIntInc := s.NonInterestIncome(period)
+	//fmt.Println(period, netIntInc, nonIntInc, exp)
+	return (math.Abs(exp) / (netIntInc + nonIntInc)) * 100
 }
 
 func (s *statement) NetIncome(period string) float64 {
@@ -1001,15 +996,15 @@ func (s *statement) NetIncome(period string) float64 {
 }
 
 func (s *statement) DebtToEquity(period string) float64 {
-    debt := s.TotalLiabilitiesNoDeposits(period)
-    equ := s.TotalEquity(period)
-    return debt / equ
+	debt := s.TotalLiabilitiesNoDeposits(period)
+	equ := s.TotalEquity(period)
+	return debt / equ
 }
 
 func (s *statement) TotalEquity(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Total Equity",
 		s.Rows[0],
@@ -1017,17 +1012,17 @@ func (s *statement) TotalEquity(
 }
 
 func (s *statement) TotalLiabilitiesNoDeposits(
-    period string,
+	period string,
 ) float64 {
-    totLia := s.TotalLiabilities(period)
-    totDep := s.TotalDeposits(period)
-    return totLia - totDep
+	totLia := s.TotalLiabilities(period)
+	totDep := s.TotalDeposits(period)
+	return totLia - totDep
 }
 
 func (s *statement) TotalLiabilities(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Total Liabilities",
 		s.Rows[0],
@@ -1035,9 +1030,9 @@ func (s *statement) TotalLiabilities(
 }
 
 func (s *statement) TotalDeposits(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Total Deposits",
 		s.Rows[0],
@@ -1045,11 +1040,11 @@ func (s *statement) TotalDeposits(
 }
 
 func (s *statement) CashAndCashEquivalents(
-    period string,
+	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
-        "Cash and Cash Equivalents",
+		"Cash and Cash Equivalents",
 		s.Rows[0],
 	)
 }
@@ -1121,7 +1116,7 @@ type realtime struct {
 }
 
 type valuation struct {
-	Collapsed  *valuationCollapsed `json:"Collapsed"`
+	Collapsed *valuationCollapsed `json:"Collapsed"`
 }
 
 type valuationCollapsed struct {
@@ -1137,7 +1132,7 @@ type valuationRow struct {
 func (s *valuation) periodIndex(period string) int {
 	for i, v := range s.Collapsed.ColumnDefs {
 		if v == period {
-			return i-1
+			return i - 1
 		}
 	}
 	return -1
@@ -1151,28 +1146,27 @@ func (s *valuation) value(
 		return 0
 	}
 
-    for _, row := range s.Collapsed.Rows {
+	for _, row := range s.Collapsed.Rows {
 		if row.Label == label {
 			d := row.Datum[periodIndex]
 			str, _ := d.(string)
-            if str == "" {
-                return 0
-            }
-            num, err := strconv.ParseFloat(str, 64)
-            if err != nil {
-                panic("parse float: " + err.Error())
-            }
-            return num
+			if str == "" {
+				return 0
+			}
+			num, err := strconv.ParseFloat(str, 64)
+			if err != nil {
+				panic("parse float: " + err.Error())
+			}
+			return num
 		}
 	}
 	return 0
 }
 
-
 func (s *valuation) PriceToEarnings(
 	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Price/Earnings",
 	)
@@ -1181,7 +1175,7 @@ func (s *valuation) PriceToEarnings(
 func (s *valuation) PriceToBook(
 	period string,
 ) float64 {
-    return s.value(
+	return s.value(
 		s.periodIndex(period),
 		"Price/Book",
 	)
@@ -1264,29 +1258,29 @@ func (c *Command) pullValuation(ctx context.Context) error {
 
 			_, symbol, _ := morningstarURLValuation(u)
 
-            /*
-			m := filepath.Join(baseDir, exch, symbol, "missing")
-			exist, err = exists(m)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			if exist {
-				continue
-			}
-            */
+			/*
+				m := filepath.Join(baseDir, exch, symbol, "missing")
+				exist, err = exists(m)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				if exist {
+					continue
+				}
+			*/
 
-            /*
-			dir := filepath.Join(baseDir, exch, symbol, "is.json")
-			exist, err = exists(dir)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			if exist {
-				continue
-			}
-            */
+			/*
+				dir := filepath.Join(baseDir, exch, symbol, "is.json")
+				exist, err = exists(dir)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+				if exist {
+					continue
+				}
+			*/
 
 			jobCh <- u
 			fmt.Printf("%v: %v\n", symbol, u)
@@ -1327,7 +1321,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 			continue
 		}
 
-        err = ioutil.WriteFile(
+		err = ioutil.WriteFile(
 			realtimeFile(baseDir, res.URL),
 			[]byte(res.Realtime),
 			0644,
@@ -1337,7 +1331,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 			continue
 		}
 
-        err = ioutil.WriteFile(
+		err = ioutil.WriteFile(
 			valuationFile(baseDir, res.URL),
 			[]byte(res.Valuation),
 			0644,

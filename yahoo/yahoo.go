@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
-    "regexp"
 
 	//"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp"
@@ -170,12 +170,12 @@ func (s *financialsService) PullValuation(
 	ctx context.Context,
 	in *divyield.FinancialsPullValuationInput,
 ) (
-    chan string,
-    chan *divyield.FinancialsPullValuationOutput,
+	chan string,
+	chan *divyield.FinancialsPullValuationOutput,
 ) {
 	resCh := make(
-        chan *divyield.FinancialsPullValuationOutput,
-    )
+		chan *divyield.FinancialsPullValuationOutput,
+	)
 	jobCh := make(chan string)
 
 	go func() {
@@ -196,20 +196,23 @@ func (s *financialsService) PullValuation(
 		defer cancel()
 
 		responses := make(map[string]*response)
-		statementsCh := make(chan *response, 20)
+		rtCh := make(chan *response, 1)
+		valCh := make(chan *response, 1)
+		isCh := make(chan *response, 1)
+		bsCh := make(chan *response, 1)
+		cfCh := make(chan *response, 1)
 
 		chromedp.ListenTarget(ctx, func(v interface{}) {
 			switch ev := v.(type) {
 			case *network.EventRequestWillBeSent:
-                reqID := ev.RequestID.String()
+				reqID := ev.RequestID.String()
 				resp := &response{
 					URL: ev.Request.URL,
 				}
 
-
 				if (resp.IsIS() || resp.IsBS() || resp.IsCF() || resp.IsValuation() || resp.IsRealtime()) &&
-                    ev.Request.Method == "GET" {
-				    //fmt.Println("reqID", reqID, ev.Request.URL)
+					ev.Request.Method == "GET" {
+					//fmt.Println("reqID", reqID, ev.Request.URL)
 					responses[reqID] = resp
 				}
 
@@ -233,7 +236,20 @@ func (s *financialsService) PullValuation(
 								fmt.Println(err)
 							} else {
 								resp.Body = string(body)
-								statementsCh <- resp
+
+								if resp.IsRealtime() {
+									rtCh <- resp
+								} else if resp.IsValuation() {
+									valCh <- resp
+								} else if resp.IsIS() {
+									isCh <- resp
+								} else if resp.IsBS() {
+									bsCh <- resp
+								} else if resp.IsCF() {
+									cfCh <- resp
+								} else {
+									fmt.Println("unexpected response: ", resp)
+								}
 							}
 						}()
 						break
@@ -244,75 +260,18 @@ func (s *financialsService) PullValuation(
 
 		for u := range jobCh {
 			var compID string
-			actions := make([]chromedp.Action, 0)
-			actions = append(
-				actions,
-				chromedp.Navigate(u + "/quote"),
-				chromedp.Evaluate(libJS, &[]byte{}),
-				chromedp.Evaluate(extractCompID, &compID),
-				runWithTimeOut(&ctx, 15, chromedp.Tasks{
-					chromedp.WaitVisible(
-						"//div[contains(text(),'Market Cap')]",
-						chromedp.BySearch,
-					),
-				}),
-				chromedp.Sleep(2 * time.Second),
-
-                chromedp.Navigate(u + "/valuation"),
-				chromedp.Evaluate(libJS, &[]byte{}),
-				runWithTimeOut(&ctx, 5, chromedp.Tasks{
-					chromedp.WaitVisible(
-						"//span[contains(text(),'Price/Earnings')]",
-						chromedp.BySearch,
-					),
-				}),
-
-				chromedp.Navigate(u + "/financials"),
-				runWithTimeOut(&ctx, 5, chromedp.Tasks{
-					chromedp.WaitVisible(
-						"//span[contains(text(),'Normalized Diluted EPS')]",
-						chromedp.BySearch,
-					),
-				}),
-
-		        chromedp.Evaluate(libJS, &[]byte{}),
-				chromedp.Evaluate(clickDetailsViewLink, &[]byte{}),
-				chromedp.Sleep(2 * time.Second),
-                /*
-				runWithTimeOut(&ctx, 5, chromedp.Tasks{
-					chromedp.WaitVisible(
-						"//div[contains(text(),'Total Revenue')]",
-						chromedp.BySearch,
-					),
-				}),
-                */
-
-				chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
-				chromedp.Sleep(2 * time.Second),
-                /*
-				runWithTimeOut(&ctx, 5, chromedp.Tasks{
-					chromedp.WaitVisible(
-						"//div[contains(text(),'Total Assets')]",
-						chromedp.BySearch,
-					),
-				}),
-                */
-
-				chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
-				chromedp.Sleep(2 * time.Second),
-                /*
-				runWithTimeOut(&ctx, 5, chromedp.Tasks{
-					chromedp.WaitVisible(
-						"//div[contains(text(),'Cash Flow from Operating Activities')]",
-						chromedp.BySearch,
-					),
-				}),
-                */
-			)
 
 			res := &divyield.FinancialsPullValuationOutput{
 				URL: u,
 			}
+
+			actions := make([]chromedp.Action, 0)
+			actions = append(
+				actions,
+				chromedp.Navigate(u+"/quote"),
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(extractCompID, &compID),
+			)
 
 			err := chromedp.Run(ctx, actions...)
 			if err != nil {
@@ -321,69 +280,117 @@ func (s *financialsService) PullValuation(
 				continue
 			}
 
-            if compID == "" {
+			compID = strings.TrimSpace(compID)
+			if compID == "" {
 				res.Err = fmt.Errorf("CompID not found")
 				resCh <- res
 				continue
-            }
+			}
 			//fmt.Println("compID", compID)
 
-            var resp *response
-			var is, bs, cf, val, rt string
-            LOOP: for {
-				select {
-                case resp = <-statementsCh:
-				case <-time.After(10 * time.Second):
-					err = fmt.Errorf("Response timeout")
-					break LOOP
-				}
-
-				if resp.CompID() != compID {
-					fmt.Printf(
-						"Ignore unexpected compID: %v\n",
-						resp.CompID(),
-					)
-					continue
-                }
-
-				if resp.IsIS() {
-					is = resp.Body
-				} else if resp.IsBS() {
-					bs = resp.Body
-				} else if resp.IsCF() {
-					cf = resp.Body
-				} else if resp.IsValuation() {
-					val = resp.Body
-				} else if resp.IsRealtime() {
-					rt = resp.Body
-				} else {
-					err = fmt.Errorf(
-						"Unexpected statement: %v",
-						resp.Body,
-					)
-					break
-				}
-
-				if is != "" &&
-                    bs != "" &&
-                    cf != "" &&
-                    val != "" &&
-                    rt != "" {
-					break
-				}
+			rt, err := waitForResponse(rtCh, compID)
+			if err != nil {
+				res.Err = fmt.Errorf("realtime: %v", err)
+				resCh <- res
+				continue
 			}
 
-            if err != nil {
-                res.Err = err
-			    resCh <- res
-                continue
-            }
+			actions = make([]chromedp.Action, 0)
+			actions = append(
+                actions,
+				chromedp.Navigate(u+"/valuation"),
+				chromedp.Evaluate(libJS, &[]byte{}),
+			)
 
-			res.Realtime = rt
-			res.Valuation = val
-			res.IncomeStatement = is
-			res.BalanceSheet = bs
-			res.CashFlow = cf
+			err = chromedp.Run(ctx, actions...)
+			if err != nil {
+				res.Err = err
+				resCh <- res
+				continue
+			}
+
+			val, err := waitForResponse(valCh, compID)
+			if err != nil {
+				res.Err = fmt.Errorf("valuation: %v", err)
+				resCh <- res
+				continue
+			}
+
+			actions = make([]chromedp.Action, 0)
+			actions = append(
+                actions,
+				chromedp.Navigate(u+"/financials"),
+                runWithTimeOut(&ctx, 5, chromedp.Tasks{
+					chromedp.WaitVisible(
+						"//span[contains(text(),'Normalized Diluted EPS')]",
+						chromedp.BySearch,
+					),
+				}),
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(clickDetailsViewLink, &[]byte{}),
+			)
+
+			err = chromedp.Run(ctx, actions...)
+			if err != nil {
+				res.Err = err
+				resCh <- res
+				continue
+			}
+
+			is, err := waitForResponse(isCh, compID)
+			if err != nil {
+				res.Err = fmt.Errorf("is: %v", err)
+				resCh <- res
+				continue
+			}
+
+			actions = make([]chromedp.Action, 0)
+			actions = append(
+                actions,
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
+			)
+
+			err = chromedp.Run(ctx, actions...)
+			if err != nil {
+				res.Err = err
+				resCh <- res
+				continue
+			}
+
+			bs, err := waitForResponse(bsCh, compID)
+			if err != nil {
+				res.Err = fmt.Errorf("bs: %v", err)
+				resCh <- res
+				continue
+			}
+
+			actions = make([]chromedp.Action, 0)
+			actions = append(
+                actions,
+				chromedp.Evaluate(libJS, &[]byte{}),
+				chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
+			)
+
+			err = chromedp.Run(ctx, actions...)
+			if err != nil {
+				res.Err = err
+				resCh <- res
+				continue
+			}
+
+			cf, err := waitForResponse(cfCh, compID)
+			if err != nil {
+				res.Err = fmt.Errorf("cf: %v", err)
+				resCh <- res
+				continue
+			}
+
+			res.Realtime = rt.Body
+			res.Valuation = val.Body
+			res.IncomeStatement = is.Body
+			res.BalanceSheet = bs.Body
+			res.CashFlow = cf.Body
 			resCh <- res
 		}
 		close(resCh)
@@ -392,23 +399,43 @@ func (s *financialsService) PullValuation(
 	return jobCh, resCh
 }
 
+func waitForResponse(ch chan *response, compID string) (*response, error) {
+	var resp *response
+	for {
+		select {
+		case resp = <-ch:
+		case <-time.After(15 * time.Second):
+			return nil, fmt.Errorf("timeout")
+		}
+
+		if resp.CompID() != compID {
+			return nil, fmt.Errorf(
+				"unexpected compID: %v",
+				resp.CompID(),
+			)
+		}
+
+		return resp, nil
+	}
+}
+
 type response struct {
 	URL  string
 	Body string
 }
 
 func (r *response) CompID() string {
-    if r.IsValuation() {
-	    re := regexp.MustCompile(`/valuation/[^/]+/([^/]+)\?`)
-	    matches := re.FindStringSubmatch(r.URL)
-	    return matches[1]
-    }
+	if r.IsValuation() {
+		re := regexp.MustCompile(`/valuation/[^/]+/([^/]+)\?`)
+		matches := re.FindStringSubmatch(r.URL)
+		return matches[1]
+	}
 
-    if r.IsRealtime() {
-	    re := regexp.MustCompile(`/realTime/[^/]+/([^/]+)/`)
-	    matches := re.FindStringSubmatch(r.URL)
-	    return matches[1]
-    }
+	if r.IsRealtime() {
+		re := regexp.MustCompile(`/realTime/[^/]+/([^/]+)/`)
+		matches := re.FindStringSubmatch(r.URL)
+		return matches[1]
+	}
 
 	re := regexp.MustCompile(`/newfinancials/([^/]+)/`)
 	matches := re.FindStringSubmatch(r.URL)

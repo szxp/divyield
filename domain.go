@@ -477,7 +477,7 @@ type FinancialsPullValuationInput struct {
 
 type FinancialsPullValuationOutput struct {
 	URL             string
-	Realtime       string
+	Realtime        string
 	Valuation       string
 	IncomeStatement string
 	BalanceSheet    string
