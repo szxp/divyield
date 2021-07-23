@@ -489,6 +489,13 @@ func (c *Command) bargain(ctx context.Context) error {
 
 			fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
+            fin.FCFOnEqu1 = fin.FreeCashFlowOnEquity(last1)
+			fin.FCFOnEqu2 = fin.FreeCashFlowOnEquity(last2)
+			fin.FCFOnEqu3 = fin.FreeCashFlowOnEquity(last3)
+			fin.FCFOnEqu4 = fin.FreeCashFlowOnEquity(last4)
+			fin.FCFOnEqu5 = fin.FreeCashFlowOnEquity(last5)
+
+            /*
 			fin.ReturnOnEquity1 = fin.
 				OperatingIncomeOnEquity(last1)
 			fin.ReturnOnEquity2 = fin.
@@ -499,6 +506,7 @@ func (c *Command) bargain(ctx context.Context) error {
 				OperatingIncomeOnEquity(last4)
 			fin.ReturnOnEquity5 = fin.
 				OperatingIncomeOnEquity(last5)
+*/
 
 			fin.DebtToEquity1 = fin.
 				BalanceSheet.DebtToEquity(last1)
@@ -537,17 +545,17 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
+            /*
 			v0 := financials[i].NetCashToMCap
 			v1 := financials[j].NetCashToMCap
 			return v0 > v1
+            */
 
-			/*
 				pe0 := financials[i].Valuation.
 					PriceToEarnings("Current")
 				pe1 := financials[j].Valuation.
 					PriceToEarnings("Current")
 				return pe0 < pe1
-			*/
 		},
 	)
 
@@ -626,34 +634,15 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
 		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf(
-			"%.2f",
-			v.ReturnOnEquity1,
-		))
+		b.WriteString(p.Sprintf("%.2f",	v.FCFOnEqu1))
 		b.WriteByte('\t')
-
-		b.WriteString(p.Sprintf(
-			"%.2f",
-			v.ReturnOnEquity2,
-		))
+		b.WriteString(p.Sprintf("%.2f", v.FCFOnEqu2))
 		b.WriteByte('\t')
-
-		b.WriteString(p.Sprintf(
-			"%.2f",
-			v.ReturnOnEquity3,
-		))
+		b.WriteString(p.Sprintf("%.2f",	v.FCFOnEqu3))
 		b.WriteByte('\t')
-
-		b.WriteString(p.Sprintf(
-			"%.2f",
-			v.ReturnOnEquity4,
-		))
+		b.WriteString(p.Sprintf("%.2f",	v.FCFOnEqu4))
 		b.WriteByte('\t')
-
-		b.WriteString(p.Sprintf(
-			"%.2f",
-			v.ReturnOnEquity5,
-		))
+		b.WriteString(p.Sprintf("%.2f",	v.FCFOnEqu5))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf(
@@ -842,11 +831,20 @@ type financials struct {
 
 	NetCashToMCap float64
 
+    //FCFTTM float64
+    FCFOnEqu1   float64
+    FCFOnEqu2   float64
+    FCFOnEqu3   float64
+    FCFOnEqu4   float64
+    FCFOnEqu5   float64
+
+    /*
 	ReturnOnEquity1 float64
 	ReturnOnEquity2 float64
 	ReturnOnEquity3 float64
 	ReturnOnEquity4 float64
 	ReturnOnEquity5 float64
+    */
 
 	DebtToEquity1 float64
 	DebtToEquity2 float64
@@ -881,6 +879,14 @@ func (f *financials) OperatingIncomeOnEquity(
 	equ := f.BalanceSheet.TotalEquity(period)
 	//fmt.Println(opInc, equ, (opInc/equ)*100)
 	return (opInc / equ) * 100
+}
+
+func (f *financials) FreeCashFlowOnEquity(
+	period string,
+) float64 {
+	fcf := f.CashFlow.FreeCashFlow(period)
+	equ := f.BalanceSheet.TotalEquity(period)
+	return (fcf / equ) * 100
 }
 
 type statement struct {
@@ -1054,15 +1060,21 @@ func (s *statement) FreeCashFlow(period string) float64 {
 		return 0
 	}
 
-	opCash := s.value(
+	opCashDir := s.value(
 		s.periodIndex(period),
-		"Cash Flow from Operating Activities",
+        "Cash Flows from/Used in Operating Activities, Direct",
 		s.Rows[0],
 	)
 
-	purPPPPE := s.value(
+	opCashInd := s.value(
 		s.periodIndex(period),
-		"Purchase of Property, Plant and Equipment",
+		"Cash Flow from Operating Activities, Indirect",
+		s.Rows[0],
+	)
+
+	netPPPE := s.value(
+		s.periodIndex(period),
+		"Purchase/Sale and Disposal of Property, Plant and Equipment, Net",
 		s.Rows[0],
 	)
 
@@ -1072,7 +1084,16 @@ func (s *statement) FreeCashFlow(period string) float64 {
 		s.Rows[0],
 	)
 
-	return opCash + purPPPPE + capEx
+    fcf := opCashInd + opCashDir
+    if fcf <= 0 {
+        return 0
+    }
+
+    fcf += capEx
+    if netPPPE < 0 {
+        fcf += netPPPE
+    }
+	return fcf
 }
 
 func (s *statement) periodIndex(period string) int {
