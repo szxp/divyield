@@ -297,7 +297,7 @@ func (s *financialsService) PullValuation(
 
 			actions = make([]chromedp.Action, 0)
 			actions = append(
-                actions,
+				actions,
 				chromedp.Navigate(u+"/valuation"),
 				chromedp.Evaluate(libJS, &[]byte{}),
 			)
@@ -318,9 +318,9 @@ func (s *financialsService) PullValuation(
 
 			actions = make([]chromedp.Action, 0)
 			actions = append(
-                actions,
+				actions,
 				chromedp.Navigate(u+"/financials"),
-                runWithTimeOut(&ctx, 5, chromedp.Tasks{
+				runWithTimeOut(&ctx, 5, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//span[contains(text(),'Normalized Diluted EPS')]",
 						chromedp.BySearch,
@@ -346,7 +346,7 @@ func (s *financialsService) PullValuation(
 
 			actions = make([]chromedp.Action, 0)
 			actions = append(
-                actions,
+				actions,
 				chromedp.Evaluate(libJS, &[]byte{}),
 				chromedp.Evaluate(clickBalSheRadio, &[]byte{}),
 			)
@@ -367,7 +367,7 @@ func (s *financialsService) PullValuation(
 
 			actions = make([]chromedp.Action, 0)
 			actions = append(
-                actions,
+				actions,
 				chromedp.Evaluate(libJS, &[]byte{}),
 				chromedp.Evaluate(clickCasFloRadio, &[]byte{}),
 			)
