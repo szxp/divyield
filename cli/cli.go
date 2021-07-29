@@ -523,7 +523,20 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.DebtToFCF5 = fin.
 				DebtToFreeCashFlow(last5)
 
-			financials = append(financials, fin)
+			fin.CorToRevTTM = fin.IncomeStatement.
+				CostOfRevenueToRevenue(lastTTM)
+			fin.CorToRev1 = fin.IncomeStatement.
+				CostOfRevenueToRevenue(last1)
+			fin.CorToRev2 = fin.IncomeStatement.
+				CostOfRevenueToRevenue(last2)
+			fin.CorToRev3 = fin.IncomeStatement.
+				CostOfRevenueToRevenue(last3)
+			fin.CorToRev4 = fin.IncomeStatement.
+				CostOfRevenueToRevenue(last4)
+			fin.CorToRev5 = fin.IncomeStatement.
+				CostOfRevenueToRevenue(last5)
+
+            financials = append(financials, fin)
 		}
 	}
 
@@ -600,6 +613,19 @@ func (c *Command) printFinancials(
 	b.WriteString("Debt/FCF5")
 	b.WriteByte('\t')
 
+	b.WriteString("Cor/RevTTM")
+	b.WriteByte('\t')
+	b.WriteString("Cor/Rev1")
+	b.WriteByte('\t')
+	b.WriteString("Cor/Rev2")
+	b.WriteByte('\t')
+	b.WriteString("Cor/Rev3")
+	b.WriteByte('\t')
+	b.WriteString("Cor/Rev4")
+	b.WriteByte('\t')
+	b.WriteString("Cor/Rev5")
+	b.WriteByte('\t')
+
 	fmt.Fprintln(w, b.String())
 
 	for _, v := range financials {
@@ -656,6 +682,19 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF4))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF5))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf("%.2f", v.CorToRevTTM))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.CorToRev1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.CorToRev2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.CorToRev3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.CorToRev4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.CorToRev5))
 		b.WriteByte('\t')
 
 		fmt.Fprintln(w, b.String())
@@ -808,13 +847,20 @@ type financials struct {
 	DebtToFCF3 float64
 	DebtToFCF4 float64
 	DebtToFCF5 float64
+
+    CorToRevTTM float64
+    CorToRev1 float64
+	CorToRev2 float64
+	CorToRev3 float64
+	CorToRev4 float64
+	CorToRev5 float64
 }
 
 func (f *financials) NetCashToMarketCap(
 	period string,
 ) float64 {
 	cash := f.BalanceSheet.CashAndCashEquivalents(period)
-	totLia := f.BalanceSheet.TotalLiabilities(period)
+	totLia := f.BalanceSheet.Liabilities(period)
 	if f.Realtime.MarketCap <= 0 {
 		return 0
 	}
@@ -838,7 +884,7 @@ func (f *financials) ReturnOnEquity(
 	period string,
 ) float64 {
 	fcf := f.CashFlow.FreeCashFlow(period)
-	equ := f.BalanceSheet.TotalEquity(period)
+	equ := f.BalanceSheet.Equity(period)
 	if equ <= 0 {
 		return 0
 	}
@@ -848,7 +894,7 @@ func (f *financials) ReturnOnEquity(
 func (f *financials) DebtToFreeCashFlow(
 	period string,
 ) float64 {
-	debt := f.BalanceSheet.TotalDebt(period)
+	debt := f.BalanceSheet.Debt(period)
 	fcf := f.CashFlow.FreeCashFlow(period)
 	return debt / fcf
 }
@@ -883,13 +929,52 @@ type statementFooter struct {
 	FiscalYearEndDate string `json:"fiscalYearEndDate"`
 }
 
-func (s *statement) GrossEarnings(
+func (s *statement) Revenue(
 	period string,
 ) float64 {
+    // banks
 	netIntInc := s.NetInterestIncome(period)
-	if netIntInc > 0 { // banks
+	if netIntInc > 0 {
 		nonIntInc := s.NonInterestIncome(period)
 		return netIntInc + nonIntInc
+	}
+
+    // others
+	return s.value(
+		s.periodIndex(period),
+		"Total Revenue",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) CostOfRevenue(
+	period string,
+) float64 {
+	return s.value(
+		s.periodIndex(period),
+		"Cost of Revenue",
+		s.Rows[0],
+	)
+}
+
+func (s *statement) CostOfRevenueToRevenue(
+	period string,
+) float64 {
+    cor := s.CostOfRevenue(period)
+    rev := s.Revenue(period)
+    if rev == 0 {
+        return 0
+    }
+    return math.Abs(cor) / rev
+}
+
+func (s *statement) GrossIncome(
+	period string,
+) float64 {
+    // banks, no cost of goods sold
+	netIntInc := s.NetInterestIncome(period)
+	if netIntInc > 0 {
+		return s.Revenue(period)
 	}
 
 	// other companies
@@ -900,13 +985,13 @@ func (s *statement) GrossEarnings(
 	)
 }
 
-func (s *statement) OperatingEarnings(
+func (s *statement) OperatingIncome(
 	period string,
 ) float64 {
 	// banks
 	nonIntExp := s.NonInterestExpenses(period)
 	if nonIntExp < 0 {
-		gro := s.GrossEarnings(period)
+		gro := s.GrossIncome(period)
 		return gro + nonIntExp
 	}
 
@@ -967,20 +1052,20 @@ func (s *statement) NetIncome(period string) float64 {
 }
 
 func (s *statement) DebtToEquity(period string) float64 {
-	debt := s.TotalLiabilitiesNoDeposits(period)
-	equ := s.TotalEquity(period)
+	debt := s.LiabilitiesNoDeposits(period)
+	equ := s.Equity(period)
 	return debt / equ
 }
 
 func (s *statement) InvestedCapital(
 	period string,
 ) float64 {
-	equ := s.TotalEquity(period)
-	debt := s.TotalDebt(period)
+	equ := s.Equity(period)
+	debt := s.Debt(period)
 	return equ + debt
 }
 
-func (s *statement) TotalEquity(
+func (s *statement) Equity(
 	period string,
 ) float64 {
 	return s.value(
@@ -990,7 +1075,7 @@ func (s *statement) TotalEquity(
 	)
 }
 
-func (s *statement) TotalDebt(
+func (s *statement) Debt(
 	period string,
 ) float64 {
 	curr := s.value(
@@ -1019,15 +1104,15 @@ func (s *statement) TotalDebt(
 	)
 }
 
-func (s *statement) TotalLiabilitiesNoDeposits(
+func (s *statement) LiabilitiesNoDeposits(
 	period string,
 ) float64 {
-	totLia := s.TotalLiabilities(period)
-	totDep := s.TotalDeposits(period)
+	totLia := s.Liabilities(period)
+	totDep := s.Deposits(period)
 	return totLia - totDep
 }
 
-func (s *statement) TotalLiabilities(
+func (s *statement) Liabilities(
 	period string,
 ) float64 {
 	return s.value(
@@ -1037,7 +1122,7 @@ func (s *statement) TotalLiabilities(
 	)
 }
 
-func (s *statement) TotalDeposits(
+func (s *statement) Deposits(
 	period string,
 ) float64 {
 	return s.value(
