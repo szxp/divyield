@@ -459,7 +459,7 @@ func (c *Command) bargain(ctx context.Context) error {
 
 		u := scanner.Text()
 		u = strings.TrimSpace(u)
-		if u == "" {
+		if u == "" || strings.HasPrefix(u, "#") {
 			continue
 		}
 
@@ -487,8 +487,9 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.Exchange = exch
 			fin.Symbol = symbol
 
-			fin.NetCashToMCap = fin.
-				NetCashToMarketCap(last1)
+			//fin.PToFCFTTM = fin.PriceToFreeCashFlow(lastTTM)
+
+            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
 			fin.ROIC1 = fin.
 				ReturnOnInvestedCapital(last1)
@@ -522,6 +523,17 @@ func (c *Command) bargain(ctx context.Context) error {
 				DebtToFreeCashFlow(last4)
 			fin.DebtToFCF5 = fin.
 				DebtToFreeCashFlow(last5)
+
+			fin.DebtToEqu1 = fin.
+				DebtToEquity(last1)
+			fin.DebtToEqu2 = fin.
+				DebtToEquity(last2)
+			fin.DebtToEqu3 = fin.
+				DebtToEquity(last3)
+			fin.DebtToEqu4 = fin.
+				DebtToEquity(last4)
+			fin.DebtToEqu5 = fin.
+				DebtToEquity(last5)
 
 			fin.CorToRevTTM = fin.IncomeStatement.
 				CostOfRevenueToRevenue(lastTTM)
@@ -573,9 +585,12 @@ func (c *Command) printFinancials(
 	b := &bytes.Buffer{}
 	b.WriteString(fmt.Sprintf("%-10v", "Symbol"))
 	b.WriteByte('\t')
-	b.WriteString("P/E")
+
+	//b.WriteString("MyPE")
+	//b.WriteByte('\t')
+	b.WriteString("PE")
 	b.WriteByte('\t')
-	b.WriteString("P/B")
+	b.WriteString("PB")
 	b.WriteByte('\t')
 	b.WriteString("NetCash/MCap")
 	b.WriteByte('\t')
@@ -613,17 +628,28 @@ func (c *Command) printFinancials(
 	b.WriteString("Debt/FCF5")
 	b.WriteByte('\t')
 
-	b.WriteString("Cor/RevTTM")
+	b.WriteString("Debt/Equ1")
 	b.WriteByte('\t')
-	b.WriteString("Cor/Rev1")
+	b.WriteString("Debt/Equ2")
 	b.WriteByte('\t')
-	b.WriteString("Cor/Rev2")
+	b.WriteString("Debt/Equ3")
 	b.WriteByte('\t')
-	b.WriteString("Cor/Rev3")
+	b.WriteString("Debt/Equ4")
 	b.WriteByte('\t')
-	b.WriteString("Cor/Rev4")
+	b.WriteString("Debt/Equ5")
 	b.WriteByte('\t')
-	b.WriteString("Cor/Rev5")
+
+	b.WriteString("COR/RevTTM")
+	b.WriteByte('\t')
+	b.WriteString("COR/Rev1")
+	b.WriteByte('\t')
+	b.WriteString("COR/Rev2")
+	b.WriteByte('\t')
+	b.WriteString("COR/Rev3")
+	b.WriteByte('\t')
+	b.WriteString("COR/Rev4")
+	b.WriteByte('\t')
+	b.WriteString("COR/Rev5")
 	b.WriteByte('\t')
 
 	fmt.Fprintln(w, b.String())
@@ -640,7 +666,10 @@ func (c *Command) printFinancials(
 		))
 		b.WriteByte('\t')
 
-		pe := v.Valuation.PriceToEarnings("Current")
+		//b.WriteString(p.Sprintf("%.2f", v.PToFCFTTM))
+		//b.WriteByte('\t')
+
+        pe := v.Valuation.PriceToEarnings("Current")
 		b.WriteString(p.Sprintf("%.2f", pe))
 		b.WriteByte('\t')
 
@@ -682,6 +711,17 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF4))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF5))
+		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu5))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf("%.2f", v.CorToRevTTM))
@@ -828,6 +868,8 @@ type financials struct {
 	Valuation       *valuation
 	Realtime        *realtime
 
+    PToFCFTTM float64
+
 	NetCashToMCap float64
 
 	ROIC1 float64
@@ -847,6 +889,12 @@ type financials struct {
 	DebtToFCF3 float64
 	DebtToFCF4 float64
 	DebtToFCF5 float64
+
+	DebtToEqu1 float64
+	DebtToEqu2 float64
+	DebtToEqu3 float64
+	DebtToEqu4 float64
+	DebtToEqu5 float64
 
     CorToRevTTM float64
     CorToRev1 float64
@@ -1051,6 +1099,14 @@ func (s *statement) NetIncome(period string) float64 {
 	)
 }
 
+func (s *statement) DilutedSharesOutstanding(period string) float64 {
+    return s.value(
+		s.periodIndex(period),
+        "Diluted Weighted Average Shares Outstanding",
+		s.Rows[0],
+	)
+}
+
 func (s *statement) DebtToEquity(period string) float64 {
 	debt := s.LiabilitiesNoDeposits(period)
 	equ := s.Equity(period)
@@ -1102,6 +1158,14 @@ func (s *statement) Debt(
 		"Debt and Capital Lease Obligations",
 		s.Rows[0],
 	)
+}
+
+func (f *financials) DebtToEquity(
+	period string,
+) float64 {
+	debt := f.BalanceSheet.Debt(period)
+	equ  := f.BalanceSheet.Equity(period)
+	return debt / equ
 }
 
 func (s *statement) LiabilitiesNoDeposits(
@@ -1230,6 +1294,8 @@ func (s *statement) value(
 
 type realtime struct {
 	MarketCap float64 `json:"marketCap"`
+    LastPrice float64 `json:"lastPrice"`
+
 }
 
 type valuation struct {
@@ -1369,7 +1435,7 @@ func (c *Command) pullValuation(ctx context.Context) error {
 
 			u := scanner.Text()
 			u = strings.TrimSpace(u)
-			if u == "" {
+			if u == "" || strings.HasPrefix(u, "#") {
 				continue
 			}
 
