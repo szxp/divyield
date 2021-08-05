@@ -489,18 +489,18 @@ func (c *Command) bargain(ctx context.Context) error {
 
 			//fin.PToFCFTTM = fin.PriceToFreeCashFlow(lastTTM)
 
-            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
+//            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
-			fin.ROIC1 = fin.
-				ReturnOnInvestedCapital(last1)
-			fin.ROIC2 = fin.
-				ReturnOnInvestedCapital(last2)
-			fin.ROIC3 = fin.
-				ReturnOnInvestedCapital(last3)
-			fin.ROIC4 = fin.
-				ReturnOnInvestedCapital(last4)
-			fin.ROIC5 = fin.
-				ReturnOnInvestedCapital(last5)
+//			fin.ROIC1 = fin.
+//				ReturnOnInvestedCapital(last1)
+//			fin.ROIC2 = fin.
+//				ReturnOnInvestedCapital(last2)
+//			fin.ROIC3 = fin.
+//				ReturnOnInvestedCapital(last3)
+//			fin.ROIC4 = fin.
+//				ReturnOnInvestedCapital(last4)
+//			fin.ROIC5 = fin.
+//				ReturnOnInvestedCapital(last5)
 
 			fin.ROE1 = fin.
 				ReturnOnEquity(last1)
@@ -555,8 +555,8 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
-			v0 := financials[i].ROIC1
-			v1 := financials[j].ROIC1
+			v0 := financials[i].ROE1
+			v1 := financials[j].ROE1
 			return v0 > v1
 
 			/*
@@ -586,25 +586,28 @@ func (c *Command) printFinancials(
 	b.WriteString(fmt.Sprintf("%-10v", "Symbol"))
 	b.WriteByte('\t')
 
-	//b.WriteString("MyPE")
-	//b.WriteByte('\t')
-	b.WriteString("PE")
-	b.WriteByte('\t')
-	b.WriteString("PB")
-	b.WriteByte('\t')
-	b.WriteString("NetCash/MCap")
+	b.WriteString("MCap")
 	b.WriteByte('\t')
 
-	b.WriteString("ROIC1%")
-	b.WriteByte('\t')
-	b.WriteString("ROIC2%")
-	b.WriteByte('\t')
-	b.WriteString("ROIC3%")
-	b.WriteByte('\t')
-	b.WriteString("ROIC4%")
-	b.WriteByte('\t')
-	b.WriteString("ROIC5%")
-	b.WriteByte('\t')
+//	b.WriteString("MyPE")
+//	b.WriteByte('\t')
+//	b.WriteString("PE")
+//	b.WriteByte('\t')
+//	b.WriteString("PB")
+//	b.WriteByte('\t')
+//	b.WriteString("NetCash/MCap")
+//	b.WriteByte('\t')
+
+//	b.WriteString("ROIC1%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROIC2%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROIC3%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROIC4%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROIC5%")
+//	b.WriteByte('\t')
 
 	b.WriteString("ROE1%")
 	b.WriteByte('\t')
@@ -666,30 +669,33 @@ func (c *Command) printFinancials(
 		))
 		b.WriteByte('\t')
 
-		//b.WriteString(p.Sprintf("%.2f", v.PToFCFTTM))
-		//b.WriteByte('\t')
-
-        pe := v.Valuation.PriceToEarnings("Current")
-		b.WriteString(p.Sprintf("%.2f", pe))
+		b.WriteString(p.Sprintf("%s", v.Realtime.MarketCapStr()))
 		b.WriteByte('\t')
 
-		pb := v.Valuation.PriceToBook("Current")
-		b.WriteString(p.Sprintf("%.2f", pb))
-		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.PToFCFTTM))
+//		b.WriteByte('\t')
+//
+//        pe := v.Valuation.PriceToEarnings("Current")
+//		b.WriteString(p.Sprintf("%.2f", pe))
+//		b.WriteByte('\t')
+//
+//		pb := v.Valuation.PriceToBook("Current")
+//		b.WriteString(p.Sprintf("%.2f", pb))
+//		b.WriteByte('\t')
+//
+//		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
+//		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
-		b.WriteByte('\t')
-
-		b.WriteString(p.Sprintf("%.2f", v.ROIC1))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROIC2))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROIC3))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROIC4))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROIC5))
-		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROIC1))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROIC2))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROIC3))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROIC4))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROIC5))
+//		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf("%.2f", v.ROE1))
 		b.WriteByte('\t')
@@ -909,7 +915,7 @@ func (f *financials) NetCashToMarketCap(
 ) float64 {
 	cash := f.BalanceSheet.CashAndCashEquivalents(period)
 	totLia := f.BalanceSheet.Liabilities(period)
-	if f.Realtime.MarketCap <= 0 {
+	if f.Realtime.MarketCap == 0 {
 		return 0
 	}
 	return (cash - math.Abs(totLia)) /
@@ -921,7 +927,7 @@ func (f *financials) ReturnOnInvestedCapital(
 ) float64 {
 	fcf := f.CashFlow.FreeCashFlow(period)
 	cap := f.BalanceSheet.InvestedCapital(period)
-	if cap <= 0 {
+	if cap == 0 {
 		return 0
 	}
 	//fmt.Printf("%v %f %f\n", period, fcf, cap)
@@ -931,12 +937,13 @@ func (f *financials) ReturnOnInvestedCapital(
 func (f *financials) ReturnOnEquity(
 	period string,
 ) float64 {
-	fcf := f.CashFlow.FreeCashFlow(period)
+	//fcf := f.CashFlow.FreeCashFlow(period)
+	ear := f.IncomeStatement.OperatingIncome(period)
 	equ := f.BalanceSheet.Equity(period)
-	if equ <= 0 {
+	if equ == 0 {
 		return 0
 	}
-	return (fcf / equ) * 100
+	return (ear / equ) * 100
 }
 
 func (f *financials) DebtToFreeCashFlow(
@@ -1036,6 +1043,17 @@ func (s *statement) GrossIncome(
 func (s *statement) OperatingIncome(
 	period string,
 ) float64 {
+	// non bank companies
+    inc := s.value(
+		s.periodIndex(period),
+		"Total Operating Profit/Loss",
+		s.Rows[0],
+	)
+
+    if inc != 0 {
+        return inc
+    }
+
 	// banks
 	nonIntExp := s.NonInterestExpenses(period)
 	if nonIntExp < 0 {
@@ -1043,12 +1061,7 @@ func (s *statement) OperatingIncome(
 		return gro + nonIntExp
 	}
 
-	// other companies
-	return s.value(
-		s.periodIndex(period),
-		"Total Operating Profit/Loss",
-		s.Rows[0],
-	)
+    return 0
 }
 
 func (s *statement) NetInterestIncome(
@@ -1296,6 +1309,19 @@ type realtime struct {
 	MarketCap float64 `json:"marketCap"`
     LastPrice float64 `json:"lastPrice"`
 
+}
+
+const billion = float64(1000000000);
+const million = float64(1000000);
+
+func (r *realtime) MarketCapStr() string {
+    if r.MarketCap > billion {
+        v := r.MarketCap / billion
+        return strconv.FormatFloat(v, 'f', 3, 64) + "b"
+    }
+
+    v := r.MarketCap / million
+    return strconv.FormatFloat(v, 'f', 3, 64) + "m"
 }
 
 type valuation struct {
