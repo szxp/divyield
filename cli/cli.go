@@ -946,11 +946,13 @@ func (f *financials) ReturnOnEquity(
 	period string,
 ) float64 {
 	ear := f.CashFlow.FreeCashFlow(period)
+    //fmt.Println(period, "fcf", ear)
 	//ear := f.IncomeStatement.OperatingIncome(period)
 	if ear <= 0 {
 		return math.NaN()
 	}
 	equ := f.BalanceSheet.Equity(period)
+    //fmt.Println(period, "equ", equ)
 	if equ <= 0 {
 		return math.NaN()
 	}
