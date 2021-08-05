@@ -556,7 +556,13 @@ func (c *Command) bargain(ctx context.Context) error {
 		financials,
 		func(i, j int) bool {
 			v0 := financials[i].ROE1
+            if math.IsNaN(v0) {
+                v0 = 0;
+            }
 			v1 := financials[j].ROE1
+            if math.IsNaN(v1) {
+                v1 = 0;
+            }
 			return v0 > v1
 
 			/*
@@ -925,23 +931,28 @@ func (f *financials) NetCashToMarketCap(
 func (f *financials) ReturnOnInvestedCapital(
 	period string,
 ) float64 {
-	fcf := f.CashFlow.FreeCashFlow(period)
-	cap := f.BalanceSheet.InvestedCapital(period)
-	if cap == 0 {
-		return 0
+	ear := f.CashFlow.FreeCashFlow(period)
+	if ear <= 0 {
+		return math.NaN()
 	}
-	//fmt.Printf("%v %f %f\n", period, fcf, cap)
-	return (fcf / cap) * 100
+	cap := f.BalanceSheet.InvestedCapital(period)
+	if cap <= 0 {
+		return math.NaN()
+	}
+	return (ear / cap) * 100
 }
 
 func (f *financials) ReturnOnEquity(
 	period string,
 ) float64 {
-	//fcf := f.CashFlow.FreeCashFlow(period)
-	ear := f.IncomeStatement.OperatingIncome(period)
+	ear := f.CashFlow.FreeCashFlow(period)
+	//ear := f.IncomeStatement.OperatingIncome(period)
+	if ear <= 0 {
+		return math.NaN()
+	}
 	equ := f.BalanceSheet.Equity(period)
-	if equ == 0 {
-		return 0
+	if equ <= 0 {
+		return math.NaN()
 	}
 	return (ear / equ) * 100
 }
@@ -951,6 +962,9 @@ func (f *financials) DebtToFreeCashFlow(
 ) float64 {
 	debt := f.BalanceSheet.Debt(period)
 	fcf := f.CashFlow.FreeCashFlow(period)
+	if fcf <= 0 {
+		return math.NaN()
+	}
 	return debt / fcf
 }
 
@@ -966,6 +980,8 @@ func (s *statement) OrderOfMagnitude() float64 {
 		return 1000000000
 	case "Million":
 		return 1000000
+	case "Thousand":
+		return 1000
 	default:
 		panic("unexpected order of magnitude: " + s.Footer.OrderOfMagnitude)
 	}
@@ -1017,8 +1033,8 @@ func (s *statement) CostOfRevenueToRevenue(
 ) float64 {
     cor := s.CostOfRevenue(period)
     rev := s.Revenue(period)
-    if rev == 0 {
-        return 0
+    if rev <= 0 {
+        return math.NaN()
     }
     return math.Abs(cor) / rev
 }
@@ -1120,12 +1136,6 @@ func (s *statement) DilutedSharesOutstanding(period string) float64 {
 	)
 }
 
-func (s *statement) DebtToEquity(period string) float64 {
-	debt := s.LiabilitiesNoDeposits(period)
-	equ := s.Equity(period)
-	return debt / equ
-}
-
 func (s *statement) InvestedCapital(
 	period string,
 ) float64 {
@@ -1178,6 +1188,9 @@ func (f *financials) DebtToEquity(
 ) float64 {
 	debt := f.BalanceSheet.Debt(period)
 	equ  := f.BalanceSheet.Equity(period)
+    if equ <= 0 {
+        return math.NaN()
+    }
 	return debt / equ
 }
 
@@ -1313,6 +1326,7 @@ type realtime struct {
 
 const billion = float64(1000000000);
 const million = float64(1000000);
+const thousand = float64(1000);
 
 func (r *realtime) MarketCapStr() string {
     if r.MarketCap > billion {
@@ -1320,8 +1334,13 @@ func (r *realtime) MarketCapStr() string {
         return strconv.FormatFloat(v, 'f', 3, 64) + "b"
     }
 
-    v := r.MarketCap / million
-    return strconv.FormatFloat(v, 'f', 3, 64) + "m"
+    if r.MarketCap > million {
+        v := r.MarketCap / million
+        return strconv.FormatFloat(v, 'f', 3, 64) + "m"
+    }
+
+    v := r.MarketCap / thousand
+    return strconv.FormatFloat(v, 'f', 3, 64) + "t"
 }
 
 type valuation struct {
