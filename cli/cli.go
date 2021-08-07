@@ -491,27 +491,27 @@ func (c *Command) bargain(ctx context.Context) error {
 
 //            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
-//			fin.ROIC1 = fin.
-//				ReturnOnInvestedCapital(last1)
-//			fin.ROIC2 = fin.
-//				ReturnOnInvestedCapital(last2)
-//			fin.ROIC3 = fin.
-//				ReturnOnInvestedCapital(last3)
-//			fin.ROIC4 = fin.
-//				ReturnOnInvestedCapital(last4)
-//			fin.ROIC5 = fin.
-//				ReturnOnInvestedCapital(last5)
+			fin.ROIC1 = fin.
+				ReturnOnInvestedCapital(last1)
+			fin.ROIC2 = fin.
+				ReturnOnInvestedCapital(last2)
+			fin.ROIC3 = fin.
+				ReturnOnInvestedCapital(last3)
+			fin.ROIC4 = fin.
+				ReturnOnInvestedCapital(last4)
+			fin.ROIC5 = fin.
+				ReturnOnInvestedCapital(last5)
 
-			fin.ROE1 = fin.
-				ReturnOnEquity(last1)
-			fin.ROE2 = fin.
-				ReturnOnEquity(last2)
-			fin.ROE3 = fin.
-				ReturnOnEquity(last3)
-			fin.ROE4 = fin.
-				ReturnOnEquity(last4)
-			fin.ROE5 = fin.
-				ReturnOnEquity(last5)
+//			fin.ROE1 = fin.
+//				ReturnOnEquity(last1)
+//			fin.ROE2 = fin.
+//				ReturnOnEquity(last2)
+//			fin.ROE3 = fin.
+//				ReturnOnEquity(last3)
+//			fin.ROE4 = fin.
+//				ReturnOnEquity(last4)
+//			fin.ROE5 = fin.
+//				ReturnOnEquity(last5)
 
 			fin.DebtToFCF1 = fin.
 				DebtToFreeCashFlow(last1)
@@ -555,11 +555,11 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
-			v0 := financials[i].ROE1
+			v0 := financials[i].ROIC1
             if math.IsNaN(v0) {
                 v0 = 0;
             }
-			v1 := financials[j].ROE1
+			v1 := financials[j].ROIC1
             if math.IsNaN(v1) {
                 v1 = 0;
             }
@@ -604,26 +604,37 @@ func (c *Command) printFinancials(
 //	b.WriteString("NetCash/MCap")
 //	b.WriteByte('\t')
 
-//	b.WriteString("ROIC1%")
+	b.WriteString("ROIC1%")
+	b.WriteByte('\t')
+	b.WriteString("ROIC2%")
+	b.WriteByte('\t')
+	b.WriteString("ROIC3%")
+	b.WriteByte('\t')
+	b.WriteString("ROIC4%")
+	b.WriteByte('\t')
+	b.WriteString("ROIC5%")
+	b.WriteByte('\t')
+
+//	b.WriteString("ROE1%")
 //	b.WriteByte('\t')
-//	b.WriteString("ROIC2%")
+//	b.WriteString("ROE2%")
 //	b.WriteByte('\t')
-//	b.WriteString("ROIC3%")
+//	b.WriteString("ROE3%")
 //	b.WriteByte('\t')
-//	b.WriteString("ROIC4%")
+//	b.WriteString("ROE4%")
 //	b.WriteByte('\t')
-//	b.WriteString("ROIC5%")
+//	b.WriteString("ROE5%")
 //	b.WriteByte('\t')
 
-	b.WriteString("ROE1%")
+	b.WriteString("Debt/Equ1")
 	b.WriteByte('\t')
-	b.WriteString("ROE2%")
+	b.WriteString("Debt/Equ2")
 	b.WriteByte('\t')
-	b.WriteString("ROE3%")
+	b.WriteString("Debt/Equ3")
 	b.WriteByte('\t')
-	b.WriteString("ROE4%")
+	b.WriteString("Debt/Equ4")
 	b.WriteByte('\t')
-	b.WriteString("ROE5%")
+	b.WriteString("Debt/Equ5")
 	b.WriteByte('\t')
 
 	b.WriteString("Debt/FCF1")
@@ -637,16 +648,6 @@ func (c *Command) printFinancials(
 	b.WriteString("Debt/FCF5")
 	b.WriteByte('\t')
 
-	b.WriteString("Debt/Equ1")
-	b.WriteByte('\t')
-	b.WriteString("Debt/Equ2")
-	b.WriteByte('\t')
-	b.WriteString("Debt/Equ3")
-	b.WriteByte('\t')
-	b.WriteString("Debt/Equ4")
-	b.WriteByte('\t')
-	b.WriteString("Debt/Equ5")
-	b.WriteByte('\t')
 
 	b.WriteString("COR/RevTTM")
 	b.WriteByte('\t')
@@ -664,9 +665,9 @@ func (c *Command) printFinancials(
 	fmt.Fprintln(w, b.String())
 
 	for _, v := range financials {
-		//if !filterLowDebt(v) {
-		//    continue
-		//}
+		if !filterROICPositive(v) {
+		    continue
+		}
 
 		b.Reset()
 		b.WriteString(fmt.Sprintf(
@@ -692,38 +693,27 @@ func (c *Command) printFinancials(
 //		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
 //		b.WriteByte('\t')
 
-//		b.WriteString(p.Sprintf("%.2f", v.ROIC1))
-//		b.WriteByte('\t')
-//		b.WriteString(p.Sprintf("%.2f", v.ROIC2))
-//		b.WriteByte('\t')
-//		b.WriteString(p.Sprintf("%.2f", v.ROIC3))
-//		b.WriteByte('\t')
-//		b.WriteString(p.Sprintf("%.2f", v.ROIC4))
-//		b.WriteByte('\t')
-//		b.WriteString(p.Sprintf("%.2f", v.ROIC5))
-//		b.WriteByte('\t')
-
-		b.WriteString(p.Sprintf("%.2f", v.ROE1))
+		b.WriteString(p.Sprintf("%.2f", v.ROIC1))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE2))
+		b.WriteString(p.Sprintf("%.2f", v.ROIC2))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE3))
+		b.WriteString(p.Sprintf("%.2f", v.ROIC3))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE4))
+		b.WriteString(p.Sprintf("%.2f", v.ROIC4))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE5))
+		b.WriteString(p.Sprintf("%.2f", v.ROIC5))
 		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF1))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF2))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF3))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF4))
-		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF5))
-		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE1))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE2))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE3))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE4))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE5))
+//		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu1))
 		b.WriteByte('\t')
@@ -734,6 +724,18 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu4))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu5))
+		b.WriteByte('\t')
+
+
+		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DebtToFCF5))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf("%.2f", v.CorToRevTTM))
@@ -756,17 +758,12 @@ func (c *Command) printFinancials(
 	c.writef("%s", buf.String())
 }
 
-func filterLowDebt(v *financials) bool {
-	return !(v.DebtToFCF1 >= 3 ||
-		v.DebtToFCF2 >= 3 ||
-		v.DebtToFCF3 >= 3 ||
-		v.DebtToFCF4 >= 3 ||
-		v.DebtToFCF5 >= 3 ||
-		v.DebtToFCF1 < 0 ||
-		v.DebtToFCF2 < 0 ||
-		v.DebtToFCF3 < 0 ||
-		v.DebtToFCF4 < 0 ||
-		v.DebtToFCF5 < 0)
+func filterROICPositive(v *financials) bool {
+	return v.ROIC1 > 0 &&
+		v.ROIC2 > 0 &&
+		v.ROIC3 > 0 &&
+		v.ROIC4 > 0 //&&
+		//v.ROIC5 > 0
 }
 
 func (c *Command) financials(
@@ -1273,7 +1270,7 @@ func (s *statement) FreeCashFlow(
 
 	capEx := s.value(
 		s.periodIndex(period),
-		"Capital Expenditure",
+		"Capital Expenditure, Reported",
 		s.Rows[0],
 	)
 
