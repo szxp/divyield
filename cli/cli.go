@@ -491,7 +491,21 @@ func (c *Command) bargain(ctx context.Context) error {
 
 //            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
-			fin.ROIC1 = fin.
+			fin.E1 = fin.IncomeStatement.NetIncome(last1)
+			fin.E2 = fin.IncomeStatement.NetIncome(last2)
+			fin.E3 = fin.IncomeStatement.NetIncome(last3)
+			fin.E4 = fin.IncomeStatement.NetIncome(last4)
+			fin.E5 = fin.IncomeStatement.NetIncome(last5)
+
+/*
+			fin.BVPS1 = fin.BookValuePerShare(last1)
+			fin.BVPS2 = fin.BookValuePerShare(last2)
+			fin.BVPS3 = fin.BookValuePerShare(last3)
+			fin.BVPS4 = fin.BookValuePerShare(last4)
+			fin.BVPS5 = fin.BookValuePerShare(last5)
+*/
+
+            fin.ROIC1 = fin.
 				ReturnOnInvestedCapital(last1)
 			fin.ROIC2 = fin.
 				ReturnOnInvestedCapital(last2)
@@ -597,8 +611,8 @@ func (c *Command) printFinancials(
 
 //	b.WriteString("MyPE")
 //	b.WriteByte('\t')
-//	b.WriteString("PE")
-//	b.WriteByte('\t')
+	b.WriteString("PE")
+	b.WriteByte('\t')
 //	b.WriteString("PB")
 //	b.WriteByte('\t')
 //	b.WriteString("NetCash/MCap")
@@ -665,7 +679,9 @@ func (c *Command) printFinancials(
 	fmt.Fprintln(w, b.String())
 
 	for _, v := range financials {
-		if !filterROICPositive(v) {
+		//if !filterROICPositive(v) {
+		//if !filterBVPSGrowing(v) {
+		if !filterEarningsGrowing(v) {
 		    continue
 		}
 
@@ -682,9 +698,9 @@ func (c *Command) printFinancials(
 //		b.WriteString(p.Sprintf("%.2f", v.PToFCFTTM))
 //		b.WriteByte('\t')
 //
-//        pe := v.Valuation.PriceToEarnings("Current")
-//		b.WriteString(p.Sprintf("%.2f", pe))
-//		b.WriteByte('\t')
+        pe := v.Valuation.PriceToEarnings("Current")
+		b.WriteString(p.Sprintf("%.2f", pe))
+		b.WriteByte('\t')
 //
 //		pb := v.Valuation.PriceToBook("Current")
 //		b.WriteString(p.Sprintf("%.2f", pb))
@@ -765,6 +781,23 @@ func filterROICPositive(v *financials) bool {
 		v.ROIC4 > 0 //&&
 		//v.ROIC5 > 0
 }
+
+func filterBVPSGrowing(v *financials) bool {
+	return v.BVPS5 > 0 &&
+		v.BVPS4 > v.BVPS5 &&
+		v.BVPS3 > v.BVPS4 &&
+		v.BVPS2 > v.BVPS3 &&
+		v.BVPS1 > v.BVPS2
+}
+
+func filterEarningsGrowing(v *financials) bool {
+	return v.E1 > v.E2 &&
+		v.E2 > v.E3 &&
+		v.E3 > v.E4 &&
+		v.E4 > 0 //v.E5 &&
+        //v.E5 > 0
+}
+
 
 func (c *Command) financials(
 	ctx context.Context,
@@ -881,7 +914,41 @@ type financials struct {
 
 	NetCashToMCap float64
 
-	ROIC1 float64
+    // Book value (equity) per share
+	BVPS1 float64
+	BVPS2 float64
+	BVPS3 float64
+	BVPS4 float64
+	BVPS5 float64
+
+	E1 float64
+	E2 float64
+	E3 float64
+	E4 float64
+	E5 float64
+
+    // Earnings per share
+	EPS1 float64
+	EPS2 float64
+	EPS3 float64
+	EPS4 float64
+	EPS5 float64
+
+    // Operating cash flow per share
+	OCFPS1 float64
+	OCFPS2 float64
+	OCFPS3 float64
+	OCFPS4 float64
+	OCFPS5 float64
+
+    // Sales per share
+	SPS1 float64
+	SPS2 float64
+	SPS3 float64
+	SPS4 float64
+	SPS5 float64
+
+    ROIC1 float64
 	ROIC2 float64
 	ROIC3 float64
 	ROIC4 float64
@@ -928,7 +995,8 @@ func (f *financials) NetCashToMarketCap(
 func (f *financials) ReturnOnInvestedCapital(
 	period string,
 ) float64 {
-	ear := f.CashFlow.FreeCashFlow(period)
+	//ear := f.CashFlow.FreeCashFlow(period)
+	ear := f.IncomeStatement.OperatingIncome(period)
 	if ear <= 0 {
 		return math.NaN()
 	}
@@ -942,9 +1010,8 @@ func (f *financials) ReturnOnInvestedCapital(
 func (f *financials) ReturnOnEquity(
 	period string,
 ) float64 {
-	ear := f.CashFlow.FreeCashFlow(period)
-    //fmt.Println(period, "fcf", ear)
-	//ear := f.IncomeStatement.OperatingIncome(period)
+	//ear := f.CashFlow.FreeCashFlow(period)
+	ear := f.IncomeStatement.OperatingIncome(period)
 	if ear <= 0 {
 		return math.NaN()
 	}
@@ -1002,6 +1069,9 @@ type statementFooter struct {
 func (s *statement) Revenue(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
     // banks
 	netIntInc := s.NetInterestIncome(period)
 	if netIntInc > 0 {
@@ -1020,6 +1090,9 @@ func (s *statement) Revenue(
 func (s *statement) CostOfRevenue(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	return s.value(
 		s.periodIndex(period),
 		"Cost of Revenue",
@@ -1041,6 +1114,9 @@ func (s *statement) CostOfRevenueToRevenue(
 func (s *statement) GrossIncome(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
     // banks, no cost of goods sold
 	netIntInc := s.NetInterestIncome(period)
 	if netIntInc > 0 {
@@ -1058,6 +1134,9 @@ func (s *statement) GrossIncome(
 func (s *statement) OperatingIncome(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	// non bank companies
     inc := s.value(
 		s.periodIndex(period),
@@ -1082,6 +1161,9 @@ func (s *statement) OperatingIncome(
 func (s *statement) NetInterestIncome(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	return s.value(
 		s.periodIndex(period),
 		"Net Interest Income",
@@ -1092,6 +1174,9 @@ func (s *statement) NetInterestIncome(
 func (s *statement) NonInterestIncome(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	return s.value(
 		s.periodIndex(period),
 		"Non-Interest Income",
@@ -1102,6 +1187,9 @@ func (s *statement) NonInterestIncome(
 func (s *statement) NonInterestExpenses(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	return s.value(
 		s.periodIndex(period),
 		"Non-Interest Expenses",
@@ -1120,6 +1208,9 @@ func (s *statement) OperatingEfficiency(
 }
 
 func (s *statement) NetIncome(period string) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	return s.value(
 		s.periodIndex(period),
 		"Net Income Available to Common Stockholders",
@@ -1128,6 +1219,9 @@ func (s *statement) NetIncome(period string) float64 {
 }
 
 func (s *statement) DilutedSharesOutstanding(period string) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
     return s.value(
 		s.periodIndex(period),
         "Diluted Weighted Average Shares Outstanding",
@@ -1146,7 +1240,11 @@ func (s *statement) InvestedCapital(
 func (s *statement) Equity(
 	period string,
 ) float64 {
-	return s.value(
+    if len(s.Rows) == 0 {
+        return 0
+    }
+
+    return s.value(
 		s.periodIndex(period),
 		"Total Equity",
 		s.Rows[0],
@@ -1156,6 +1254,9 @@ func (s *statement) Equity(
 func (s *statement) Debt(
 	period string,
 ) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
 	curr := s.value(
 		s.periodIndex(period),
 		"Current Debt and Capital Lease Obligation",
@@ -1323,11 +1424,16 @@ type realtime struct {
 
 }
 
+const trillion = float64(1000000000000);
 const billion = float64(1000000000);
 const million = float64(1000000);
 const thousand = float64(1000);
 
 func (r *realtime) MarketCapStr() string {
+    if r.MarketCap > trillion {
+        v := r.MarketCap / trillion
+        return strconv.FormatFloat(v, 'f', 3, 64) + "tr"
+    }
     if r.MarketCap > billion {
         v := r.MarketCap / billion
         return strconv.FormatFloat(v, 'f', 3, 64) + "b"
@@ -1339,7 +1445,7 @@ func (r *realtime) MarketCapStr() string {
     }
 
     v := r.MarketCap / thousand
-    return strconv.FormatFloat(v, 'f', 3, 64) + "t"
+    return strconv.FormatFloat(v, 'f', 3, 64) + "th"
 }
 
 type valuation struct {

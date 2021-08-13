@@ -1,209 +1,119 @@
-# https://www.morningstar.com/stocks/pinx/abqq
-# https://www.morningstar.com/stocks/xnas/abst
-# https://www.morningstar.com/stocks/pinx/abxxf
-# https://www.morningstar.com/stocks/xnas/acva
-# https://www.morningstar.com/stocks/pinx/acwrf
-# https://www.morningstar.com/stocks/pinx/adcof
-# https://www.morningstar.com/stocks/pinx/adgo
-# https://www.morningstar.com/stocks/xnas/adsk
-# https://www.morningstar.com/stocks/pinx/adsv
-# https://www.morningstar.com/stocks/pinx/adtm
-# https://www.morningstar.com/stocks/pinx/advc
-# https://www.morningstar.com/stocks/pinx/aeltf
-# https://www.morningstar.com/stocks/xnas/aeye
-# https://www.morningstar.com/stocks/pinx/affn
-# https://www.morningstar.com/stocks/pinx/aggg
-# https://www.morningstar.com/stocks/pinx/aglt
-# https://www.morningstar.com/stocks/xnas/agmh
-# https://www.morningstar.com/stocks/xnas/agys
-# https://www.morningstar.com/stocks/pinx/ahix
-# https://www.morningstar.com/stocks/pinx/aifs
-# https://www.morningstar.com/stocks/pinx/ajia
-# https://www.morningstar.com/stocks/pinx/akrff
-# https://www.morningstar.com/stocks/pinx/alds
-# https://www.morningstar.com/stocks/pinx/alif
-# https://www.morningstar.com/stocks/xnys/alit
-# https://www.morningstar.com/stocks/xnas/alkt
-# https://www.morningstar.com/stocks/pinx/almff
-# https://www.morningstar.com/stocks/xnas/alrm
-# https://www.morningstar.com/stocks/xnas/amst
-# https://www.morningstar.com/stocks/xnas/amswa
-# https://www.morningstar.com/stocks/pinx/amwk
-# https://www.morningstar.com/stocks/pinx/andi
-# https://www.morningstar.com/stocks/xnas/anss
-# https://www.morningstar.com/stocks/xnas/any
-# https://www.morningstar.com/stocks/xnas/api
-# https://www.morningstar.com/stocks/xnas/app
-# https://www.morningstar.com/stocks/xnas/appf
-# https://www.morningstar.com/stocks/xnas/apps
-# https://www.morningstar.com/stocks/pinx/appz
-# https://www.morningstar.com/stocks/pinx/apty
-# https://www.morningstar.com/stocks/pinx/apvs
-# https://www.morningstar.com/stocks/pinx/apyp
-# https://www.morningstar.com/stocks/pinx/arcs
-# https://www.morningstar.com/stocks/pinx/arhtf
-# https://www.morningstar.com/stocks/xnys/asan
-# https://www.morningstar.com/stocks/pinx/asft
-# https://www.morningstar.com/stocks/pinx/asnt
-# https://www.morningstar.com/stocks/pinx/asta
-# https://www.morningstar.com/stocks/xnas/asur
-# https://www.morningstar.com/stocks/pinx/atiw
-# https://www.morningstar.com/stocks/pinx/atixf
-# https://www.morningstar.com/stocks/xnas/auud
-# https://www.morningstar.com/stocks/xnys/avlr
-# https://www.morningstar.com/stocks/pinx/avoi
-# https://www.morningstar.com/stocks/pinx/avri
-# https://www.morningstar.com/stocks/pinx/avvyy
-# https://www.morningstar.com/stocks/xnys/avya
-# https://www.morningstar.com/stocks/xnas/awre
-# https://www.morningstar.com/stocks/pinx/awrs
-# https://www.morningstar.com/stocks/xnys/ayx
-# https://www.morningstar.com/stocks/xnas/azpn
-
-# https://www.morningstar.com/stocks/pinx/bainf
-# https://www.morningstar.com/stocks/pinx/bblr
-# https://www.morningstar.com/stocks/pinx/bbrdf
-# https://www.morningstar.com/stocks/pinx/bcds
-# https://www.morningstar.com/stocks/xnas/bcov
-# https://www.morningstar.com/stocks/pinx/bemgq
-# https://www.morningstar.com/stocks/pinx/bhpa
-# https://www.morningstar.com/stocks/xnas/bigc
-# https://www.morningstar.com/stocks/xnys/bill
-# https://www.morningstar.com/stocks/pinx/blbx
-# https://www.morningstar.com/stocks/xnas/blkb
-# https://www.morningstar.com/stocks/xnys/blnd
-# https://www.morningstar.com/stocks/xnas/bmbl
-# https://www.morningstar.com/stocks/xase/bmtx
-# https://www.morningstar.com/stocks/xnas/bnft
-# https://www.morningstar.com/stocks/xnas/brqs
-# https://www.morningstar.com/stocks/pinx/bskzf
-# https://www.morningstar.com/stocks/xnas/bsqr
-# https://www.morningstar.com/stocks/xnas/bsy
-# https://www.morningstar.com/stocks/xnas/btbt
-# https://www.morningstar.com/stocks/xnas/btrs
-# https://www.morningstar.com/stocks/pinx/btzi
-# https://www.morningstar.com/stocks/pinx/bvsff
-# https://www.morningstar.com/stocks/pinx/bwlkf
-# https://www.morningstar.com/stocks/pinx/bzwr
-
-# https://www.morningstar.com/stocks/xnys/calx
-# https://www.morningstar.com/stocks/xnys/cday
-# https://www.morningstar.com/stocks/xnas/cdk
-# https://www.morningstar.com/stocks/xnas/cdns
-# https://www.morningstar.com/stocks/pinx/cdrbq
-# https://www.morningstar.com/stocks/pinx/cdtaf
-# https://www.morningstar.com/stocks/pinx/cgud
-# https://www.morningstar.com/stocks/pinx/chnvf
-# https://www.morningstar.com/stocks/pinx/cicn
-# https://www.morningstar.com/stocks/xnas/cih
-# https://www.morningstar.com/stocks/pinx/cingf
-# https://www.morningstar.com/stocks/xnys/cldr
-# https://www.morningstar.com/stocks/pinx/clguf
-# https://www.morningstar.com/stocks/pinx/clllf
-# https://www.morningstar.com/stocks/pinx/clri
-# https://www.morningstar.com/stocks/xnas/clsk
-# https://www.morningstar.com/stocks/pinx/clty
-# https://www.morningstar.com/stocks/pinx/clwd
-# https://www.morningstar.com/stocks/xnys/cmcm
-# https://www.morningstar.com/stocks/pinx/cncc
-# https://www.morningstar.com/stocks/pinx/cnswf
-# https://www.morningstar.com/stocks/pinx/cnwt
-# https://www.morningstar.com/stocks/xnas/coin
-# https://www.morningstar.com/stocks/xnys/comp
-# https://www.morningstar.com/stocks/pinx/cosg
-# https://www.morningstar.com/stocks/xnas/coup
-# https://www.morningstar.com/stocks/pinx/cowi
-# https://www.morningstar.com/stocks/pinx/crbtf
-# https://www.morningstar.com/stocks/xnas/crex
-# https://www.morningstar.com/stocks/xnys/crm
-# https://www.morningstar.com/stocks/xnas/crnc
-# https://www.morningstar.com/stocks/pinx/crsm
-# https://www.morningstar.com/stocks/pinx/crybf
-# https://www.morningstar.com/stocks/xnys/ctk
-# https://www.morningstar.com/stocks/xnas/ctxs
-# https://www.morningstar.com/stocks/xnas/cuen
-# https://www.morningstar.com/stocks/xnas/cvlt
-# https://www.morningstar.com/stocks/xnys/cxm
-# https://www.morningstar.com/stocks/xnas/csod
-
-# https://www.morningstar.com/stocks/pinx/dastd
-# https://www.morningstar.com/stocks/pinx/dasty
-# https://www.morningstar.com/stocks/xnys/dbd
-# https://www.morningstar.com/stocks/xnas/dcbo
-# https://www.morningstar.com/stocks/xnas/dct
-# https://www.morningstar.com/stocks/xnas/ddog
-# https://www.morningstar.com/stocks/pinx/deqi
-# https://www.morningstar.com/stocks/pinx/dftc
-# https://www.morningstar.com/stocks/pinx/dgtw
-# https://www.morningstar.com/stocks/xnys/didi
-# https://www.morningstar.com/stocks/pinx/dloc
-# https://www.morningstar.com/stocks/pinx/dmggf
-# https://www.morningstar.com/stocks/xnas/docu
-# https://www.morningstar.com/stocks/xnas/domo
-# https://www.morningstar.com/stocks/pinx/dpls
-# https://www.morningstar.com/stocks/pinx/dpsi
-# https://www.morningstar.com/stocks/xnas/dsgx
-# https://www.morningstar.com/stocks/pinx/dsny
-# https://www.morningstar.com/stocks/xnas/dsp
-# https://www.morningstar.com/stocks/xnys/dt
-# https://www.morningstar.com/stocks/xnas/duol
-# https://www.morningstar.com/stocks/xnas/duot
-# https://www.morningstar.com/stocks/pinx/dusyf
-# https://www.morningstar.com/stocks/pinx/duuo
-# https://www.morningstar.com/stocks/xnys/dv
-# https://www.morningstar.com/stocks/pinx/dvar
-# # https://www.morningstar.com/stocks/pinx/dvncf
-
-# https://www.morningstar.com/stocks/xnys/eb
-# https://www.morningstar.com/stocks/xnas/ebix
-# https://www.morningstar.com/stocks/xnys/ecom
-# https://www.morningstar.com/stocks/pinx/edxc
-# https://www.morningstar.com/stocks/pinx/efot
-# https://www.morningstar.com/stocks/xnas/egan
-# https://www.morningstar.com/stocks/pinx/eghsf
-# https://www.morningstar.com/stocks/xnys/eght
-# https://www.morningstar.com/stocks/pinx/ehvvf
-# https://www.morningstar.com/stocks/pinx/einf
-# https://www.morningstar.com/stocks/pinx/elbsd
-# https://www.morningstar.com/stocks/pinx/elco
-# https://www.morningstar.com/stocks/xnys/env
-# https://www.morningstar.com/stocks/pinx/eosi
-# https://www.morningstar.com/stocks/pinx/epaz
-# https://www.morningstar.com/stocks/pinx/eqtd
-# https://www.morningstar.com/stocks/xnys/estc
-# https://www.morningstar.com/stocks/xnas/evbg
-# https://www.morningstar.com/stocks/xnas/evol
-# https://www.morningstar.com/stocks/pinx/exbx
-
-# https://www.morningstar.com/stocks/pinx/falc
-# https://www.morningstar.com/stocks/pinx/fcgy
-# https://www.morningstar.com/stocks/pinx/fdbl
-# https://www.morningstar.com/stocks/pinx/fdmsf
-# https://www.morningstar.com/stocks/pinx/fdvrf
-# https://www.morningstar.com/stocks/xnys/fico
-# https://www.morningstar.com/stocks/pinx/flxi
-# https://www.morningstar.com/stocks/pinx/fmegf
-# https://www.morningstar.com/stocks/xnas/frog
-# https://www.morningstar.com/stocks/pinx/frxx
-# https://www.morningstar.com/stocks/xnys/fsly
-# https://www.morningstar.com/stocks/pinx/fssn
-# https://www.morningstar.com/stocks/xnas/ftft
-# https://www.morningstar.com/stocks/pinx/ftws
-
-https://www.morningstar.com/stocks/pinx/gaex
-https://www.morningstar.com/stocks/pinx/gahc
-https://www.morningstar.com/stocks/pinx/garlf
-https://www.morningstar.com/stocks/pinx/gbgpf
-https://www.morningstar.com/stocks/pinx/gbux
-https://www.morningstar.com/stocks/pinx/gclt
-https://www.morningstar.com/stocks/pinx/gemz
-https://www.morningstar.com/stocks/pinx/glbh
-https://www.morningstar.com/stocks/xnys/glob
-https://www.morningstar.com/stocks/pinx/glpt
-https://www.morningstar.com/stocks/pinx/grgg
-https://www.morningstar.com/stocks/pinx/grwc
-https://www.morningstar.com/stocks/pinx/gtswf
+https://www.morningstar.com/stocks/xnas/aciw
+https://www.morningstar.com/stocks/xnas/adbe
+https://www.morningstar.com/stocks/xnas/adsk
+https://www.morningstar.com/stocks/xnas/agys
+https://www.morningstar.com/stocks/xnas/alrm
+https://www.morningstar.com/stocks/xnas/altr
+https://www.morningstar.com/stocks/xnas/amst
+https://www.morningstar.com/stocks/xnas/amswa
+https://www.morningstar.com/stocks/xnas/anss
+https://www.morningstar.com/stocks/xnas/atvi
+https://www.morningstar.com/stocks/xnas/auud
+#https://www.morningstar.com/stocks/xnas/auudw
+https://www.morningstar.com/stocks/xnas/avid
+#https://www.morningstar.com/stocks/xnas/avpt
+https://www.morningstar.com/stocks/xnas/band
+https://www.morningstar.com/stocks/xnas/bigc
+https://www.morningstar.com/stocks/xnas/bl
+https://www.morningstar.com/stocks/xnas/blin
+https://www.morningstar.com/stocks/xnas/blkb
+https://www.morningstar.com/stocks/xnas/bmbl
+https://www.morningstar.com/stocks/xnas/bnft
+https://www.morningstar.com/stocks/xnas/bsqr
+https://www.morningstar.com/stocks/xnas/cdns
+https://www.morningstar.com/stocks/xnas/clsk
+https://www.morningstar.com/stocks/xnas/cnxc
+https://www.morningstar.com/stocks/xnas/coup
+https://www.morningstar.com/stocks/xnas/csod
+https://www.morningstar.com/stocks/xnas/ctxs
+https://www.morningstar.com/stocks/xnas/cuen
+#https://www.morningstar.com/stocks/xnas/cuenw
+https://www.morningstar.com/stocks/xnas/cvlt
+https://www.morningstar.com/stocks/xnas/cyrn
+https://www.morningstar.com/stocks/xnas/dbx
+https://www.morningstar.com/stocks/xnas/ddog
+https://www.morningstar.com/stocks/xnas/domo
+https://www.morningstar.com/stocks/xnas/duot
+https://www.morningstar.com/stocks/xnas/ea
+https://www.morningstar.com/stocks/xnas/egan
+https://www.morningstar.com/stocks/xnas/evbg
+https://www.morningstar.com/stocks/xnas/feye
+https://www.morningstar.com/stocks/xnas/fora
+https://www.morningstar.com/stocks/xnas/frog
 https://www.morningstar.com/stocks/xnas/gtyh
-https://www.morningstar.com/stocks/pinx/guesf
 https://www.morningstar.com/stocks/xnas/gvp
+https://www.morningstar.com/stocks/xnas/inpx
+https://www.morningstar.com/stocks/xnas/intu
+https://www.morningstar.com/stocks/xnas/jamf
+https://www.morningstar.com/stocks/xnas/manh
+https://www.morningstar.com/stocks/xnas/mcfe
+https://www.morningstar.com/stocks/xnas/mdb
+https://www.morningstar.com/stocks/xnas/mitk
+#https://www.morningstar.com/stocks/xnas/mktw
+https://www.morningstar.com/stocks/xnas/msft
+https://www.morningstar.com/stocks/xnas/msgm
+https://www.morningstar.com/stocks/xnas/mstr
+https://www.morningstar.com/stocks/xnas/mtbc
+https://www.morningstar.com/stocks/xnas/nati
+https://www.morningstar.com/stocks/xnas/ncno
+https://www.morningstar.com/stocks/xnas/nlok
+https://www.morningstar.com/stocks/xnas/ntwk
+https://www.morningstar.com/stocks/xnas/nuan
+https://www.morningstar.com/stocks/xnas/oblg
+https://www.morningstar.com/stocks/xnas/paya
+#https://www.morningstar.com/stocks/xnas/payaw
+https://www.morningstar.com/stocks/xnas/pcty
+https://www.morningstar.com/stocks/xnas/prch
+https://www.morningstar.com/stocks/xnas/prgs
+https://www.morningstar.com/stocks/xnas/ptc
+https://www.morningstar.com/stocks/xnas/pubm
+https://www.morningstar.com/stocks/xnas/qada
+https://www.morningstar.com/stocks/xnas/qadb
+https://www.morningstar.com/stocks/xnas/qlys
+https://www.morningstar.com/stocks/xnas/qumu
+https://www.morningstar.com/stocks/xnas/rdvt
+https://www.morningstar.com/stocks/xnas/rpd
+https://www.morningstar.com/stocks/xnas/sdgr
+https://www.morningstar.com/stocks/xnas/smsi
+https://www.morningstar.com/stocks/xnas/splk
+https://www.morningstar.com/stocks/xnas/spt
+https://www.morningstar.com/stocks/xnas/ssnt
+https://www.morningstar.com/stocks/xnas/ssti
+https://www.morningstar.com/stocks/xnas/ttwo
+https://www.morningstar.com/stocks/xnas/upld
+#https://www.morningstar.com/stocks/xnas/vih
+https://www.morningstar.com/stocks/xnas/vmeo
+https://www.morningstar.com/stocks/xnas/vrns
+https://www.morningstar.com/stocks/xnas/wday
+https://www.morningstar.com/stocks/xnas/wfcf
+https://www.morningstar.com/stocks/xnas/wtrh
+https://www.morningstar.com/stocks/xnas/xm
+https://www.morningstar.com/stocks/xnas/zi
+
+https://www.morningstar.com/stocks/xnys/ayx
+https://www.morningstar.com/stocks/xnys/box
+https://www.morningstar.com/stocks/xnys/crm
+https://www.morningstar.com/stocks/xnys/dfns
+https://www.morningstar.com/stocks/xnys/dt
+https://www.morningstar.com/stocks/xnys/ecom          
+https://www.morningstar.com/stocks/xnys/estc
 https://www.morningstar.com/stocks/xnys/gwre
+https://www.morningstar.com/stocks/xnys/hubs
+https://www.morningstar.com/stocks/xnys/msp
+https://www.morningstar.com/stocks/xnys/newr
+https://www.morningstar.com/stocks/xnys/now
+https://www.morningstar.com/stocks/xnys/orcl
+https://www.morningstar.com/stocks/xnys/pace
+https://www.morningstar.com/stocks/xnys/par
+https://www.morningstar.com/stocks/xnys/plan
+https://www.morningstar.com/stocks/xnys/sail
+https://www.morningstar.com/stocks/xnys/se
+https://www.morningstar.com/stocks/xnys/snow
+https://www.morningstar.com/stocks/xnys/sq
+#https://www.morningstar.com/stocks/xnys/stem
+https://www.morningstar.com/stocks/xnys/swi
+https://www.morningstar.com/stocks/xnys/tyl
+https://www.morningstar.com/stocks/xnys/vmw
+https://www.morningstar.com/stocks/xnys/wk
+
+# ROIC1>=10 && FCF1>=0.75*E1
