@@ -503,6 +503,12 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.BVPS4 = fin.BookValuePerShare(last4)
 			fin.BVPS5 = fin.BookValuePerShare(last5)
 
+			fin.DivPS1 = fin.DividendPerShare(last1)
+			fin.DivPS2 = fin.DividendPerShare(last2)
+			fin.DivPS3 = fin.DividendPerShare(last3)
+			fin.DivPS4 = fin.DividendPerShare(last4)
+			fin.DivPS5 = fin.DividendPerShare(last5)
+
             fin.ROIC1 = fin.
 				ReturnOnInvestedCapital(last1)
 			fin.ROIC2 = fin.
@@ -674,7 +680,7 @@ func (c *Command) printFinancials(
 	b.WriteString("COR/Rev5")
 	b.WriteByte('\t')
 
-	b.WriteString("BVPS CAGR%")
+	b.WriteString("BVDivPS CAGR%")
 	b.WriteByte('\t')
 	b.WriteString("BVPS1")
 	b.WriteByte('\t')
@@ -685,6 +691,17 @@ func (c *Command) printFinancials(
 	b.WriteString("BVPS4")
 	b.WriteByte('\t')
 	b.WriteString("BVPS5")
+	b.WriteByte('\t')
+
+	b.WriteString("DivPS1")
+	b.WriteByte('\t')
+	b.WriteString("DivPS2")
+	b.WriteByte('\t')
+	b.WriteString("DivPS3")
+	b.WriteByte('\t')
+	b.WriteString("DivPS4")
+	b.WriteByte('\t')
+	b.WriteString("DivPS5")
 	b.WriteByte('\t')
 
 	fmt.Fprintln(w, b.String())
@@ -778,7 +795,7 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.CorToRev5))
 		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf("%.2f", v.BookValuePerShareCAGR()))
+		b.WriteString(p.Sprintf("%.2f", v.BookValueDividendPerShareCAGR()))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.BVPS1))
 		b.WriteByte('\t')
@@ -791,6 +808,17 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.BVPS5))
 		b.WriteByte('\t')
 
+		b.WriteString(p.Sprintf("%.2f", v.DivPS1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DivPS2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DivPS3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DivPS4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.DivPS5))
+		b.WriteByte('\t')
+
 		fmt.Fprintln(w, b.String())
 	}
 
@@ -799,20 +827,20 @@ func (c *Command) printFinancials(
 }
 
 func filterROICPositive(v *financials) bool {
-	return v.ROIC1 > 0 &&
-		v.ROIC2 > 0 &&
-		v.ROIC3 > 0 &&
-		v.ROIC4 > 0 //&&
+	return v.ROIC1 > 0 //&&
+		//v.ROIC2 > 0 &&
+		//v.ROIC3 > 0 &&
+		//v.ROIC4 > 0 //&&
 		//v.ROIC5 > 0
 }
 
 func filterBVPSGrowing(v *financials) bool {
 	return v.BVPS1 > v.BVPS5 &&
+		v.BVPS1 > 0 &&
+		v.BVPS2 > 0 &&
+		v.BVPS3 > 0 &&
+		v.BVPS4 > 0 &&
 		v.BVPS5 > 0
-		//v.BVPS2 > v.BVPS3 &&
-		//v.BVPS3 > 0 // v.BVPS4 &&
-		//v.BVPS4 > 0 // v.BVPS5 &&
-        //v.BVPS5 > 0
 }
 
 func filterEarningsGrowing(v *financials) bool {
@@ -946,6 +974,13 @@ type financials struct {
 	BVPS4 float64
 	BVPS5 float64
 
+    // Dividend per share
+    DivPS1 float64
+	DivPS2 float64
+	DivPS3 float64
+	DivPS4 float64
+	DivPS5 float64
+
 	E1 float64
 	E2 float64
 	E3 float64
@@ -1059,9 +1094,9 @@ func (f *financials) DebtToFreeCashFlow(
 	return debt / fcf
 }
 
-func (f *financials) BookValuePerShareCAGR() float64 {
-	to := f.BVPS1
-    from := f.BVPS5
+func (f *financials) BookValueDividendPerShareCAGR() float64 {
+	to := f.BVPS1 + math.Abs(f.DivPS1)
+    from := f.BVPS5 + math.Abs(f.DivPS5)
 	if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1077,6 +1112,17 @@ func (f *financials) BookValuePerShare(
 		return math.NaN()
 	}
 	return equ / sha
+}
+
+func (f *financials) DividendPerShare(
+	period string,
+) float64 {
+	sha := f.IncomeStatement.SharesOutstanding(period)
+	div := f.CashFlow.DividendPaid(period)
+	if sha <= 0 {
+		return math.NaN()
+	}
+	return div / sha
 }
 
 type statement struct {
@@ -1435,6 +1481,20 @@ func (s *statement) FreeCashFlow(
 		fcf += pppe
 	}
 	return fcf
+}
+
+func (s *statement) DividendPaid(
+	period string,
+) float64 {
+	if len(s.Rows) == 0 {
+		return 0
+	}
+
+	return s.value(
+		s.periodIndex(period),
+        "Common Stock Dividends Paid",
+		s.Rows,
+	)
 }
 
 func (s *statement) periodIndex(period string) int {
