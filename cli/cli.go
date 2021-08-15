@@ -509,16 +509,11 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.DivPS4 = fin.DividendPerShare(last4)
 			fin.DivPS5 = fin.DividendPerShare(last5)
 
-            fin.ROIC1 = fin.
-				ReturnOnInvestedCapital(last1)
-			fin.ROIC2 = fin.
-				ReturnOnInvestedCapital(last2)
-			fin.ROIC3 = fin.
-				ReturnOnInvestedCapital(last3)
-			fin.ROIC4 = fin.
-				ReturnOnInvestedCapital(last4)
-			fin.ROIC5 = fin.
-				ReturnOnInvestedCapital(last5)
+            fin.ROIC1 = fin.ReturnOnInvestedCapital(last1)
+			fin.ROIC2 = fin.ReturnOnInvestedCapital(last2)
+			fin.ROIC3 = fin.ReturnOnInvestedCapital(last3)
+			fin.ROIC4 = fin.ReturnOnInvestedCapital(last4)
+			fin.ROIC5 = fin.ReturnOnInvestedCapital(last5)
 
 //			fin.ROE1 = fin.
 //				ReturnOnEquity(last1)
@@ -542,16 +537,11 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.DebtToFCF5 = fin.
 				DebtToFreeCashFlow(last5)
 
-			fin.DebtToEqu1 = fin.
-				DebtToEquity(last1)
-			fin.DebtToEqu2 = fin.
-				DebtToEquity(last2)
-			fin.DebtToEqu3 = fin.
-				DebtToEquity(last3)
-			fin.DebtToEqu4 = fin.
-				DebtToEquity(last4)
-			fin.DebtToEqu5 = fin.
-				DebtToEquity(last5)
+			fin.DebtToEqu1 = fin.DebtToEquity(last1)
+			fin.DebtToEqu2 = fin.DebtToEquity(last2)
+			fin.DebtToEqu3 = fin.DebtToEquity(last3)
+			fin.DebtToEqu4 = fin.DebtToEquity(last4)
+			fin.DebtToEqu5 = fin.DebtToEquity(last5)
 
 			fin.CorToRevTTM = fin.IncomeStatement.
 				CostOfRevenueToRevenue(lastTTM)
@@ -713,6 +703,10 @@ func (c *Command) printFinancials(
 		    continue
 		}
 
+        if !filterDebtToEquity1Low(v) {
+		    continue
+		}
+
 		b.Reset()
 		b.WriteString(fmt.Sprintf(
 			"%-10v",
@@ -851,6 +845,9 @@ func filterEarningsGrowing(v *financials) bool {
         //v.E5 > 0
 }
 
+func filterDebtToEquity1Low(v *financials) bool {
+	return v.DebtToEqu1 <= 0.4
+}
 
 func (c *Command) financials(
 	ctx context.Context,
