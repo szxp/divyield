@@ -497,13 +497,11 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.E4 = fin.IncomeStatement.NetIncome(last4)
 			fin.E5 = fin.IncomeStatement.NetIncome(last5)
 
-/*
 			fin.BVPS1 = fin.BookValuePerShare(last1)
 			fin.BVPS2 = fin.BookValuePerShare(last2)
 			fin.BVPS3 = fin.BookValuePerShare(last3)
 			fin.BVPS4 = fin.BookValuePerShare(last4)
 			fin.BVPS5 = fin.BookValuePerShare(last5)
-*/
 
             fin.ROIC1 = fin.
 				ReturnOnInvestedCapital(last1)
@@ -676,12 +674,25 @@ func (c *Command) printFinancials(
 	b.WriteString("COR/Rev5")
 	b.WriteByte('\t')
 
+	b.WriteString("BVPS CAGR%")
+	b.WriteByte('\t')
+	b.WriteString("BVPS1")
+	b.WriteByte('\t')
+	b.WriteString("BVPS2")
+	b.WriteByte('\t')
+	b.WriteString("BVPS3")
+	b.WriteByte('\t')
+	b.WriteString("BVPS4")
+	b.WriteByte('\t')
+	b.WriteString("BVPS5")
+	b.WriteByte('\t')
+
 	fmt.Fprintln(w, b.String())
 
 	for _, v := range financials {
 		//if !filterROICPositive(v) {
-		//if !filterBVPSGrowing(v) {
-		if !filterEarningsGrowing(v) {
+		if !filterBVPSGrowing(v) {
+		//if !filterEarningsGrowing(v) {
 		    continue
 		}
 
@@ -767,6 +778,19 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.CorToRev5))
 		b.WriteByte('\t')
 
+		b.WriteString(p.Sprintf("%.2f", v.BookValuePerShareCAGR()))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.BVPS1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.BVPS2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.BVPS3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.BVPS4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.BVPS5))
+		b.WriteByte('\t')
+
 		fmt.Fprintln(w, b.String())
 	}
 
@@ -783,11 +807,12 @@ func filterROICPositive(v *financials) bool {
 }
 
 func filterBVPSGrowing(v *financials) bool {
-	return v.BVPS5 > 0 &&
-		v.BVPS4 > v.BVPS5 &&
-		v.BVPS3 > v.BVPS4 &&
-		v.BVPS2 > v.BVPS3 &&
-		v.BVPS1 > v.BVPS2
+	return v.BVPS1 > v.BVPS5 &&
+		v.BVPS5 > 0
+		//v.BVPS2 > v.BVPS3 &&
+		//v.BVPS3 > 0 // v.BVPS4 &&
+		//v.BVPS4 > 0 // v.BVPS5 &&
+        //v.BVPS5 > 0
 }
 
 func filterEarningsGrowing(v *financials) bool {
@@ -1034,6 +1059,26 @@ func (f *financials) DebtToFreeCashFlow(
 	return debt / fcf
 }
 
+func (f *financials) BookValuePerShareCAGR() float64 {
+	to := f.BVPS1
+    from := f.BVPS5
+	if to <= 0 || from <= 0 {
+		return math.NaN()
+	}
+    return (math.Pow(to / from, float64(1) / float64(4)) - 1) * float64(100)
+}
+
+func (f *financials) BookValuePerShare(
+	period string,
+) float64 {
+	sha := f.IncomeStatement.SharesOutstanding(period)
+	equ := f.BalanceSheet.Equity(period)
+	if sha <= 0 {
+		return math.NaN()
+	}
+	return equ / sha
+}
+
 type statement struct {
 	ColumnDefs []string             `json:"columnDefs"`
 	Rows       []*statementSubLevel `json:"rows"`
@@ -1066,6 +1111,16 @@ type statementFooter struct {
 	FiscalYearEndDate string `json:"fiscalYearEndDate"`
 }
 
+func (s *statement) SharesOutstanding(
+	period string,
+) float64 {
+	return s.value(
+		s.periodIndex(period),
+		"Diluted Weighted Average Shares Outstanding",
+		s.Rows,
+	)
+}
+
 func (s *statement) Revenue(
 	period string,
 ) float64 {
@@ -1083,7 +1138,7 @@ func (s *statement) Revenue(
 	return s.value(
 		s.periodIndex(period),
 		"Total Revenue",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1096,7 +1151,7 @@ func (s *statement) CostOfRevenue(
 	return s.value(
 		s.periodIndex(period),
 		"Cost of Revenue",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1127,7 +1182,7 @@ func (s *statement) GrossIncome(
 	return s.value(
 		s.periodIndex(period),
 		"Gross Profit",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1141,7 +1196,7 @@ func (s *statement) OperatingIncome(
     inc := s.value(
 		s.periodIndex(period),
 		"Total Operating Profit/Loss",
-		s.Rows[0],
+		s.Rows,
 	)
 
     if inc != 0 {
@@ -1167,7 +1222,7 @@ func (s *statement) NetInterestIncome(
 	return s.value(
 		s.periodIndex(period),
 		"Net Interest Income",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1180,7 +1235,7 @@ func (s *statement) NonInterestIncome(
 	return s.value(
 		s.periodIndex(period),
 		"Non-Interest Income",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1193,7 +1248,7 @@ func (s *statement) NonInterestExpenses(
 	return s.value(
 		s.periodIndex(period),
 		"Non-Interest Expenses",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1214,7 +1269,7 @@ func (s *statement) NetIncome(period string) float64 {
 	return s.value(
 		s.periodIndex(period),
 		"Net Income Available to Common Stockholders",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1225,7 +1280,7 @@ func (s *statement) DilutedSharesOutstanding(period string) float64 {
     return s.value(
 		s.periodIndex(period),
         "Diluted Weighted Average Shares Outstanding",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1247,7 +1302,7 @@ func (s *statement) Equity(
     return s.value(
 		s.periodIndex(period),
 		"Total Equity",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1260,13 +1315,13 @@ func (s *statement) Debt(
 	curr := s.value(
 		s.periodIndex(period),
 		"Current Debt and Capital Lease Obligation",
-		s.Rows[0],
+		s.Rows,
 	)
 
 	long := s.value(
 		s.periodIndex(period),
 		"Long Term Debt and Capital Lease Obligation",
-		s.Rows[0],
+		s.Rows,
 	)
 
 	//fmt.Printf("Debt %v %f %f\n", period, curr, long)
@@ -1279,7 +1334,7 @@ func (s *statement) Debt(
 	return s.value(
 		s.periodIndex(period),
 		"Debt and Capital Lease Obligations",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1308,7 +1363,7 @@ func (s *statement) Liabilities(
 	return s.value(
 		s.periodIndex(period),
 		"Total Liabilities",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1318,7 +1373,7 @@ func (s *statement) Deposits(
 	return s.value(
 		s.periodIndex(period),
 		"Total Deposits",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1328,7 +1383,7 @@ func (s *statement) CashAndCashEquivalents(
 	return s.value(
 		s.periodIndex(period),
 		"Cash and Cash Equivalents",
-		s.Rows[0],
+		s.Rows,
 	)
 }
 
@@ -1342,13 +1397,13 @@ func (s *statement) OperatingCashFlow(
 	dir := s.value(
 		s.periodIndex(period),
 		"Net Cash Flow from Continuing Operating Activities, Direct",
-		s.Rows[0],
+		s.Rows,
 	)
 
 	ind := s.value(
 		s.periodIndex(period),
 		"Net Cash Flow from Continuing Operating Activities, Indirect",
-		s.Rows[0],
+		s.Rows,
 	)
 
 	return dir + ind
@@ -1366,13 +1421,13 @@ func (s *statement) FreeCashFlow(
 	pppe := s.value(
 		s.periodIndex(period),
 		"Purchase of Property, Plant and Equipment",
-		s.Rows[0],
+		s.Rows,
 	)
 
 	capEx := s.value(
 		s.periodIndex(period),
 		"Capital Expenditure, Reported",
-		s.Rows[0],
+		s.Rows,
 	)
 
 	fcf := opCash + capEx
@@ -1394,14 +1449,14 @@ func (s *statement) periodIndex(period string) int {
 func (s *statement) value(
 	periodIndex int,
 	label string,
-	level *statementSubLevel,
+	rows []*statementSubLevel,
 ) float64 {
 	if periodIndex == -1 {
 		return 0
 	}
 
 	levels := make([]*statementSubLevel, 0)
-	levels = append(levels, level)
+	levels = append(levels, rows...)
 
 	for len(levels) > 0 {
 		next := levels[0]
