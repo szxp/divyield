@@ -491,18 +491,19 @@ func (c *Command) bargain(ctx context.Context) error {
 
 //            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
 
-			fin.E1 = fin.IncomeStatement.NetIncome(last1)
-			fin.E2 = fin.IncomeStatement.NetIncome(last2)
-			fin.E3 = fin.IncomeStatement.NetIncome(last3)
-			fin.E4 = fin.IncomeStatement.NetIncome(last4)
-			fin.E5 = fin.IncomeStatement.NetIncome(last5)
-
-			fin.FCFPSTTM = fin.FreeCashFlowPerShare(last1)
+			fin.FCFPSTTM = fin.FreeCashFlowPerShare(lastTTM)
 			fin.FCFPS1 = fin.FreeCashFlowPerShare(last1)
 			fin.FCFPS2 = fin.FreeCashFlowPerShare(last2)
 			fin.FCFPS3 = fin.FreeCashFlowPerShare(last3)
 			fin.FCFPS4 = fin.FreeCashFlowPerShare(last4)
 			fin.FCFPS5 = fin.FreeCashFlowPerShare(last5)
+
+			fin.EPSTTM = fin.IncomeStatement.EarningsPerShare(lastTTM)
+			fin.EPS1 = fin.IncomeStatement.EarningsPerShare(last1)
+			fin.EPS2 = fin.IncomeStatement.EarningsPerShare(last2)
+			fin.EPS3 = fin.IncomeStatement.EarningsPerShare(last3)
+			fin.EPS4 = fin.IncomeStatement.EarningsPerShare(last4)
+			fin.EPS5 = fin.IncomeStatement.EarningsPerShare(last5)
 
 			fin.BVPS1 = fin.BookValuePerShare(last1)
 			fin.BVPS2 = fin.BookValuePerShare(last2)
@@ -670,6 +671,20 @@ func (c *Command) printFinancials(
 	b.WriteString("FCFPS5")
 	b.WriteByte('\t')
 
+	b.WriteString("EPS CAGR%")
+	b.WriteByte('\t')
+	b.WriteString("EPSTTM")
+	b.WriteByte('\t')
+	b.WriteString("EPS1")
+	b.WriteByte('\t')
+	b.WriteString("EPS2")
+	b.WriteByte('\t')
+	b.WriteString("EPS3")
+	b.WriteByte('\t')
+	b.WriteString("EPS4")
+	b.WriteByte('\t')
+	b.WriteString("EPS5")
+	b.WriteByte('\t')
 
 	b.WriteString("BVDivPS CAGR%")
 	b.WriteByte('\t')
@@ -813,6 +828,21 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.FCFPS5))
 		b.WriteByte('\t')
 
+		b.WriteString(p.Sprintf("%.2f", v.EarningsPerShareCAGR()))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.EPSTTM))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.EPS1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.EPS2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.EPS3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.EPS4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.EPS5))
+		b.WriteByte('\t')
+
 		b.WriteString(p.Sprintf("%.2f", v.BookValueDividendPerShareCAGR()))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.BVPS1))
@@ -851,6 +881,7 @@ func (c *Command) printFinancials(
 		b.WriteByte('\t')
 
 
+
 		fmt.Fprintln(w, b.String())
 	}
 
@@ -883,14 +914,6 @@ func filterBVPSGrowing(v *financials) bool {
 		v.BVPS3 > 0 &&
 		v.BVPS4 > 0 &&
 		v.BVPS5 > 0
-}
-
-func filterEarningsGrowing(v *financials) bool {
-	return v.E1 > v.E2 &&
-		v.E2 > v.E3 &&
-		v.E3 > v.E4 &&
-		v.E4 > 0 //v.E5 &&
-        //v.E5 > 0
 }
 
 func filterDebtToEquity1Low(v *financials) bool {
@@ -1024,6 +1047,13 @@ type financials struct {
 	FCFPS4 float64
 	FCFPS5 float64
 
+    EPSTTM float64
+    EPS1 float64
+	EPS2 float64
+	EPS3 float64
+	EPS4 float64
+	EPS5 float64
+
     // Book value (equity) per share
 	BVPS1 float64
 	BVPS2 float64
@@ -1037,19 +1067,6 @@ type financials struct {
 	DivPS3 float64
 	DivPS4 float64
 	DivPS5 float64
-
-	E1 float64
-	E2 float64
-	E3 float64
-	E4 float64
-	E5 float64
-
-    // Earnings per share
-	EPS1 float64
-	EPS2 float64
-	EPS3 float64
-	EPS4 float64
-	EPS5 float64
 
     // Operating cash flow per share
 	OCFPS1 float64
@@ -1095,6 +1112,7 @@ type financials struct {
 	CorToRev3 float64
 	CorToRev4 float64
 	CorToRev5 float64
+
 }
 
 func (f *financials) NetCashToMarketCap(
@@ -1155,6 +1173,16 @@ func (f *financials) FreeCashFlowPerShareCAGR() float64 {
     n := 5
 	to := f.FCFPSTTM
     from := f.FCFPS5
+    if to <= 0 || from <= 0 {
+		return math.NaN()
+	}
+    return (math.Pow(to / from, float64(1) / float64(n)) - 1) * 100
+}
+
+func (f *financials) EarningsPerShareCAGR() float64 {
+    n := 5
+	to := f.EPSTTM
+    from := f.EPS5
     if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1404,6 +1432,18 @@ func (s *statement) DilutedSharesOutstanding(period string) float64 {
         "Diluted Weighted Average Shares Outstanding",
 		s.Rows,
 	)
+}
+
+func (s *statement) EarningsPerShare(period string) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
+    sha := s.DilutedSharesOutstanding(period)
+    inc := s.NetIncome(period)
+    if sha <= 0 {
+        return math.NaN()
+    }
+    return inc / sha
 }
 
 func (s *statement) InvestedCapital(
