@@ -489,8 +489,6 @@ func (c *Command) bargain(ctx context.Context) error {
 
 			//fin.PToFCFTTM = fin.PriceToFreeCashFlow(lastTTM)
 
-//            fin.NetCashToMCap = fin.NetCashToMarketCap(last1)
-
 			fin.FCFPSTTM = fin.FreeCashFlowPerShare(lastTTM)
 			fin.FCFPS1 = fin.FreeCashFlowPerShare(last1)
 			fin.FCFPS2 = fin.FreeCashFlowPerShare(last2)
@@ -504,6 +502,13 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.EPS3 = fin.IncomeStatement.EarningsPerShare(last3)
 			fin.EPS4 = fin.IncomeStatement.EarningsPerShare(last4)
 			fin.EPS5 = fin.IncomeStatement.EarningsPerShare(last5)
+
+			fin.RPSTTM = fin.IncomeStatement.RevenuePerShare(lastTTM)
+			fin.RPS1 = fin.IncomeStatement.RevenuePerShare(last1)
+			fin.RPS2 = fin.IncomeStatement.RevenuePerShare(last2)
+			fin.RPS3 = fin.IncomeStatement.RevenuePerShare(last3)
+			fin.RPS4 = fin.IncomeStatement.RevenuePerShare(last4)
+			fin.RPS5 = fin.IncomeStatement.RevenuePerShare(last5)
 
 			fin.BVPS1 = fin.BookValuePerShare(last1)
 			fin.BVPS2 = fin.BookValuePerShare(last2)
@@ -607,8 +612,6 @@ func (c *Command) printFinancials(
 	b.WriteByte('\t')
 //	b.WriteString("PB")
 //	b.WriteByte('\t')
-//	b.WriteString("NetCash/MCap")
-//	b.WriteByte('\t')
 
 //	b.WriteString("ROIC1%")
 //	b.WriteByte('\t')
@@ -710,6 +713,21 @@ func (c *Command) printFinancials(
 	b.WriteString("DivPS5")
 	b.WriteByte('\t')
 
+	b.WriteString("RPS CAGR%")
+	b.WriteByte('\t')
+	b.WriteString("RPSTTM")
+	b.WriteByte('\t')
+	b.WriteString("RPS1")
+	b.WriteByte('\t')
+	b.WriteString("RPS2")
+	b.WriteByte('\t')
+	b.WriteString("RPS3")
+	b.WriteByte('\t')
+	b.WriteString("RPS4")
+	b.WriteByte('\t')
+	b.WriteString("RPS5")
+	b.WriteByte('\t')
+
 	b.WriteString("COR/RevTTM")
 	b.WriteByte('\t')
 	b.WriteString("COR/Rev1")
@@ -731,15 +749,19 @@ func (c *Command) printFinancials(
 		}
 
         if !filterFCFPSGrowing(v) {
-		    //continue
+		    continue
 		}
-
+        if !filterRPSGrowing(v) {
+		    continue
+		}
         if !filterBVPSGrowing(v) {
-		    //continue
+		    continue
 		}
-
+        if !filterEPSGrowing(v) {
+		    continue
+		}
         if !filterDebtToEquity1Low(v) {
-		    //continue
+		    continue
 		}
 
 		b.Reset()
@@ -761,9 +783,6 @@ func (c *Command) printFinancials(
 //
 //		pb := v.Valuation.PriceToBook("Current")
 //		b.WriteString(p.Sprintf("%.2f", pb))
-//		b.WriteByte('\t')
-//
-//		b.WriteString(p.Sprintf("%.2f", v.NetCashToMCap))
 //		b.WriteByte('\t')
 
 //		b.WriteString(p.Sprintf("%.2f", v.ROIC1))
@@ -867,6 +886,21 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.DivPS5))
 		b.WriteByte('\t')
 
+		b.WriteString(p.Sprintf("%.2f", v.RevenuePerShareCAGR()))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.RPSTTM))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.RPS1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.RPS2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.RPS3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.RPS4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.RPS5))
+		b.WriteByte('\t')
+
 		b.WriteString(p.Sprintf("%.2f", v.CorToRevTTM))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.CorToRev1))
@@ -907,6 +941,26 @@ func filterFCFPSGrowing(v *financials) bool {
 		v.FCFPS5 > 0
 }
 
+func filterRPSGrowing(v *financials) bool {
+	return v.RPSTTM > v.RPS5 &&
+		v.RPSTTM > 0 &&
+		v.RPS1 > 0 &&
+		v.RPS2 > 0 &&
+		v.RPS3 > 0 &&
+		v.RPS4 > 0 &&
+		v.RPS5 > 0
+}
+
+func filterEPSGrowing(v *financials) bool {
+	return v.EPSTTM > v.EPS5 &&
+		v.EPSTTM > 0 &&
+		v.EPS1 > 0 &&
+		v.EPS2 > 0 &&
+		v.EPS3 > 0 &&
+		v.EPS4 > 0 &&
+		v.EPS5 > 0
+}
+
 func filterBVPSGrowing(v *financials) bool {
 	return v.BVPS1 > v.BVPS5 &&
 		v.BVPS1 > 0 &&
@@ -917,7 +971,7 @@ func filterBVPSGrowing(v *financials) bool {
 }
 
 func filterDebtToEquity1Low(v *financials) bool {
-	return v.DebtToEqu1 <= 0.4
+	return v.DebtToEqu1 <= 0.33
 }
 
 func filterCapRate10(v *financials) bool {
@@ -1075,13 +1129,6 @@ type financials struct {
 	OCFPS4 float64
 	OCFPS5 float64
 
-    // Sales per share
-	SPS1 float64
-	SPS2 float64
-	SPS3 float64
-	SPS4 float64
-	SPS5 float64
-
     ROIC1 float64
 	ROIC2 float64
 	ROIC3 float64
@@ -1106,6 +1153,14 @@ type financials struct {
 	DebtToEqu4 float64
 	DebtToEqu5 float64
 
+    // Sales per share
+    RPSTTM float64
+    RPS1 float64
+	RPS2 float64
+	RPS3 float64
+	RPS4 float64
+	RPS5 float64
+
     CorToRevTTM float64
     CorToRev1 float64
 	CorToRev2 float64
@@ -1113,18 +1168,6 @@ type financials struct {
 	CorToRev4 float64
 	CorToRev5 float64
 
-}
-
-func (f *financials) NetCashToMarketCap(
-	period string,
-) float64 {
-	cash := f.BalanceSheet.CashAndCashEquivalents(period)
-	totLia := f.BalanceSheet.Liabilities(period)
-	if f.Realtime.MarketCap == 0 {
-		return 0
-	}
-	return (cash - math.Abs(totLia)) /
-		f.Realtime.MarketCap
 }
 
 func (f *financials) ReturnOnInvestedCapital(
@@ -1183,6 +1226,16 @@ func (f *financials) EarningsPerShareCAGR() float64 {
     n := 5
 	to := f.EPSTTM
     from := f.EPS5
+    if to <= 0 || from <= 0 {
+		return math.NaN()
+	}
+    return (math.Pow(to / from, float64(1) / float64(n)) - 1) * 100
+}
+
+func (f *financials) RevenuePerShareCAGR() float64 {
+    n := 5
+	to := f.RPSTTM
+    from := f.RPS5
     if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1444,6 +1497,18 @@ func (s *statement) EarningsPerShare(period string) float64 {
         return math.NaN()
     }
     return inc / sha
+}
+
+func (s *statement) RevenuePerShare(period string) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
+    sha := s.DilutedSharesOutstanding(period)
+    rev := s.Revenue(period)
+    if sha <= 0 {
+        return math.NaN()
+    }
+    return rev / sha
 }
 
 func (s *statement) InvestedCapital(
