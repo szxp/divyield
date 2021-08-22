@@ -489,12 +489,27 @@ func (c *Command) bargain(ctx context.Context) error {
 
 			//fin.PToFCFTTM = fin.PriceToFreeCashFlow(lastTTM)
 
+			fin.FCFTTM = fin.CashFlow.FreeCashFlow(lastTTM)
+			fin.FCF1 = fin.CashFlow.FreeCashFlow(last1)
+			fin.FCF2 = fin.CashFlow.FreeCashFlow(last2)
+			fin.FCF3 = fin.CashFlow.FreeCashFlow(last3)
+			fin.FCF4 = fin.CashFlow.FreeCashFlow(last4)
+			fin.FCF5 = fin.CashFlow.FreeCashFlow(last5)
+
 			fin.FCFPSTTM = fin.FreeCashFlowPerShare(lastTTM)
 			fin.FCFPS1 = fin.FreeCashFlowPerShare(last1)
 			fin.FCFPS2 = fin.FreeCashFlowPerShare(last2)
 			fin.FCFPS3 = fin.FreeCashFlowPerShare(last3)
 			fin.FCFPS4 = fin.FreeCashFlowPerShare(last4)
 			fin.FCFPS5 = fin.FreeCashFlowPerShare(last5)
+
+
+			fin.ETTM = fin.IncomeStatement.NetIncome(lastTTM)
+			fin.E1 = fin.IncomeStatement.NetIncome(last1)
+			fin.E2 = fin.IncomeStatement.NetIncome(last2)
+			fin.E3 = fin.IncomeStatement.NetIncome(last3)
+			fin.E4 = fin.IncomeStatement.NetIncome(last4)
+			fin.E5 = fin.IncomeStatement.NetIncome(last5)
 
 			fin.EPSTTM = fin.IncomeStatement.EarningsPerShare(lastTTM)
 			fin.EPS1 = fin.IncomeStatement.EarningsPerShare(last1)
@@ -503,12 +518,25 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.EPS4 = fin.IncomeStatement.EarningsPerShare(last4)
 			fin.EPS5 = fin.IncomeStatement.EarningsPerShare(last5)
 
+			fin.RevTTM = fin.IncomeStatement.Revenue(lastTTM)
+			fin.Rev1 = fin.IncomeStatement.Revenue(last1)
+			fin.Rev2 = fin.IncomeStatement.Revenue(last2)
+			fin.Rev3 = fin.IncomeStatement.Revenue(last3)
+			fin.Rev4 = fin.IncomeStatement.Revenue(last4)
+			fin.Rev5 = fin.IncomeStatement.Revenue(last5)
+
 			fin.RPSTTM = fin.IncomeStatement.RevenuePerShare(lastTTM)
 			fin.RPS1 = fin.IncomeStatement.RevenuePerShare(last1)
 			fin.RPS2 = fin.IncomeStatement.RevenuePerShare(last2)
 			fin.RPS3 = fin.IncomeStatement.RevenuePerShare(last3)
 			fin.RPS4 = fin.IncomeStatement.RevenuePerShare(last4)
 			fin.RPS5 = fin.IncomeStatement.RevenuePerShare(last5)
+
+			fin.BV1 = fin.BalanceSheet.Equity(last1)
+			fin.BV2 = fin.BalanceSheet.Equity(last2)
+			fin.BV3 = fin.BalanceSheet.Equity(last3)
+			fin.BV4 = fin.BalanceSheet.Equity(last4)
+			fin.BV5 = fin.BalanceSheet.Equity(last5)
 
 			fin.BVPS1 = fin.BookValuePerShare(last1)
 			fin.BVPS2 = fin.BookValuePerShare(last2)
@@ -527,6 +555,12 @@ func (c *Command) bargain(ctx context.Context) error {
 //			fin.ROIC3 = fin.ReturnOnInvestedCapital(last3)
 //			fin.ROIC4 = fin.ReturnOnInvestedCapital(last4)
 //			fin.ROIC5 = fin.ReturnOnInvestedCapital(last5)
+
+			fin.RONTA1 = fin.ReturnOnNetTangibleAssets(last1)
+			fin.RONTA2 = fin.ReturnOnNetTangibleAssets(last2)
+			fin.RONTA3 = fin.ReturnOnNetTangibleAssets(last3)
+			fin.RONTA4 = fin.ReturnOnNetTangibleAssets(last4)
+			fin.RONTA5 = fin.ReturnOnNetTangibleAssets(last5)
 
 			fin.ROE1 = fin.ReturnOnEquity(last1)
 			fin.ROE2 = fin.ReturnOnEquity(last2)
@@ -559,6 +593,13 @@ func (c *Command) bargain(ctx context.Context) error {
 			fin.CorToRev5 = fin.IncomeStatement.
 				CostOfRevenueToRevenue(last5)
 
+			fin.EffTTM = fin.IncomeStatement.OperatingEfficiency(lastTTM)
+			fin.Eff1 = fin.IncomeStatement.OperatingEfficiency(last1)
+			fin.Eff2 = fin.IncomeStatement.OperatingEfficiency(last2)
+			fin.Eff3 = fin.IncomeStatement.OperatingEfficiency(last3)
+			fin.Eff4 = fin.IncomeStatement.OperatingEfficiency(last4)
+			fin.Eff5 = fin.IncomeStatement.OperatingEfficiency(last5)
+
             financials = append(financials, fin)
 		}
 	}
@@ -566,11 +607,11 @@ func (c *Command) bargain(ctx context.Context) error {
 	sort.SliceStable(
 		financials,
 		func(i, j int) bool {
-			v0 := financials[i].ROE1
+			v0 := financials[i].RONTA1
             if math.IsNaN(v0) {
                 v0 = 0;
             }
-			v1 := financials[j].ROE1
+			v1 := financials[j].RONTA1
             if math.IsNaN(v1) {
                 v1 = 0;
             }
@@ -624,15 +665,26 @@ func (c *Command) printFinancials(
 //	b.WriteString("ROIC5%")
 //	b.WriteByte('\t')
 
-	b.WriteString("ROE1%")
+//	b.WriteString("ROE1%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROE2%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROE3%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROE4%")
+//	b.WriteByte('\t')
+//	b.WriteString("ROE5%")
+//	b.WriteByte('\t')
+
+	b.WriteString("RONTA1%")
 	b.WriteByte('\t')
-	b.WriteString("ROE2%")
+	b.WriteString("RONTA2%")
 	b.WriteByte('\t')
-	b.WriteString("ROE3%")
+	b.WriteString("RONTA3%")
 	b.WriteByte('\t')
-	b.WriteString("ROE4%")
+	b.WriteString("RONTA4%")
 	b.WriteByte('\t')
-	b.WriteString("ROE5%")
+	b.WriteString("RONTA5%")
 	b.WriteByte('\t')
 
 	b.WriteString("Debt/Equ1")
@@ -741,27 +793,51 @@ func (c *Command) printFinancials(
 	b.WriteString("COR/Rev5")
 	b.WriteByte('\t')
 
+	b.WriteString("EffTTM%")
+	b.WriteByte('\t')
+	b.WriteString("Eff1%")
+	b.WriteByte('\t')
+	b.WriteString("Eff2%")
+	b.WriteByte('\t')
+	b.WriteString("Eff3%")
+	b.WriteByte('\t')
+	b.WriteString("Eff4%")
+	b.WriteByte('\t')
+	b.WriteString("Eff5%")
+	b.WriteByte('\t')
+
 	fmt.Fprintln(w, b.String())
 
 	for _, v := range financials {
-		if !filterCapRate10(v) {
+        if !filterEPSGrowing(v) {
 		    //continue
 		}
-
-        if !filterFCFPSGrowing(v) {
+        if !filterFCFGrowing(v) {
 		    continue
 		}
-        if !filterRPSGrowing(v) {
+        if !filterRONTAPositive(v) {
 		    continue
 		}
-        if !filterBVPSGrowing(v) {
-		    continue
+        if !filterRevGrowing(v) {
+		    //continue
 		}
-        if !filterEPSGrowing(v) {
-		    continue
+        if !filterBVGrowing(v) {
+		    //continue
+		}
+        if !(v.RONTA1>0) {
+		    //continue
 		}
         if !filterDebtToEquity1Low(v) {
-		    continue
+		    //continue
+		}
+        if !filterRPSGrowing(v) {
+		    //continue
+		}
+        if !filterEPSGrowing(v) {
+		    //continue
+		}
+        if !filterBVPSPositive(v) {
+		    //continue
 		}
 
 		b.Reset()
@@ -796,15 +872,26 @@ func (c *Command) printFinancials(
 //		b.WriteString(p.Sprintf("%.2f", v.ROIC5))
 //		b.WriteByte('\t')
 
-		b.WriteString(p.Sprintf("%.2f", v.ROE1))
+//		b.WriteString(p.Sprintf("%.2f", v.ROE1))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE2))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE3))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE4))
+//		b.WriteByte('\t')
+//		b.WriteString(p.Sprintf("%.2f", v.ROE5))
+//		b.WriteByte('\t')
+
+		b.WriteString(p.Sprintf("%.2f", v.RONTA1))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE2))
+		b.WriteString(p.Sprintf("%.2f", v.RONTA2))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE3))
+		b.WriteString(p.Sprintf("%.2f", v.RONTA3))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE4))
+		b.WriteString(p.Sprintf("%.2f", v.RONTA4))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.ROE5))
+		b.WriteString(p.Sprintf("%.2f", v.RONTA5))
 		b.WriteByte('\t')
 
 		b.WriteString(p.Sprintf("%.2f", v.DebtToEqu1))
@@ -834,7 +921,7 @@ func (c *Command) printFinancials(
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.FreeCashFlowPerShareCAGR()))
 		b.WriteByte('\t')
-		b.WriteString(p.Sprintf("%.2f", v.FCFPS1))
+		b.WriteString(p.Sprintf("%.2f", v.FCFPSTTM))
 		b.WriteByte('\t')
 		b.WriteString(p.Sprintf("%.2f", v.FCFPS1))
 		b.WriteByte('\t')
@@ -914,7 +1001,18 @@ func (c *Command) printFinancials(
 		b.WriteString(p.Sprintf("%.2f", v.CorToRev5))
 		b.WriteByte('\t')
 
-
+		b.WriteString(p.Sprintf("%.2f", v.EffTTM))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.Eff1))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.Eff2))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.Eff3))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.Eff4))
+		b.WriteByte('\t')
+		b.WriteString(p.Sprintf("%.2f", v.Eff5))
+		b.WriteByte('\t')
 
 		fmt.Fprintln(w, b.String())
 	}
@@ -923,51 +1021,65 @@ func (c *Command) printFinancials(
 	c.writef("%s", buf.String())
 }
 
-func filterROICPositive(v *financials) bool {
-	return v.ROIC1 > 0 //&&
-		//v.ROIC2 > 0 &&
-		//v.ROIC3 > 0 &&
-		//v.ROIC4 > 0 //&&
-		//v.ROIC5 > 0
-}
-
-func filterFCFPSGrowing(v *financials) bool {
-	return v.FCFPSTTM > v.FCFPS5 &&
-		v.FCFPSTTM > 0 &&
-		v.FCFPS1 > 0 &&
-		v.FCFPS2 > 0 &&
-		v.FCFPS3 > 0 &&
-		v.FCFPS4 > 0 &&
-		v.FCFPS5 > 0
+func filterRONTAPositive(v *financials) bool {
+	return v.RONTA1 > 0 &&
+		v.RONTA2 > 0 &&
+		v.RONTA3 > 0
 }
 
 func filterRPSGrowing(v *financials) bool {
-	return v.RPSTTM > v.RPS5 &&
-		v.RPSTTM > 0 &&
-		v.RPS1 > 0 &&
-		v.RPS2 > 0 &&
-		v.RPS3 > 0 &&
-		v.RPS4 > 0 &&
-		v.RPS5 > 0
+	return v.RPSTTM > v.RPS1 &&
+		v.RPS1 > v.RPS2 &&
+		v.RPS2 > v.RPS3 &&
+		v.RPS3 > 0
+}
+
+func filterRevGrowing(v *financials) bool {
+	return v.RevTTM > v.Rev3 &&
+		v.Rev1 > 0 &&
+		v.Rev2 > 0 &&
+		v.Rev3 > 0
+}
+
+func filterEGrowing(v *financials) bool {
+	return v.ETTM > v.E1 &&
+		v.E1 > v.E2 &&
+		v.E2 > v.E3 &&
+		v.E3 > 0
 }
 
 func filterEPSGrowing(v *financials) bool {
-	return v.EPSTTM > v.EPS5 &&
-		v.EPSTTM > 0 &&
-		v.EPS1 > 0 &&
-		v.EPS2 > 0 &&
-		v.EPS3 > 0 &&
-		v.EPS4 > 0 &&
-		v.EPS5 > 0
+	return v.EPSTTM > v.EPS1 &&
+		v.EPS1 > v.EPS2 &&
+		v.EPS2 > v.EPS3 &&
+		v.EPS3 > 0
 }
 
-func filterBVPSGrowing(v *financials) bool {
-	return v.BVPS1 > v.BVPS5 &&
-		v.BVPS1 > 0 &&
+func filterFCFGrowing(v *financials) bool {
+	return v.FCFTTM > v.FCF3 &&
+		v.FCF1 > 0 &&
+		v.FCF2 > 0 &&
+		v.FCF3 > 0
+}
+
+func filterFCFPSGrowing(v *financials) bool {
+	return v.FCFPSTTM > v.FCFPS3 &&
+        v.FCFPSTTM > 0 &&
+		v.FCFPS1 > 0 &&
+		v.FCFPS2 > 0 &&
+		v.FCFPS3 > 0
+}
+
+func filterBVGrowing(v *financials) bool {
+	return v.BV1 > v.BV3 &&
+		v.BV2 > 0 &&
+		v.BV3 > 0
+}
+
+func filterBVPSPositive(v *financials) bool {
+	return v.BVPS1 > 0 &&
 		v.BVPS2 > 0 &&
-		v.BVPS3 > 0 &&
-		v.BVPS4 > 0 &&
-		v.BVPS5 > 0
+		v.BVPS3 > 0
 }
 
 func filterDebtToEquity1Low(v *financials) bool {
@@ -1101,12 +1213,32 @@ type financials struct {
 	FCFPS4 float64
 	FCFPS5 float64
 
+	FCFTTM float64
+	FCF1 float64
+	FCF2 float64
+	FCF3 float64
+	FCF4 float64
+	FCF5 float64
+
+    ETTM float64
+    E1 float64
+	E2 float64
+	E3 float64
+	E4 float64
+	E5 float64
+
     EPSTTM float64
     EPS1 float64
 	EPS2 float64
 	EPS3 float64
 	EPS4 float64
 	EPS5 float64
+
+	BV1 float64
+	BV2 float64
+	BV3 float64
+	BV4 float64
+	BV5 float64
 
     // Book value (equity) per share
 	BVPS1 float64
@@ -1141,6 +1273,12 @@ type financials struct {
 	ROE4 float64
 	ROE5 float64
 
+	RONTA1 float64
+	RONTA2 float64
+	RONTA3 float64
+	RONTA4 float64
+	RONTA5 float64
+
 	DebtToFCF1 float64
 	DebtToFCF2 float64
 	DebtToFCF3 float64
@@ -1161,12 +1299,26 @@ type financials struct {
 	RPS4 float64
 	RPS5 float64
 
+    RevTTM float64
+    Rev1 float64
+	Rev2 float64
+	Rev3 float64
+	Rev4 float64
+	Rev5 float64
+
     CorToRevTTM float64
     CorToRev1 float64
 	CorToRev2 float64
 	CorToRev3 float64
 	CorToRev4 float64
 	CorToRev5 float64
+
+    EffTTM float64
+    Eff1 float64
+	Eff2 float64
+	Eff3 float64
+	Eff4 float64
+	Eff5 float64
 
 }
 
@@ -1201,6 +1353,18 @@ func (f *financials) ReturnOnEquity(
 	return (ear / equ) * 100
 }
 
+func (f *financials) ReturnOnNetTangibleAssets(
+	period string,
+) float64 {
+	ear := f.IncomeStatement.OperatingIncome(period)
+//	if ear <= 0 {
+//		return math.NaN()
+//	}
+	nta := f.BalanceSheet.NetTangibleAssets(period)
+    //fmt.Println(period, nta)
+	return (ear / nta) * 100
+}
+
 func (f *financials) DebtToFreeCashFlow(
 	period string,
 ) float64 {
@@ -1213,9 +1377,9 @@ func (f *financials) DebtToFreeCashFlow(
 }
 
 func (f *financials) FreeCashFlowPerShareCAGR() float64 {
-    n := 5
+    n := 3
 	to := f.FCFPSTTM
-    from := f.FCFPS5
+    from := f.FCFPS3
     if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1223,9 +1387,9 @@ func (f *financials) FreeCashFlowPerShareCAGR() float64 {
 }
 
 func (f *financials) EarningsPerShareCAGR() float64 {
-    n := 5
+    n := 3
 	to := f.EPSTTM
-    from := f.EPS5
+    from := f.EPS3
     if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1233,9 +1397,9 @@ func (f *financials) EarningsPerShareCAGR() float64 {
 }
 
 func (f *financials) RevenuePerShareCAGR() float64 {
-    n := 5
+    n := 3
 	to := f.RPSTTM
-    from := f.RPS5
+    from := f.RPS3
     if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1258,9 +1422,9 @@ func (f *financials) FreeCashFlowPerShare(
 }
 
 func (f *financials) BookValueDividendPerShareCAGR() float64 {
-    n := 4
+    n := 2
 	to := f.BVPS1 + math.Abs(f.DivPS1)
-    from := f.BVPS5 + math.Abs(f.DivPS5)
+    from := f.BVPS3 + math.Abs(f.DivPS3)
 	if to <= 0 || from <= 0 {
 		return math.NaN()
 	}
@@ -1459,10 +1623,10 @@ func (s *statement) OperatingEfficiency(
 	period string,
 ) float64 {
 	exp := s.NonInterestExpenses(period)
-	netIntInc := s.NetInterestIncome(period)
-	nonIntInc := s.NonInterestIncome(period)
-	//fmt.Println(period, netIntInc, nonIntInc, exp)
-	return (math.Abs(exp) / (netIntInc + nonIntInc)) * 100
+	netInc := s.NetInterestIncome(period)
+	nonInc := s.NonInterestIncome(period)
+	//fmt.Println(period, netInc, nonInc, exp)
+	return (math.Abs(exp) / (netInc + nonInc)) * 100
 }
 
 func (s *statement) NetIncome(period string) float64 {
@@ -1491,12 +1655,11 @@ func (s *statement) EarningsPerShare(period string) float64 {
     if len(s.Rows) == 0 {
         return 0
     }
-    sha := s.DilutedSharesOutstanding(period)
-    inc := s.NetIncome(period)
-    if sha <= 0 {
-        return math.NaN()
-    }
-    return inc / sha
+    return s.value(
+		s.periodIndex(period),
+        "Diluted EPS",
+		s.Rows,
+	)
 }
 
 func (s *statement) RevenuePerShare(period string) float64 {
@@ -1531,6 +1694,24 @@ func (s *statement) Equity(
 		"Total Equity",
 		s.Rows,
 	)
+}
+
+func (s *statement) NetTangibleAssets(
+	period string,
+) float64 {
+    if len(s.Rows) == 0 {
+        return 0
+    }
+
+    equ := s.Equity(period)
+
+    intan := s.value(
+		s.periodIndex(period),
+		"Net Intangible Assets",
+		s.Rows,
+	)
+
+    return equ - intan
 }
 
 func (s *statement) Debt(
@@ -1706,7 +1887,11 @@ func (s *statement) value(
 		if next.Label == label {
 			v := next.Datum[periodIndex]
 			num, _ := v.(float64)
-			return num * s.OrderOfMagnitude()
+            if label == "Diluted EPS" {
+                return num
+            } else {
+			    return num * s.OrderOfMagnitude()
+            }
 		}
 
 		levels = append(levels, next.SubLevels...)

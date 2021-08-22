@@ -320,7 +320,7 @@ func (s *financialsService) PullValuation(
 			actions = append(
 				actions,
 				chromedp.Navigate(u+"/financials"),
-				runWithTimeOut(&ctx, 5, chromedp.Tasks{
+				runWithTimeOut(&ctx, 30, chromedp.Tasks{
 					chromedp.WaitVisible(
 						"//span[contains(text(),'Normalized Diluted EPS')]",
 						chromedp.BySearch,
@@ -404,7 +404,7 @@ func waitForResponse(ch chan *response, compID string) (*response, error) {
 	for {
 		select {
 		case resp = <-ch:
-		case <-time.After(15 * time.Second):
+		case <-time.After(30 * time.Second):
 			return nil, fmt.Errorf("timeout")
 		}
 
