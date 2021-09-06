@@ -1056,7 +1056,7 @@ func filterEPSGrowing(v *financials) bool {
 }
 
 func filterFCFGrowing(v *financials) bool {
-	return v.FCFTTM > v.FCF3 &&
+	return v.FCFTTM > 0 &&
 		v.FCF1 > 0 &&
 		v.FCF2 > 0 &&
 		v.FCF3 > 0
