@@ -3,10 +3,12 @@
 # Learn more about .gitignore:
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
+*.tar.gz
+build/
+*.dia~
 dbdump/divyield.sql
 work/
 *.swp
-main.exe
 
 # Node artifact files
 node_modules/

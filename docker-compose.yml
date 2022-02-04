@@ -1,0 +1,77 @@
+version: "3.8"
+
+services:
+  haproxy1:
+    privileged: true
+    build:
+      context: ./haproxy
+      args:
+        - STATE=master
+        - VIP=${VIP}
+    sysctls:
+      - net.ipv4.ip_nonlocal_bind=1
+    networks:
+      - divyield  
+    ports:
+      - "8001:80"
+      - "9001:8404"
+
+  haproxy2:
+    privileged: true
+    build:
+      context: ./haproxy
+      args:
+        - STATE=backup
+        - VIP=${VIP}
+    sysctls:
+      - net.ipv4.ip_nonlocal_bind=1
+    networks:
+      - divyield  
+    ports:
+      - "8002:80"
+      - "9002:8404"
+
+  paper1:
+    build:
+      context: ./paper
+    networks:
+      - divyield  
+
+  paper2:
+    build:
+      context: ./paper
+    networks:
+      - divyield  
+
+  postgresql:
+    build:
+      context: ./postgres
+    networks:
+      - divyield
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: postgres
+        PGDATA: /var/lib/postgresql/data
+
+  # Adminer: http://localhost:9090
+  # Dd host: divyield_postgresql_1
+  #
+  adminer:
+    image: adminer:4
+    ports:
+      - 9090:8080
+    networks:
+      - divyield
+
+networks:
+  divyield:
+    name: divyield
+    driver: bridge
+
+volumes:
+  pgdata:
+    external: true
+

@@ -1,0 +1,26 @@
+FROM haproxy:2.5
+
+USER root
+
+COPY keepalived.tar.gz .
+
+RUN set -eux; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+		build-essential \
+		pkg-config \
+		libssl-dev \
+		ca-certificates \
+		curl \
+		net-tools \
+		iproute2 \
+		tcpdump; \
+	mkdir -p /usr/src/keepalived; \
+	tar -xzf keepalived.tar.gz -C /usr/src/keepalived --strip-components=1; \
+	rm keepalived.tar.gz; \
+	cd /usr/src/keepalived; \
+	./configure; \
+	make; \
+	make install;
+
+
