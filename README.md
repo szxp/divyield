@@ -47,7 +47,7 @@ DGR yearly
 
 ## Version 2
 
-Currently I am rewriting the whole app to support high availablitity using HAProxy, keepalived and virtual floating IP. Where possible I will use gRPC over HTTP(S) connection instead of JSON over HTTP(S). For development I will run the entire app in Docker and Docker Compose.
+The next version (just for fun to learn something new) will support high availablitity using HAProxy, keepalived and virtual floating IP. Where possible I will use gRPC over HTTP(S) connection instead of JSON over HTTP(S). For development I will run the entire app in Docker and Docker Compose.
 
 The architecture of the planned version 2 looks like this:
 
